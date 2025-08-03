@@ -1,130 +1,100 @@
 #!/bin/bash
-# Issue 管理器脚本 - 伪面向对象设计
-# 使用主调度函数统一管理所有 issue 操作
+# Issue 管理器脚本 - 重构版本
+# 保留主调度函数设计，简化内部实现
 
 # 加载依赖脚本
 source .github/workflows/scripts/debug-utils.sh
 source .github/workflows/scripts/issue-templates.sh
 
-# 私有属性（全局变量）
-_ISSUE_MANAGER_CURRENT_ISSUE_NUMBER=""
-_ISSUE_MANAGER_CURRENT_USER=""
-_ISSUE_MANAGER_REPOSITORY=""
+# ========== 私有辅助函数 ==========
 
-# 构造函数
-issue_manager_init() {
-    local issue_number="${1:-}"
-    local current_user="${2:-}"
+# 通用GitHub API调用函数
+_github_api_call() {
+    local method="$1"
+    local endpoint="$2"
+    local data="${3:-}"
     
-    _ISSUE_MANAGER_CURRENT_ISSUE_NUMBER="$issue_number"
-    _ISSUE_MANAGER_CURRENT_USER="$current_user"
-    _ISSUE_MANAGER_REPOSITORY="$GITHUB_REPOSITORY"
+    local curl_args=("-s" "-H" "Authorization: token $GITHUB_TOKEN" "-H" "Accept: application/vnd.github.v3+json")
     
-    debug "log" "Initializing issue manager"
-    debug "var" "Issue number" "$_ISSUE_MANAGER_CURRENT_ISSUE_NUMBER"
-    debug "var" "Current user" "$_ISSUE_MANAGER_CURRENT_USER"
-    debug "var" "Repository" "$_ISSUE_MANAGER_REPOSITORY"
+    if [ "$method" != "GET" ]; then
+        curl_args+=("-X" "$method" "-H" "Content-Type: application/json")
+        if [ -n "$data" ]; then
+            curl_args+=("-d" "$data")
+        fi
+    fi
+    
+    curl "${curl_args[@]}" "https://api.github.com/repos/$GITHUB_REPOSITORY$endpoint"
 }
 
-# 私有方法：获取 issue 内容
-_issue_manager_get_content() {
+# 检查API响应是否成功
+_check_api_response() {
+    local response="$1"
+    local operation="$2"
+    
+    if echo "$response" | jq -e '.message' | grep -q "Not Found"; then
+        debug "error" "$operation failed: Not Found"
+        return 1
+    elif echo "$response" | jq -e '.id' > /dev/null 2>&1; then
+        debug "success" "$operation completed successfully"
+        return 0
+    else
+        debug "error" "$operation failed: $(echo "$response" | jq -r '.message // "Unknown error"')"
+        return 1
+    fi
+}
+
+# ========== 私有方法 ==========
+
+# 获取 issue 内容
+_get_content() {
     local issue_number="$1"
     
     debug "log" "Fetching content for issue #$issue_number"
-    
-    local response=$(curl -s \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$issue_number")
-    
-    if echo "$response" | jq -e '.message' | grep -q "Not Found"; then
-        debug "error" "Issue #$issue_number not found"
-        return 1
-    fi
-    
-    echo "$response"
+    _github_api_call "GET" "/issues/$issue_number"
 }
 
-# 私有方法：更新 issue 内容
-_issue_manager_update_content() {
+# 更新 issue 内容
+_update_content() {
     local issue_number="$1"
     local new_body="$2"
     
     debug "log" "Updating content for issue #$issue_number"
     
-    # 使用jq正确转义JSON
     local json_payload=$(jq -n --arg body "$new_body" '{"body": $body}')
+    local response=$(_github_api_call "PATCH" "/issues/$issue_number" "$json_payload")
     
-    # 使用GitHub API更新issue
-    local response=$(curl -X PATCH \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        -H "Content-Type: application/json" \
-        https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$issue_number \
-        -d "$json_payload")
-    
-    if echo "$response" | jq -e '.id' > /dev/null 2>&1; then
-        debug "success" "Issue #$issue_number updated successfully"
-        return 0
-    else
-        debug "error" "Failed to update issue #$issue_number"
-        return 1
-    fi
+    _check_api_response "$response" "Issue update"
 }
 
-# 私有方法：添加 issue 评论
-_issue_manager_add_comment() {
+# 添加 issue 评论
+_add_comment() {
     local issue_number="$1"
     local comment="$2"
     
     debug "log" "Adding comment to issue #$issue_number"
     
-    # 使用jq正确转义JSON
     local json_payload=$(jq -n --arg body "$comment" '{"body": $body}')
+    local response=$(_github_api_call "POST" "/issues/$issue_number/comments" "$json_payload")
     
-    # 使用GitHub API添加评论
-    local response=$(curl -X POST \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        -H "Content-Type: application/json" \
-        https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$issue_number/comments \
-        -d "$json_payload")
-    
-    if echo "$response" | jq -e '.id' > /dev/null 2>&1; then
-        debug "success" "Comment added to issue #$issue_number successfully"
-        return 0
-    else
-        debug "error" "Failed to add comment to issue #$issue_number"
-        return 1
-    fi
+    _check_api_response "$response" "Comment addition"
 }
 
-# 私有方法：获取 issue 评论列表
-_issue_manager_get_comments() {
+# 获取 issue 评论列表
+_get_comments() {
     local issue_number="$1"
     
     debug "log" "Fetching comments for issue #$issue_number"
-    
-    local response=$(curl -s \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$issue_number/comments")
-    
-    echo "$response"
+    _github_api_call "GET" "/issues/$issue_number/comments"
 }
 
-# 私有方法：检查 issue 是否存在
-_issue_manager_exists() {
+# 检查 issue 是否存在
+_exists() {
     local issue_number="$1"
     
     debug "log" "Checking if issue #$issue_number exists"
     
-    local response=$(curl -s \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$issue_number")
+    local response=$(_github_api_call "GET" "/issues/$issue_number")
     
-    # 检查是否返回错误信息
     if echo "$response" | jq -e '.message' | grep -q "Not Found"; then
         debug "log" "Issue #$issue_number does not exist"
         return 1
@@ -134,33 +104,21 @@ _issue_manager_exists() {
     fi
 }
 
-# 私有方法：关闭 issue
-_issue_manager_close() {
+# 关闭 issue
+_close() {
     local issue_number="$1"
     local reason="${2:-completed}"
     
     debug "log" "Closing issue #$issue_number with reason: $reason"
     
     local json_payload=$(jq -n --arg state "closed" --arg reason "$reason" '{"state": $state, "state_reason": $reason}')
+    local response=$(_github_api_call "PATCH" "/issues/$issue_number" "$json_payload")
     
-    local response=$(curl -X PATCH \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        -H "Content-Type: application/json" \
-        https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$issue_number \
-        -d "$json_payload")
-    
-    if echo "$response" | jq -e '.id' > /dev/null 2>&1; then
-        debug "success" "Issue #$issue_number closed successfully"
-        return 0
-    else
-        debug "error" "Failed to close issue #$issue_number"
-        return 1
-    fi
+    _check_api_response "$response" "Issue closure"
 }
 
-# 私有方法：检查用户是否有管理员权限
-_issue_manager_check_admin_permission() {
+# 检查用户权限
+_check_admin_permission() {
     local username="$1"
     
     debug "log" "Checking admin permission for user: $username"
@@ -172,11 +130,7 @@ _issue_manager_check_admin_permission() {
     fi
     
     # 检查是否为协作者且有管理员权限
-    local response=$(curl -s \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/$GITHUB_REPOSITORY/collaborators/$username")
-    
+    local response=$(_github_api_call "GET" "/collaborators/$username")
     local permission=$(echo "$response" | jq -r '.permissions.admin // false')
     
     if [ "$permission" = "true" ]; then
@@ -188,14 +142,14 @@ _issue_manager_check_admin_permission() {
     fi
 }
 
-# 私有方法：获取 issue 属性
-_issue_manager_get_property() {
+# 获取 issue 属性
+_get_property() {
     local issue_number="$1"
     local property="$2"
     
     debug "log" "Getting property '$property' for issue #$issue_number"
     
-    local issue_content=$(_issue_manager_get_content "$issue_number")
+    local issue_content=$(_get_content "$issue_number")
     
     case "$property" in
         "author"|"user")
@@ -205,7 +159,7 @@ _issue_manager_get_property() {
             echo "$issue_content" | jq -r '.title // empty'
             ;;
         "state")
-            echo "$issue_content" | jq -r '.state // empty'
+    echo "$issue_content" | jq -r '.state // empty'
             ;;
         "body")
             echo "$issue_content" | jq -r '.body // empty'
@@ -217,78 +171,62 @@ _issue_manager_get_property() {
     esac
 }
 
-# 私有方法：更新评论
-_issue_manager_update_comment() {
+# 更新评论
+_update_comment() {
     local issue_number="$1"
     local comment_id="$2"
     local comment="$3"
     
     debug "log" "Updating comment #$comment_id in issue #$issue_number"
     
-    # 使用jq正确转义JSON
     local json_payload=$(jq -n --arg body "$comment" '{"body": $body}')
+    local response=$(_github_api_call "PATCH" "/issues/$issue_number/comments/$comment_id" "$json_payload")
     
-    # 使用GitHub API更新评论
-    local response=$(curl -X PATCH \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        -H "Content-Type: application/json" \
-        "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$issue_number/comments/$comment_id" \
-        -d "$json_payload")
-    
-    if echo "$response" | jq -e '.id' > /dev/null 2>&1; then
-        debug "success" "Comment #$comment_id updated successfully"
-        return 0
-    else
-        debug "error" "Failed to update comment #$comment_id"
-        return 1
-    fi
+    _check_api_response "$response" "Comment update"
 }
+
+# ========== 主调度函数 ==========
 
 # 主调度函数 - 统一管理所有 issue 操作
 issue_manager() {
     local operation="$1"
     local issue_number="${2:-}"
-    local current_user="${3:-}"
-    shift 3
-    
-    # 初始化 Issue 管理器
-    issue_manager_init "$issue_number" "$current_user"
+    shift 2
     
     case "$operation" in
         "get-content")
-            _issue_manager_get_content "$issue_number"
+            _get_content "$issue_number"
             ;;
         "update-content")
             local new_body="$1"
-            _issue_manager_update_content "$issue_number" "$new_body"
+            _update_content "$issue_number" "$new_body"
             ;;
         "add-comment")
             local comment="$1"
-            _issue_manager_add_comment "$issue_number" "$comment"
+            _add_comment "$issue_number" "$comment"
             ;;
         "get-comments")
-            _issue_manager_get_comments "$issue_number"
+            _get_comments "$issue_number"
             ;;
         "exists")
-            _issue_manager_exists "$issue_number"
+            _exists "$issue_number"
             ;;
         "close")
             local reason="${1:-completed}"
-            _issue_manager_close "$issue_number" "$reason"
+            _close "$issue_number" "$reason"
             ;;
         "check-admin")
             local username="$1"
-            _issue_manager_check_admin_permission "$username"
+            _check_admin_permission "$username"
             ;;
         "get-property")
             local property="$1"
-            _issue_manager_get_property "$issue_number" "$property"
+            _get_property "$issue_number" "$property"
             ;;
         "update-comment")
             local comment_id="$1"
             local comment="$2"
-            _issue_manager_update_comment "$issue_number" "$comment_id" "$comment"
+            _update_comment "$issue_number" "$comment_id" "$comment"
             ;;
         *)
             debug "error" "Unknown operation: $operation"

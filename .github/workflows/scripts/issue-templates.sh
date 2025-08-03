@@ -43,100 +43,7 @@ EOF
 
 
 
-# ========== 三锁架构模板函数 ==========
-
-# 生成 Issue 锁状态模板
-generate_issue_lock_body() {
-  local current_time="$1"
-  local queue_data="$2"
-  local issue_lock_version="$3"
-  local issue_locked_by="${4:-无}"
-  local queue_locked_by="${5:-无}"
-  local build_locked_by="${6:-无}"
-
-  # 确定 Issue 锁状态
-  local issue_lock_status="空闲 🔓"
-  if [ "$issue_locked_by" != "无" ]; then
-    issue_lock_status="占用 🔒"
-  fi
-
-  # 从队列数据中提取 run_id 和 issue_id 信息
-  local run_id=""
-  local issue_id=""
-  
-  # 如果有锁持有者，尝试从队列中获取相关信息
-  if [ "$issue_locked_by" != "无" ] && [ "$issue_locked_by" != "null" ]; then
-    # 从队列中查找对应的构建信息
-        local queue_item=$(echo "$queue_data" | jq --arg run_id "$issue_locked_by" '.queue[] | select(.run_id == $run_id) // empty')
-    if [ -n "$queue_item" ]; then
-        run_id=$(echo "$queue_item" | jq -r '.run_id // empty')
-      issue_id=$(echo "$queue_item" | jq -r '.issue_number // empty')
-    fi
-  fi
-
-  cat <<EOF
-## Issue 锁管理
-
-**最后更新时间：** $current_time
-
-### Issue 锁状态
-- **Issue 锁状态：** $issue_lock_status
-- **Issue 锁持有者：** $issue_locked_by
-- **版本：** $issue_lock_version
-
-### 标识信息
-- **Run ID：** ${run_id:-未获取}
-- **Issue ID：** ${issue_id:-未获取}
-
-### 当前锁状态概览
-- **队列锁：** $queue_locked_by
-- **构建锁：** $build_locked_by
-
----
-
-### Issue 锁数据
-\`\`\`json
-$queue_data
-\`\`\`
-EOF
-}
-
-# 生成队列管理模板（三锁架构）
-generate_queue_management_body() {
-  local current_time="$1"
-  local queue_data="$2"
-  local issue_lock_status="$3"
-  local queue_lock_status="$4"
-  local build_lock_status="$5"
-  local version="$6"
-
-  # 计算队列统计信息
-  local queue_length=$(echo "$queue_data" | jq '.queue | length // 0')
-  local issue_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "issue")) | length // 0')
-  local workflow_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "workflow_dispatch")) | length // 0')
-
-  # 提取锁持有者信息
-  local issue_locked_by=$(echo "$queue_data" | jq -r '.issue_locked_by // "无"')
-  local queue_locked_by=$(echo "$queue_data" | jq -r '.queue_locked_by // "无"')
-  local build_locked_by=$(echo "$queue_data" | jq -r '.build_locked_by // "无"')
-
-  cat <<EOF
-## 构建队列管理
-
-**最后更新时间：** $current_time
-
-### 三锁状态
-- **Issue 锁状态：** $issue_lock_status
-- **队列锁状态：** $queue_lock_status
-- **构建锁状态：** $build_lock_status
-
-### 锁持有者
-- **Issue 锁持有者：** $issue_locked_by
-- **队列锁持有者：** $queue_locked_by
-- **构建锁持有者：** $build_locked_by
-
-### 构建队列
-- **当前数量：** $queue_length/5
+# ========== 双锁架构模板函数 ==========
 - **Issue触发：** $issue_count/3
 - **手动触发：** $workflow_count/5
 
@@ -149,14 +56,11 @@ $queue_data
 EOF
 }
 
-# 生成三锁状态模板
-generate_triple_lock_status_body() {
+# 生成双锁状态模板
+generate_dual_lock_status_body() {
   local current_time="$1"
   local queue_data="$2"
   local version="$3"
-  local issue_lock_status="$4"
-  local queue_lock_status="$5"
-  local build_lock_status="$6"
 
   # 计算队列统计信息
   local queue_length=$(echo "$queue_data" | jq '.queue | length // 0')
@@ -165,8 +69,18 @@ generate_triple_lock_status_body() {
 
   # 提取锁持有者信息
   local issue_locked_by=$(echo "$queue_data" | jq -r '.issue_locked_by // "无"')
-  local queue_locked_by=$(echo "$queue_data" | jq -r '.queue_locked_by // "无"')
   local build_locked_by=$(echo "$queue_data" | jq -r '.build_locked_by // "无"')
+
+  # 确定锁状态
+  local issue_lock_status="空闲 🔓"
+  if [ "$issue_locked_by" != "无" ] && [ "$issue_locked_by" != "null" ]; then
+    issue_lock_status="占用 🔒"
+  fi
+
+  local build_lock_status="空闲 🔓"
+  if [ "$build_locked_by" != "无" ] && [ "$build_locked_by" != "null" ]; then
+    build_lock_status="占用 🔒"
+  fi
 
   # 提取当前构建的标识信息
   local current_run_id=""
@@ -176,7 +90,7 @@ generate_triple_lock_status_body() {
     # 从队列中查找当前构建的信息
     local current_build_item=$(echo "$queue_data" | jq --arg run_id "$build_locked_by" '.queue[] | select(.run_id == $run_id) // empty')
     if [ -n "$current_build_item" ]; then
-              current_run_id=$(echo "$current_build_item" | jq -r '.run_id // empty')
+      current_run_id=$(echo "$current_build_item" | jq -r '.run_id // empty')
       current_issue_id=$(echo "$current_build_item" | jq -r '.issue_number // empty')
     fi
   fi
@@ -186,14 +100,12 @@ generate_triple_lock_status_body() {
 
 **最后更新时间：** $current_time
 
-### 三锁状态
+### 双锁状态
 - **Issue 锁状态：** $issue_lock_status
-- **队列锁状态：** $queue_lock_status
 - **构建锁状态：** $build_lock_status
 
 ### 锁持有者
 - **Issue 锁持有者：** $issue_locked_by
-- **队列锁持有者：** $queue_locked_by
 - **构建锁持有者：** $build_locked_by
 
 ### 当前构建标识
@@ -214,69 +126,9 @@ $queue_data
 EOF
 }
 
-# 生成队列锁状态模板
-generate_queue_lock_body() {
-  local current_time="$1"
-  local queue_data="$2"
-  local queue_lock_version="$3"
-  local queue_locked_by="${4:-无}"
 
-  # 确定队列锁状态
-  local queue_lock_status="空闲 🔓"
-  if [ "$queue_locked_by" != "无" ]; then
-    queue_lock_status="占用 🔒"
-  fi
 
-  cat <<EOF
-# 队列锁管理
 
-**最后更新时间：** $current_time
-
-### 队列锁状态
-- **队列锁状态：** $queue_lock_status
-- **队列锁持有者：** $queue_locked_by
-- **版本：** $queue_lock_version
-
----
-
-### 队列锁数据
-\`\`\`json
-$queue_data
-\`\`\`
-EOF
-}
-
-# 生成构建锁状态模板
-generate_build_lock_body() {
-  local current_time="$1"
-  local queue_data="$2"
-  local build_lock_version="$3"
-  local build_locked_by="${4:-无}"
-
-  # 确定构建锁状态
-  local build_lock_status="空闲 🔓"
-  if [ "$build_locked_by" != "无" ]; then
-    build_lock_status="占用 🔒"
-  fi
-
-  cat <<EOF
-# 构建锁管理
-
-**最后更新时间：** $current_time
-
-### 构建锁状态
-- **构建锁状态：** $build_lock_status
-- **构建锁持有者：** $build_locked_by
-- **版本：** $build_lock_version
-
----
-
-### 构建锁数据
-\`\`\`json
-$queue_data
-\`\`\`
-EOF
-}
 
 # 生成队列清理记录
 generate_queue_cleanup_record() {
@@ -299,9 +151,9 @@ generate_queue_cleanup_record() {
 - **版本：** $current_version
 
 ### 清理后状态
+- **Issue 锁状态：** 空闲 🔓
 - **构建锁状态：** 空闲 🔓
 - **当前构建：** 无
-- **锁持有者：** 无
 
 ### 构建队列
 - **当前数量：** $total_count/5
@@ -334,13 +186,12 @@ generate_queue_reset_record() {
 - **版本：** 1
 
 ### 重置后状态
+- **Issue 锁状态：** 空闲 🔓
 - **构建锁状态：** 空闲 🔓
 - **当前构建：** 无
-- **锁持有者：** 无
 
-### 三锁状态
+### 双锁状态
 - **Issue 锁状态：** 空闲 🔓
-- **队列锁状态：** 空闲 🔓
 - **构建锁状态：** 空闲 🔓
 
 ### 构建队列

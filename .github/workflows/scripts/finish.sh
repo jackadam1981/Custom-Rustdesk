@@ -24,7 +24,9 @@ get_and_decrypt_build_params() {
     local current_build_id="$1"
     
     # 使用队列管理器获取队列数据
-    local queue_data=$(queue_manager "data" "${QUEUE_ISSUE_NUMBER:-1}")
+    source .github/workflows/scripts/queue-manager.sh
+    load_queue_data
+    local queue_data="$QUEUE_DATA"
     
     if [ $? -ne 0 ]; then
         debug "error" "Failed to get queue data"
@@ -122,7 +124,9 @@ check_and_reset_version_numbers() {
     debug "log" "Checking if version numbers should be reset..."
     
     # 获取当前队列数据
-    local queue_data=$(queue_manager "data" "${QUEUE_ISSUE_NUMBER:-1}")
+    source .github/workflows/scripts/queue-manager.sh
+    load_queue_data
+    local queue_data="$QUEUE_DATA"
     
     if [ $? -ne 0 ]; then
         debug "error" "Failed to get queue data for version reset check"
@@ -173,7 +177,8 @@ check_and_reset_version_numbers() {
             ')
             
             # 更新队列数据
-            local update_response=$(queue_manager_update_lock "$reset_queue_data" "queue" "无")
+            source .github/workflows/scripts/queue-manager.sh
+            update_queue_data "$reset_queue_data"
             
             if [ $? -eq 0 ]; then
                 debug "success" "Successfully reset version numbers to 1"
@@ -294,7 +299,8 @@ finish_manager() {
               debug "log" "Releasing all triple locks for build $build_id"
               
               # 使用统一的release操作
-              if queue_manager "release" "$build_id"; then
+              source .github/workflows/scripts/queue-manager.sh
+              if release_all_locks; then
                 debug "success" "Successfully released all locks"
                 echo "lock_released=success"
               else

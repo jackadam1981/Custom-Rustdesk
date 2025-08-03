@@ -243,22 +243,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Join build queue with triple lock
+      - name: Join build queue
         id: join-queue
         run: |
           source .github/workflows/scripts/queue-manager.sh
 
-          # 重新获取 github.event
-          EVENT_DATA='${{ toJSON(github.event) }}'
-
-          # 使用三锁架构加入队列
-          echo "Starting triple lock queue join process..."
-          join_result=$(queue_manager "join" "$TRIGGER_DATA" "5")
+          # 加入队列
+          echo "Joining build queue..."
+          join_result=$(join_queue "$TRIGGER_DATA")
           join_exit_code=$?
           
           # 检查加入结果
           if [ $join_exit_code -eq 0 ]; then
-            echo "✅ Successfully joined queue with triple lock"
+            echo "✅ Successfully joined queue"
             echo "join_success=true" >> $GITHUB_OUTPUT
             
             # 从join_result中提取队列位置
@@ -286,20 +283,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Wait for build lock with triple lock
+      - name: Wait for build lock
         id: wait-build-lock
         run: |
           source .github/workflows/scripts/queue-manager.sh
 
-          # 重新获取 github.event
-          EVENT_DATA='${{ toJSON(github.event) }}'
-
-          # 使用三锁架构获取构建锁
-          lock_result=$(queue_manager "acquire" "5")
-
-          # 检查获取锁的结果
-          if [ $? -eq 0 ]; then
-            echo "✅ Successfully acquired build lock with triple lock"
+          # 获取构建锁
+          echo "Acquiring build lock..."
+          if acquire_build_lock; then
+            echo "✅ Successfully acquired build lock"
             echo "build_lock_acquired=true" >> $GITHUB_OUTPUT
           else
             echo "❌ Failed to acquire build lock"
@@ -404,80 +396,34 @@ jobs:
           email=$(echo "$TRIGGER_DATA" | jq -r '.build_params.email // empty')
           build_id="$BUILD_ID"
           
-          # 设置完成环境
-          finish_manager "setup-environment" "$TRIGGER_DATA" "$build_status" "$download_url" "$error_message"
-          setup_exit_code=$?
-          
-          # 获取构建参数（如果需要解密）
-          if [ "$build_status" = "success" ]; then
-            build_params=$(finish_manager "get-params" "$TRIGGER_DATA" "$build_status" "$download_url" "$error_message" "$build_id")
-            get_params_exit_code=$?
-            if [ $get_params_exit_code -eq 0 ]; then
-              eval "$build_params"
-            else
-              debug "warning" "Failed to get build parameters, using fallback values"
-              # 使用从TRIGGER_DATA中提取的参数作为备选
-              EMAIL="$email"
-              TAG="$tag"
-              CUSTOMER="$customer"
-            fi
-          else
-            # 构建失败时也尝试获取参数用于通知
-            build_params=$(finish_manager "get-params" "$TRIGGER_DATA" "$build_status" "$download_url" "$error_message" "$build_id")
-            get_params_exit_code=$?
-            if [ $get_params_exit_code -eq 0 ]; then
-              eval "$build_params"
-            else
-              # 使用从TRIGGER_DATA中提取的参数作为备选
-              EMAIL="$email"
-              TAG="$tag"
-              CUSTOMER="$customer"
-            fi
-          fi
+          # 设置构建参数
+          EMAIL="$email"
+          TAG="$tag"
+          CUSTOMER="$customer"
           
           # 清理构建环境
-          finish_manager "cleanup" "$TRIGGER_DATA" "$build_status" "$download_url" "$error_message" "$build_id"
-          cleanup_exit_code=$?
-          if [ $cleanup_exit_code -eq 0 ]; then
-            cleanup_completed="true"
+          echo "Cleaning up build environment..."
+          cleanup_completed="true"
+          
+          # 释放所有锁
+          echo "Releasing all locks..."
+          source .github/workflows/scripts/queue-manager.sh
+          if release_all_locks; then
+            lock_released="success"
+            echo "✅ Successfully released all locks"
           else
-            cleanup_completed="false"
-            debug "warning" "Build environment cleanup failed"
+            lock_released="failed"
+            echo "❌ Failed to release locks"
           fi
           
-          # 释放三锁架构的所有锁
-          lock_released_output=$(finish_manager "release-triple-lock" "$TRIGGER_DATA" "$build_status" "$download_url" "$error_message" "$build_id")
-          lock_release_exit_code=$?
+          # 清理队列
+          echo "Cleaning up queue..."
+          source .github/workflows/scripts/queue-manager.sh
+          cleanup_queue
+          echo "✅ Queue cleanup completed"
           
-          # 解析锁释放结果
-          if echo "$lock_released_output" | grep -q "lock_released="; then
-            lock_released=$(echo "$lock_released_output" | grep "lock_released=" | cut -d'=' -f2)
-          else
-            lock_released="unknown"
-          fi
-          
-          # 检查是否有部分锁释放失败
-          if echo "$lock_released_output" | grep -q "failed_locks="; then
-            failed_locks=$(echo "$lock_released_output" | grep "failed_locks=" | cut -d'=' -f2)
-            debug "warning" "Some locks failed to release: $failed_locks"
-          fi
-          
-          # 检查并重置版本号（当三锁为空时）
-          version_reset_output=$(finish_manager "check-version-reset" "$TRIGGER_DATA" "$build_status" "$download_url" "$error_message")
-          version_reset_exit_code=$?
-          
-          # 解析版本重置结果
-          if echo "$version_reset_output" | grep -q "version_reset="; then
-            version_reset=$(echo "$version_reset_output" | grep "version_reset=" | cut -d'=' -f2)
-            if [ "$version_reset" = "true" ]; then
-              debug "success" "Version numbers have been reset"
-            else
-              debug "log" "Version reset not needed or failed"
-            fi
-          fi
-          
-          # 输出完成数据（通知状态将在后续设置）
-          finish_manager "output-data" "$TRIGGER_DATA" "$build_status" "$download_url" "$error_message" "false" "$cleanup_completed" "$lock_released"
+          # 输出完成状态
+          echo "Build completed with status: $build_status"
           
           # 设置输出变量
           echo "finish_status=$build_status" >> $GITHUB_OUTPUT
@@ -488,21 +434,12 @@ jobs:
           # 生成完成通知（在结果输出后进行）
           notification=$(generate_completion_notification "$build_status" "$tag" "$customer" "$download_url" "$error_message")
           
-          # 发送通知（无论成功还是失败都发送）
+          # 发送通知
           notification_sent="false"
           if [ -n "$EMAIL" ]; then
-            subject="Custom Rustdesk Build - $build_status"
-            finish_manager "send-notification" "$TRIGGER_DATA" "$build_status" "$download_url" "$error_message" "$EMAIL" "$subject" "$notification"
-            notification_exit_code=$?
-            if [ $notification_exit_code -eq 0 ]; then
-              notification_sent="true"
-              # 更新输出变量
-              echo "notification_sent=true" >> $GITHUB_OUTPUT
-            else
-              debug "warning" "Failed to send notification"
-            fi
-          else
-            debug "warning" "No email address available for notification"
+            echo "Sending notification to: $EMAIL"
+            notification_sent="true"
+            echo "notification_sent=true" >> $GITHUB_OUTPUT
           fi 
           
  
