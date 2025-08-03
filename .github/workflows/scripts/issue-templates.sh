@@ -93,6 +93,241 @@ $queue_data
 EOF
 }
 
+# ========== 三锁架构模板函数 ==========
+
+# 生成 Issue 锁状态模板
+generate_issue_lock_body() {
+  local current_time="$1"
+  local queue_data="$2"
+  local issue_lock_version="$3"
+  local issue_locked_by="${4:-无}"
+  local queue_locked_by="${5:-无}"
+  local build_locked_by="${6:-无}"
+
+  # 确定 Issue 锁状态
+  local issue_lock_status="空闲 🔓"
+  if [ "$issue_locked_by" != "无" ]; then
+    issue_lock_status="占用 🔒"
+  fi
+
+  # 从队列数据中提取 run_id 和 issue_id 信息
+  local run_id=""
+  local issue_id=""
+  
+  # 如果有锁持有者，尝试从队列中获取相关信息
+  if [ "$issue_locked_by" != "无" ] && [ "$issue_locked_by" != "null" ]; then
+    # 从队列中查找对应的构建信息
+    local queue_item=$(echo "$queue_data" | jq --arg build_id "$issue_locked_by" '.queue[] | select(.build_id == $build_id) // empty')
+    if [ -n "$queue_item" ]; then
+      run_id=$(echo "$queue_item" | jq -r '.build_id // empty')
+      issue_id=$(echo "$queue_item" | jq -r '.issue_number // empty')
+    fi
+  fi
+
+  cat <<EOF
+## Issue 锁管理
+
+**最后更新时间：** $current_time
+
+### Issue 锁状态
+- **Issue 锁状态：** $issue_lock_status
+- **Issue 锁持有者：** $issue_locked_by
+- **版本：** $issue_lock_version
+
+### 标识信息
+- **Run ID：** ${run_id:-未获取}
+- **Issue ID：** ${issue_id:-未获取}
+
+### 当前锁状态概览
+- **队列锁：** $queue_locked_by
+- **构建锁：** $build_locked_by
+
+---
+
+### Issue 锁数据
+\`\`\`json
+$queue_data
+\`\`\`
+EOF
+}
+
+# 生成队列管理模板（三锁架构）
+generate_queue_management_body() {
+  local current_time="$1"
+  local queue_data="$2"
+  local issue_lock_status="$3"
+  local queue_lock_status="$4"
+  local build_lock_status="$5"
+  local version="$6"
+
+  # 计算队列统计信息
+  local queue_length=$(echo "$queue_data" | jq '.queue | length // 0')
+  local issue_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "issue")) | length // 0')
+  local workflow_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "workflow_dispatch")) | length // 0')
+
+  # 提取锁持有者信息
+  local issue_locked_by=$(echo "$queue_data" | jq -r '.issue_locked_by // "无"')
+  local queue_locked_by=$(echo "$queue_data" | jq -r '.queue_locked_by // "无"')
+  local build_locked_by=$(echo "$queue_data" | jq -r '.build_locked_by // "无"')
+
+  cat <<EOF
+## 构建队列管理
+
+**最后更新时间：** $current_time
+
+### 三锁状态
+- **Issue 锁状态：** $issue_lock_status
+- **队列锁状态：** $queue_lock_status
+- **构建锁状态：** $build_lock_status
+
+### 锁持有者
+- **Issue 锁持有者：** $issue_locked_by
+- **队列锁持有者：** $queue_locked_by
+- **构建锁持有者：** $build_locked_by
+
+### 构建队列
+- **当前数量：** $queue_length/5
+- **Issue触发：** $issue_count/3
+- **手动触发：** $workflow_count/5
+
+---
+
+### 队列数据
+\`\`\`json
+$queue_data
+\`\`\`
+EOF
+}
+
+# 生成三锁状态模板（替代混合锁）
+generate_triple_lock_status_body() {
+  local current_time="$1"
+  local queue_data="$2"
+  local version="$3"
+  local issue_lock_status="$4"
+  local queue_lock_status="$5"
+  local build_lock_status="$6"
+
+  # 计算队列统计信息
+  local queue_length=$(echo "$queue_data" | jq '.queue | length // 0')
+  local issue_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "issue")) | length // 0')
+  local workflow_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "workflow_dispatch")) | length // 0')
+
+  # 提取锁持有者信息
+  local issue_locked_by=$(echo "$queue_data" | jq -r '.issue_locked_by // "无"')
+  local queue_locked_by=$(echo "$queue_data" | jq -r '.queue_locked_by // "无"')
+  local build_locked_by=$(echo "$queue_data" | jq -r '.build_locked_by // "无"')
+
+  # 提取当前构建的标识信息
+  local current_run_id=""
+  local current_issue_id=""
+  
+  if [ "$build_locked_by" != "无" ] && [ "$build_locked_by" != "null" ]; then
+    # 从队列中查找当前构建的信息
+    local current_build_item=$(echo "$queue_data" | jq --arg build_id "$build_locked_by" '.queue[] | select(.build_id == $build_id) // empty')
+    if [ -n "$current_build_item" ]; then
+      current_run_id=$(echo "$current_build_item" | jq -r '.build_id // empty')
+      current_issue_id=$(echo "$current_build_item" | jq -r '.issue_number // empty')
+    fi
+  fi
+
+  cat <<EOF
+## 构建队列管理
+
+**最后更新时间：** $current_time
+
+### 三锁状态
+- **Issue 锁状态：** $issue_lock_status
+- **队列锁状态：** $queue_lock_status
+- **构建锁状态：** $build_lock_status
+
+### 锁持有者
+- **Issue 锁持有者：** $issue_locked_by
+- **队列锁持有者：** $queue_locked_by
+- **构建锁持有者：** $build_locked_by
+
+### 当前构建标识
+- **Run ID：** ${current_run_id:-未获取}
+- **Issue ID：** ${current_issue_id:-未获取}
+
+### 构建队列
+- **当前数量：** $queue_length/5
+- **Issue触发：** $issue_count/3
+- **手动触发：** $workflow_count/5
+
+---
+
+### 队列数据
+\`\`\`json
+$queue_data
+\`\`\`
+EOF
+}
+
+# 生成队列锁状态模板
+generate_queue_lock_body() {
+  local current_time="$1"
+  local queue_data="$2"
+  local queue_lock_version="$3"
+  local queue_locked_by="${4:-无}"
+
+  # 确定队列锁状态
+  local queue_lock_status="空闲 🔓"
+  if [ "$queue_locked_by" != "无" ]; then
+    queue_lock_status="占用 🔒"
+  fi
+
+  cat <<EOF
+# 队列锁管理
+
+**最后更新时间：** $current_time
+
+### 队列锁状态
+- **队列锁状态：** $queue_lock_status
+- **队列锁持有者：** $queue_locked_by
+- **版本：** $queue_lock_version
+
+---
+
+### 队列锁数据
+\`\`\`json
+$queue_data
+\`\`\`
+EOF
+}
+
+# 生成构建锁状态模板
+generate_build_lock_body() {
+  local current_time="$1"
+  local queue_data="$2"
+  local build_lock_version="$3"
+  local build_locked_by="${4:-无}"
+
+  # 确定构建锁状态
+  local build_lock_status="空闲 🔓"
+  if [ "$build_locked_by" != "无" ]; then
+    build_lock_status="占用 🔒"
+  fi
+
+  cat <<EOF
+# 构建锁管理
+
+**最后更新时间：** $current_time
+
+### 构建锁状态
+- **构建锁状态：** $build_lock_status
+- **构建锁持有者：** $build_locked_by
+- **版本：** $build_lock_version
+
+---
+
+### 构建锁数据
+\`\`\`json
+$queue_data
+\`\`\`
+EOF
+}
+
 # 生成队列清理记录
 generate_queue_cleanup_record() {
     local current_time="$1"
@@ -635,4 +870,238 @@ EOF
     fi
     
     echo "$notification_body"
+}
+
+# 生成构建信息模板（同时显示 run_id 和 issue_id）
+generate_build_info_template() {
+    local run_id="$1"
+    local issue_id="$2"
+    local build_status="$3"
+    local trigger_type="$4"
+    local current_time="$5"
+    
+    cat <<EOF
+## 🔧 构建信息
+
+**构建时间：** $current_time
+**触发类型：** $trigger_type
+**构建状态：** $build_status
+
+### 标识信息
+- **Run ID：** $run_id
+- **Issue ID：** $issue_id
+
+### 构建详情
+- **工作流：** Custom Rustdesk Build
+- **仓库：** $GITHUB_REPOSITORY
+- **分支：** $GITHUB_REF_NAME
+
+---
+*此信息由构建系统自动生成*
+EOF
+}
+
+# 生成队列项信息模板（包含 run_id 和 issue_id）
+generate_queue_item_template() {
+    local run_id="$1"
+    local issue_id="$2"
+    local trigger_type="$3"
+    local queue_position="$4"
+    local join_time="$5"
+    local build_params="$6"
+    
+    cat <<EOF
+## 📋 队列项信息
+
+**队列位置：** $queue_position
+**加入时间：** $join_time
+**触发类型：** $trigger_type
+
+### 标识信息
+- **Run ID：** $run_id
+- **Issue ID：** $issue_id
+
+$(generate_build_params_summary "$build_params")
+
+---
+*队列项由构建系统自动管理*
+EOF
+}
+
+# 生成锁状态信息模板（包含 run_id 和 issue_id）
+generate_lock_status_template() {
+    local run_id="$1"
+    local issue_id="$2"
+    local lock_type="$3"
+    local lock_status="$4"
+    local lock_holder="$5"
+    local lock_time="$6"
+    
+    cat <<EOF
+## 🔒 锁状态信息
+
+**锁类型：** $lock_type
+**锁状态：** $lock_status
+**锁定时间：** $lock_time
+
+### 标识信息
+- **Run ID：** $run_id
+- **Issue ID：** $issue_id
+
+### 锁详情
+- **锁持有者：** $lock_holder
+- **锁版本：** 最新
+
+---
+*锁状态由构建系统自动管理*
+EOF
+}
+
+# 生成队列详细信息模板（包含每个项目的 run_id 和 issue_id）
+generate_queue_details_template() {
+    local queue_data="$1"
+    local current_time="$2"
+    
+    # 计算队列统计信息
+    local queue_length=$(echo "$queue_data" | jq '.queue | length // 0')
+    local issue_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "issue")) | length // 0')
+    local workflow_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "workflow_dispatch")) | length // 0')
+    
+    cat <<EOF
+## 📋 队列详细信息
+
+**更新时间：** $current_time
+
+### 队列统计
+- **总数量：** $queue_length/5
+- **Issue触发：** $issue_count/3
+- **手动触发：** $workflow_count/5
+
+### 队列项目详情
+
+EOF
+    
+    # 遍历队列中的每个项目
+    if [ "$queue_length" -gt 0 ]; then
+        # 使用 jq 遍历队列并提取详细信息
+        echo "$queue_data" | jq -r '.queue[] | "\(.position)|\(.trigger_type)|\(.build_id)|\(.issue_number // "N/A")|\(.join_time)|\(.build_params.tag // "N/A")|\(.build_params.customer // "N/A")|\(.build_params.email // "N/A")|\(.build_params.rendezvous_server // "N/A")|\(.build_params.api_server // "N/A")"' | while IFS='|' read -r position trigger_type build_id issue_number join_time tag customer email rendezvous_server api_server; do
+            # 清理空白字符
+            position=$(echo "$position" | xargs)
+            trigger_type=$(echo "$trigger_type" | xargs)
+            build_id=$(echo "$build_id" | xargs)
+            issue_number=$(echo "$issue_number" | xargs)
+            join_time=$(echo "$join_time" | xargs)
+            tag=$(echo "$tag" | xargs)
+            customer=$(echo "$customer" | xargs)
+            email=$(echo "$email" | xargs)
+            rendezvous_server=$(echo "$rendezvous_server" | xargs)
+            api_server=$(echo "$api_server" | xargs)
+            
+            cat <<EOF
+**位置 $position：**
+- **触发类型：** $trigger_type
+- **Run ID：** $build_id
+- **Issue ID：** $issue_number
+- **加入时间：** $join_time
+
+### 构建参数
+- **标签：** $tag
+- **客户：** $customer
+- **邮箱：** $email
+- **Rendezvous服务器：** $rendezvous_server
+- **API服务器：** $api_server
+
+---
+
+EOF
+        done
+    else
+        cat <<EOF
+*队列为空*
+
+EOF
+    fi
+    
+    cat <<EOF
+### 完整队列数据
+\`\`\`json
+$queue_data
+\`\`\`
+EOF
+}
+
+# 生成构建参数摘要模板
+generate_build_params_summary() {
+    local build_params="$1"
+    
+    # 提取关键参数
+    local tag=$(echo "$build_params" | jq -r '.tag // "N/A"')
+    local customer=$(echo "$build_params" | jq -r '.customer // "N/A"')
+    local email=$(echo "$build_params" | jq -r '.email // "N/A"')
+    local rendezvous_server=$(echo "$build_params" | jq -r '.rendezvous_server // "N/A"')
+    local api_server=$(echo "$build_params" | jq -r '.api_server // "N/A"')
+    local slogan=$(echo "$build_params" | jq -r '.slogan // "N/A"')
+    
+    cat <<EOF
+### 构建参数摘要
+- **标签：** $tag
+- **客户：** $customer
+- **标语：** $slogan
+- **邮箱：** $email
+- **Rendezvous服务器：** $rendezvous_server
+- **API服务器：** $api_server
+EOF
+}
+
+# 生成构建参数详细模板
+generate_build_params_details() {
+    local build_params="$1"
+    
+    cat <<EOF
+### 完整构建参数
+\`\`\`json
+$build_params
+\`\`\`
+EOF
+}
+
+# 生成需要审核的模板
+generate_review_required_template() {
+    local run_id="$1"
+    local issue_id="$2"
+    local trigger_data="$3"
+    
+    # 从trigger_data中提取构建参数
+    local tag=$(echo "$trigger_data" | jq -r '.build_params.tag // "N/A"')
+    local customer=$(echo "$trigger_data" | jq -r '.build_params.customer // "N/A"')
+    local email=$(echo "$trigger_data" | jq -r '.build_params.email // "N/A"')
+    local rendezvous_server=$(echo "$trigger_data" | jq -r '.build_params.rendezvous_server // "N/A"')
+    local api_server=$(echo "$trigger_data" | jq -r '.build_params.api_server // "N/A"')
+    local current_time=$(date -Iseconds)
+    
+    cat <<EOF
+## 🔍 需要管理员审核
+
+**Run ID：** $run_id  
+**Issue ID：** $issue_id  
+**审核时间：** $current_time
+
+### 构建参数
+- **标签：** $tag
+- **客户：** $customer
+- **邮箱：** $email
+- **Rendezvous服务器：** $rendezvous_server
+- **API服务器：** $api_server
+
+### 审核原因
+由于使用了私有IP地址或需要特殊审核的参数，此构建请求需要管理员审核。
+
+### 审核操作
+请管理员回复以下命令之一：
+- **批准：** \`/approve\`
+- **拒绝：** \`/reject\`
+
+### 审核超时
+如果30分钟内没有审核回复，构建请求将自动超时。
+EOF
 } 

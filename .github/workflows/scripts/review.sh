@@ -12,10 +12,11 @@ validate_server_address() {
     local server_address="$1"
     local server_name="$2"
     
-    # 去除协议前缀和端口
+    # 去除协议前缀、端口和路径
     local clean_address="$server_address"
     clean_address="${clean_address#*://}"
     clean_address="${clean_address%%:*}"
+    clean_address="${clean_address%%/*}"
     
     # 检查是否为空
     if [ -z "$clean_address" ]; then
@@ -53,10 +54,11 @@ validate_server_address() {
 check_private_ip() {
     local ip="$1"
     
-    # 去除协议前缀和端口
+    # 去除协议前缀、端口和路径
     local clean_ip="$ip"
     clean_ip="${clean_ip#*://}"
     clean_ip="${clean_ip%%:*}"
+    clean_ip="${clean_ip%%/*}"
     
     # 检查是否为IP地址格式
     if [[ "$clean_ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
@@ -75,10 +77,11 @@ check_private_ip() {
 is_valid_ip() {
     local ip="$1"
     
-    # 去除协议前缀和端口
+    # 去除协议前缀、端口和路径
     local clean_ip="$ip"
     clean_ip="${clean_ip#*://}"
     clean_ip="${clean_ip%%:*}"
+    clean_ip="${clean_ip%%/*}"
     
     # 检查是否为IP地址格式
     if [[ "$clean_ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
@@ -86,7 +89,7 @@ is_valid_ip() {
         IFS='.' read -ra ADDR <<< "$clean_ip"
         for segment in "${ADDR[@]}"; do
             if [ "$segment" -lt 0 ] || [ "$segment" -gt 255 ]; then
-        return 1
+                return 1
             fi
         done
         return 0  # 是有效IP
@@ -126,10 +129,10 @@ validate_parameters() {
     local event_data="$1"
     local trigger_data="$2"
     
-    # 从trigger_data中提取需要的参数
-    local rendezvous_server=$(echo "$trigger_data" | jq -r '.rendezvous_server // empty')
-    local api_server=$(echo "$trigger_data" | jq -r '.api_server // empty')
-    local email=$(echo "$trigger_data" | jq -r '.email // empty')
+    # 从trigger_data的build_params中提取需要的参数
+    local rendezvous_server=$(echo "$trigger_data" | jq -r '.build_params.rendezvous_server // empty')
+    local api_server=$(echo "$trigger_data" | jq -r '.build_params.api_server // empty')
+    local email=$(echo "$trigger_data" | jq -r '.build_params.email // empty')
     
     # 调试：输出提取的参数
     debug "var" "Extracted rendezvous_server" "$rendezvous_server"
@@ -248,8 +251,8 @@ need_review() {
         fi
         
         # 直接检查服务器地址是否为公网地址
-        local rendezvous_server=$(echo "$trigger_data" | jq -r '.rendezvous_server // empty' || echo "")
-        local api_server=$(echo "$trigger_data" | jq -r '.api_server // empty' || echo "")
+        local rendezvous_server=$(echo "$trigger_data" | jq -r '.build_params.rendezvous_server // empty' || echo "")
+        local api_server=$(echo "$trigger_data" | jq -r '.build_params.api_server // empty' || echo "")
         
         # 检查是否需要审核
         local needs_review=false
@@ -288,9 +291,9 @@ handle_review() {
     local event_data="$1"
     local trigger_data="$2"
     
-    # 从trigger_data中提取需要的参数
-    local rendezvous_server=$(echo "$trigger_data" | jq -r '.rendezvous_server // empty' || echo "")
-    local api_server=$(echo "$trigger_data" | jq -r '.api_server // empty' || echo "")
+    # 从trigger_data的build_params中提取需要的参数
+    local rendezvous_server=$(echo "$trigger_data" | jq -r '.build_params.rendezvous_server // empty' || echo "")
+    local api_server=$(echo "$trigger_data" | jq -r '.build_params.api_server // empty' || echo "")
     
     # 从event_data中提取actor和repo_owner
     local actor=$(echo "$event_data" | jq -r '.sender.login // empty' || echo "")
@@ -480,28 +483,26 @@ output_data() {
         '{trigger_data: $trigger_data, build_rejected: $build_rejected, build_timeout: $build_timeout, validation_passed: $validation_passed, reject_reason: $reject_reason}' || echo "{}")
     
     # 输出到GitHub Actions输出变量
-    echo "data<<EOF" >> $GITHUB_OUTPUT
-    echo "$trigger_data" >> $GITHUB_OUTPUT
-    echo "EOF" >> $GITHUB_OUTPUT
+    echo "data=$trigger_data" >> $GITHUB_OUTPUT
     
     # 根据标志设置构建批准状态    
     if [ "$build_rejected" = "true" ]; then
-        echo "validation_passed=false" >> $GITHUB_OUTPUT
+        echo "review_passed=false" >> $GITHUB_OUTPUT
         if [ "$BUILD_REJECTED" = "true" ]; then
             local reject_reason="${REJECT_REASON:-Build was rejected due to validation issues}"
-            echo "reject_reason=$reject_reason" >> $GITHUB_OUTPUT
+            echo "review_reason=$reject_reason" >> $GITHUB_OUTPUT
             debug "error" "Build was rejected: $reject_reason"
         else
-        echo "reject_reason=Build was rejected by admin" >> $GITHUB_OUTPUT
+        echo "review_reason=Build was rejected by admin" >> $GITHUB_OUTPUT
             debug "error" "Build was rejected by admin"
         fi
     elif [ "$build_timeout" = "true" ]; then
-        echo "validation_passed=false" >> $GITHUB_OUTPUT
-        echo "reject_reason=Build timed out during review" >> $GITHUB_OUTPUT
+        echo "review_passed=false" >> $GITHUB_OUTPUT
+        echo "review_reason=Build timed out during review" >> $GITHUB_OUTPUT
         debug "error" "Build timed out during review"
     else
-        echo "validation_passed=true" >> $GITHUB_OUTPUT
-        echo "reject_reason=" >> $GITHUB_OUTPUT
+        echo "review_passed=true" >> $GITHUB_OUTPUT
+        echo "review_reason=" >> $GITHUB_OUTPUT
         debug "success" "Build was approved or no review needed"
     fi
     
@@ -511,9 +512,9 @@ output_data() {
 # 公共方法：输出被拒绝构建的数据
 output_rejected_data() {
     local trigger_data="$1"
-    echo "data={}" >> $GITHUB_OUTPUT
-    echo "validation_passed=false" >> $GITHUB_OUTPUT
-    echo "reject_reason=Build was rejected - no data to pass forward" >> $GITHUB_OUTPUT
+    echo "data=$trigger_data" >> $GITHUB_OUTPUT
+    echo "review_passed=false" >> $GITHUB_OUTPUT
+    echo "review_reason=Build was rejected - no data to pass forward" >> $GITHUB_OUTPUT
     debug "error" "Build was rejected - no data to pass forward"
 }
 
@@ -527,10 +528,10 @@ get_trigger_data() {
 get_server_params() {
     local trigger_data="$1"
     
-    # 从trigger_data中提取服务器参数
-    local rendezvous_server=$(echo "$trigger_data" | jq -r '.rendezvous_server // empty' || echo "")
-    local api_server=$(echo "$trigger_data" | jq -r '.api_server // empty' || echo "")
-    local email=$(echo "$trigger_data" | jq -r '.email // empty' || echo "")
+    # 从trigger_data的build_params中提取服务器参数
+    local rendezvous_server=$(echo "$trigger_data" | jq -r '.build_params.rendezvous_server // empty' || echo "")
+    local api_server=$(echo "$trigger_data" | jq -r '.build_params.api_server // empty' || echo "")
+    local email=$(echo "$trigger_data" | jq -r '.build_params.email // empty' || echo "")
     
     echo "RENDEZVOUS_SERVER=$rendezvous_server"
     echo "API_SERVER=$api_server"
@@ -540,43 +541,43 @@ get_server_params() {
 # 主审核管理函数 - 供工作流调用
 # 参数说明：
 #   arg1: operation - 操作类型 (validate|need-review|handle-review|handle-rejection|output-data|output-rejected|get-trigger-data|get-server-params)
-#   arg2: trigger_data - 触发数据JSON字符串 (仅在需要时使用)
-#   arg3: event_data - GitHub事件数据JSON字符串 (仅在需要时使用)
+#   arg2: event_data - GitHub事件数据JSON字符串 (仅在需要时使用)
+#   arg3: trigger_data - 触发数据JSON字符串 (仅在需要时使用)
 #   arg4: 额外参数 - 根据操作类型不同而不同 (仅在需要时使用)
 #   arg5: 额外参数 - 根据操作类型不同而不同 (仅在需要时使用)
 #   arg6: 额外参数 - 根据操作类型不同而不同 (仅在需要时使用)
 review_manager() {
     local operation="$1"
-    local arg1="$2"
-    local arg2="$3"
-    local arg3="$4"
-    local arg4="$5"
-    local arg5="$6"
+    local event_data="$2"
+    local trigger_data="$3"
+    local arg4="$4"
+    local arg5="$5"
+    local arg6="$6"
     
     case "$operation" in
         "validate")
-            validate_parameters "$arg2" "$arg1"
+            validate_parameters "$event_data" "$trigger_data"
             ;;
         "need-review")
-            need_review "$arg1" "$arg2"
+            need_review "$event_data" "$trigger_data"
             ;;
         "handle-review")
-            handle_review "$arg1" "$arg2"
+            handle_review "$event_data" "$trigger_data"
             ;;
         "handle-rejection")
-            handle_rejection "$arg1" "$arg2" "$arg3"
+            handle_rejection "$event_data" "$trigger_data" "$arg4"
             ;;
         "output-data")
-            output_data "$arg1" "$arg2" "$arg3" "$arg4"
+            output_data "$event_data" "$trigger_data" "$arg4" "$arg5"
             ;;
         "output-rejected")
-            output_rejected_data "$arg1"
+            output_rejected_data "$trigger_data"
             ;;
         "get-trigger-data")
-            get_trigger_data "$arg1"
+            get_trigger_data "$trigger_data"
             ;;
         "get-server-params")
-            get_server_params "$arg1"
+            get_server_params "$trigger_data"
             ;;
         *)
             debug "error" "Unknown operation: $operation"

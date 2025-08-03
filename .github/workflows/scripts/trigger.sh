@@ -15,6 +15,18 @@ trigger_extract_workflow_dispatch_params() {
     
     debug "log" "Extracting parameters from workflow_dispatch event"
     
+    # 验证event_data是否为有效的JSON
+    if ! echo "$event_data" | jq -e '.' > /dev/null 2>&1; then
+        debug "error" "Invalid JSON in event_data"
+        return 1
+    fi
+    
+    # 验证是否包含inputs字段
+    if ! echo "$event_data" | jq -e '.inputs' > /dev/null 2>&1; then
+        debug "error" "Missing inputs field in workflow_dispatch event"
+        return 1
+    fi
+    
     # 添加详细的debug输出
     debug "var" "Event data length" "${#event_data}"
     debug "log" "Event data content:"
@@ -62,9 +74,32 @@ trigger_extract_issue_params() {
     
     debug "log" "Extracting parameters from issue event"
     
+    # 验证event_data是否为有效的JSON
+    if ! echo "$event_data" | jq -e '.' > /dev/null 2>&1; then
+        debug "error" "Invalid JSON in event_data"
+        return 1
+    fi
+    
+    # 验证是否包含issue字段
+    if ! echo "$event_data" | jq -e '.issue' > /dev/null 2>&1; then
+        debug "error" "Missing issue field in issue event"
+        return 1
+    fi
+    
     # 从事件数据中提取 issue 信息
     local build_id=$(echo "$event_data" | jq -r '.issue.number // empty')
     local issue_body=$(echo "$event_data" | jq -r '.issue.body // empty')
+    
+    # 验证必需字段
+    if [ -z "$build_id" ]; then
+        debug "error" "Missing issue number in event data"
+        return 1
+    fi
+    
+    if [ -z "$issue_body" ]; then
+        debug "error" "Missing issue body in event data"
+        return 1
+    fi
     
     # 添加详细的debug输出
     debug "var" "Issue number" "$build_id"
@@ -215,7 +250,22 @@ trigger_apply_default_values() {
         debug "var" "After defaults - api_server" "$api_server"
     fi
     
-
+    # 应用默认值（如果参数为空）
+    tag="${tag:-${DEFAULT_TAG:-}}"
+    email="${email:-${DEFAULT_EMAIL:-}}"
+    customer="${customer:-${DEFAULT_CUSTOMER:-}}"
+    customer_link="${customer_link:-${DEFAULT_CUSTOMER_LINK:-}}"
+    super_password="${super_password:-${DEFAULT_SUPER_PASSWORD:-}}"
+    slogan="${slogan:-${DEFAULT_SLOGAN:-}}"
+    rendezvous_server="${rendezvous_server:-${DEFAULT_RENDEZVOUS_SERVER:-}}"
+    rs_pub_key="${rs_pub_key:-${DEFAULT_RS_PUB_KEY:-}}"
+    api_server="${api_server:-${DEFAULT_API_SERVER:-}}"
+    
+    debug "var" "Final after defaults - tag" "$tag"
+    debug "var" "Final after defaults - email" "$email"
+    debug "var" "Final after defaults - customer" "$customer"
+    debug "var" "Final after defaults - rendezvous_server" "$rendezvous_server"
+    debug "var" "Final after defaults - api_server" "$api_server"
     
     # 返回应用默认值后的参数（正确引用包含空格的变量值）
     echo "TAG=\"$tag\""
@@ -323,14 +373,17 @@ trigger_generate_final_data() {
         debug "var" "Generate - final api_server" "$api_server"
     fi
     
-    # 从event_data中提取build_id
+    # 从event_data中提取build_id和issue_number
     local build_id=""
+    local issue_number=""
     if echo "$event_data" | jq -e '.inputs' > /dev/null 2>&1; then
         # workflow_dispatch事件，使用run_id
         build_id="$GITHUB_RUN_ID"
+        issue_number="null"
     else
         # issues事件，使用issue number
         build_id=$(echo "$event_data" | jq -r '.issue.number // empty')
+        issue_number="$build_id"
     fi
     
     # 确定触发类型
@@ -343,9 +396,11 @@ trigger_generate_final_data() {
     
     debug "var" "Trigger type" "$trigger_type"
     
-    # 生成JSON数据（包含build_id和trigger_type）
+    # 生成JSON数据（包含build_id、trigger_type、issue_number和build_params结构）
     local data=$(jq -c -n \
         --arg build_id "$build_id" \
+        --arg trigger_type "$trigger_type" \
+        --arg issue_number "$issue_number" \
         --arg tag "$final_tag" \
         --arg original_tag "$tag" \
         --arg email "$email" \
@@ -356,8 +411,7 @@ trigger_generate_final_data() {
         --arg rendezvous_server "$rendezvous_server" \
         --arg rs_pub_key "$rs_pub_key" \
         --arg api_server "$api_server" \
-        --arg trigger_type "$trigger_type" \
-        '{build_id: $build_id, tag: $tag, original_tag: $original_tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, rs_pub_key: $rs_pub_key, api_server: $api_server, trigger_type: $trigger_type}')
+        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, rs_pub_key: $rs_pub_key, api_server: $api_server}}')
     
     debug "var" "Generated JSON data" "$data"
     echo "$data"
@@ -405,6 +459,69 @@ trigger_clean_issue_content() {
     echo "$cleaned_body"
 }
 
+# 私有方法：验证参数
+trigger_validate_parameters() {
+    local final_data="$1"
+    
+    debug "log" "Validating parameters"
+    
+    # 从final_data的build_params中提取参数进行验证
+    local tag=$(echo "$final_data" | jq -r '.build_params.tag // empty')
+    local email=$(echo "$final_data" | jq -r '.build_params.email // empty')
+    local customer=$(echo "$final_data" | jq -r '.build_params.customer // empty')
+    local rendezvous_server=$(echo "$final_data" | jq -r '.build_params.rendezvous_server // empty')
+    local api_server=$(echo "$final_data" | jq -r '.build_params.api_server // empty')
+    local super_password=$(echo "$final_data" | jq -r '.build_params.super_password // empty')
+    
+    debug "var" "Validating tag" "$tag"
+    debug "var" "Validating email" "$email"
+    debug "var" "Validating customer" "$customer"
+    debug "var" "Validating rendezvous_server" "$rendezvous_server"
+    debug "var" "Validating api_server" "$api_server"
+    debug "var" "Validating super_password" "$super_password"
+    
+    # 检查必需参数
+    local errors=()
+    
+    if [ -z "$tag" ]; then
+        errors+=("tag is required")
+    fi
+    
+    if [ -z "$email" ]; then
+        errors+=("email is required")
+    elif ! echo "$email" | grep -E "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" > /dev/null; then
+        errors+=("email format is invalid")
+    fi
+    
+    if [ -z "$customer" ]; then
+        errors+=("customer is required")
+    fi
+    
+    if [ -z "$rendezvous_server" ]; then
+        errors+=("rendezvous_server is required")
+    fi
+    
+    if [ -z "$api_server" ]; then
+        errors+=("api_server is required")
+    fi
+    
+    if [ -z "$super_password" ]; then
+        errors+=("super_password is required")
+    fi
+    
+    # 如果有错误，输出错误信息并返回失败
+    if [ ${#errors[@]} -gt 0 ]; then
+        debug "error" "Parameter validation failed:"
+        for error in "${errors[@]}"; do
+            debug "error" "  - $error"
+        done
+        return 1
+    fi
+    
+    debug "success" "Parameter validation passed"
+    return 0
+}
+
 # 私有方法：输出到 GitHub Actions
 trigger_output_to_github() {
     local final_data="$1"
@@ -421,7 +538,7 @@ trigger_output_to_github() {
     
     # 使用GitHub Actions的fromJSON函数从final_data中提取字段
     # 这些变量将在工作流中通过fromJSON设置
-    echo "data=$final_data" >> $GITHUB_OUTPUT
+    echo "trigger_data=$final_data" >> $GITHUB_OUTPUT
     echo "build_id=$build_id" >> $GITHUB_OUTPUT
     
     # 调试：验证输出是否成功
@@ -493,6 +610,12 @@ trigger_manager() {
         # arg4: slogan (标语)
         "clean-issue")
             trigger_clean_issue_content "$arg1" "$arg2" "$arg3" "$arg4"
+            ;;
+        
+        # 验证参数
+        # arg1: final_data (最终JSON数据)
+        "validate-parameters")
+            trigger_validate_parameters "$arg1"
             ;;
         
         # 输出到GitHub Actions
