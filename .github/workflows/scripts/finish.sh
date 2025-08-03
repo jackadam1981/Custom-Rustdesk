@@ -33,8 +33,8 @@ get_and_decrypt_build_params() {
     
     # 从队列中找到当前构建
     local current_queue_item=$(echo "$queue_data" | \
-        jq -r --arg build_id "$current_build_id" \
-        '.queue[] | select(.build_id == $build_id) // empty')
+        jq -r --arg run_id "$current_build_id" \
+        '.queue[] | select(.run_id == $run_id) // empty')
     
     if [ -z "$current_queue_item" ]; then
         debug "error" "Current build not found in queue"
@@ -173,7 +173,7 @@ check_and_reset_version_numbers() {
             ')
             
             # 更新队列数据
-            local update_response=$(queue_manager_update_queue_comment "$reset_queue_data" "无")
+            local update_response=$(queue_manager_update_lock "$reset_queue_data" "queue" "无")
             
             if [ $? -eq 0 ]; then
                 debug "success" "Successfully reset version numbers to 1"
@@ -293,42 +293,13 @@ finish_manager() {
             else
               debug "log" "Releasing all triple locks for build $build_id"
               
-              local lock_release_status="success"
-              local failed_locks=""
-              
-              # 释放构建锁
-              if queue_manager "release-build-lock" "$build_id"; then
-                debug "success" "Successfully released build lock"
-              else
-                debug "warning" "Failed to release build lock"
-                lock_release_status="partial"
-                failed_locks="${failed_locks}build_lock "
-              fi
-              
-              # 释放队列锁
-              if queue_manager "release-queue-lock" "$build_id"; then
-                debug "success" "Successfully released queue lock"
-              else
-                debug "warning" "Failed to release queue lock"
-                lock_release_status="partial"
-                failed_locks="${failed_locks}queue_lock "
-              fi
-              
-              # 释放Issue锁
-              if queue_manager "release-issue-lock" "$build_id"; then
-                debug "success" "Successfully released issue lock"
-              else
-                debug "warning" "Failed to release issue lock"
-                lock_release_status="partial"
-                failed_locks="${failed_locks}issue_lock "
-              fi
-              
-              if [ "$lock_release_status" = "partial" ]; then
-                debug "warning" "Some locks failed to release: $failed_locks"
-                echo "lock_released=partial"
-                echo "failed_locks=$failed_locks"
-              else
+              # 使用统一的release操作
+              if queue_manager "release" "$build_id"; then
+                debug "success" "Successfully released all locks"
                 echo "lock_released=success"
+              else
+                debug "warning" "Failed to release locks"
+                echo "lock_released=failed"
               fi
             fi
             ;;

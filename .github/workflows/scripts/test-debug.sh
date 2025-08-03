@@ -17,7 +17,7 @@ debug_var "测试变量" "这是一个很长的测试变量值，用来测试变
 debug_json "测试JSON" '{"name":"test","value":123,"array":[1,2,3]}'
 debug_api "GET" "/api/test" '{"status":"success"}' "200"
 debug_queue "测试队列操作" '{"queue":[{"id":1},{"id":2}]}' "队列长度: 2"
-debug_lock "乐观锁" "获取" "build-123" "成功"
+debug_lock "三锁架构" "获取" "build-123" "成功"
 debug_performance "测试操作" "$(date +%s)" "$(date +%s)"
 debug_exit "test_function" 0 "测试结果"
 

@@ -330,7 +330,7 @@ handle_review() {
     
     # 如果是Issue触发，添加到原始Issue
     if [ -n "$original_issue_number" ]; then
-        add_issue_comment "$original_issue_number" "$review_comment"
+        issue_manager "add-comment" "$original_issue_number" "" "$review_comment"
     fi
     
     # 循环检查审核回复
@@ -437,7 +437,7 @@ handle_rejection() {
                 reject_comment+=$'\n'"- $validation_result"
             fi
             
-            add_issue_comment "$original_issue_number" "$reject_comment" || true
+            issue_manager "add-comment" "$original_issue_number" "" "$reject_comment" || true
         fi
     fi
 

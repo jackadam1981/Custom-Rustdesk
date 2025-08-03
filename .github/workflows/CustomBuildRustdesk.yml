@@ -251,15 +251,9 @@ jobs:
           # 重新获取 github.event
           EVENT_DATA='${{ toJSON(github.event) }}'
 
-          # 使用通用函数自动确定issue_number和build_id
-          eval $(queue_manager_determine_ids "$EVENT_DATA" "$TRIGGER_DATA" "${{ github.run_id }}" "${{ github.event_name }}")
-
-          echo "Issue Number: $ISSUE_NUMBER"
-          echo "Build ID: $BUILD_ID"
-
           # 使用三锁架构加入队列
           echo "Starting triple lock queue join process..."
-          join_result=$(queue_manager "join" "$ISSUE_NUMBER" "$TRIGGER_DATA" "5")
+          join_result=$(queue_manager "join" "$TRIGGER_DATA" "5")
           join_exit_code=$?
           
           # 检查加入结果
@@ -300,14 +294,8 @@ jobs:
           # 重新获取 github.event
           EVENT_DATA='${{ toJSON(github.event) }}'
 
-          # 使用通用函数自动确定issue_number和build_id
-          eval $(queue_manager_determine_ids "$EVENT_DATA" "$TRIGGER_DATA" "${{ github.run_id }}" "${{ github.event_name }}")
-
-          echo "Issue Number: $ISSUE_NUMBER"
-          echo "Build ID: $BUILD_ID"
-          
           # 使用三锁架构获取构建锁
-          lock_result=$(queue_manager "acquire" "$BUILD_ID" "5")
+          lock_result=$(queue_manager "acquire" "5")
 
           # 检查获取锁的结果
           if [ $? -eq 0 ]; then

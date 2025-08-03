@@ -2,85 +2,41 @@
 # 队列管理脚本 - 伪面向对象模式
 # 这个文件包含所有队列操作功能，采用简单的伪面向对象设计
 # 主要用于被 CustomBuildRustdesk.yml 工作流调用
-# 整合了混合锁机制（乐观锁 + 悲观锁）
+# 整合了三锁架构（Issue锁 + 队列锁 + 构建锁）
 
 # 加载依赖脚本
 source .github/workflows/scripts/debug-utils.sh
 source .github/workflows/scripts/encryption-utils.sh
 source .github/workflows/scripts/issue-templates.sh
-
-# 通用函数：根据触发类型自动确定 issue_number 和 build_id
-# 这个函数可以在所有需要区分触发类型的步骤中使用
-queue_manager_determine_ids() {
-  local event_data="$1"
-  local trigger_data="$2"
-  local github_run_id="$3"
-  local github_event_name="$4"
-
-  local issue_number=""
-  local build_id=""
-
-  if [ "$github_event_name" = "issues" ]; then
-        # Issue触发：使用真实的issue编号
-    issue_number=$(echo "$event_data" | jq -r '.issue.number // empty')
-    if [ -z "$issue_number" ]; then
-      debug "error" "无法从event_data中提取issue编号"
-      return 1
-    fi
-        
-        # 优先使用trigger_data中的build_id，没有则使用run_id
-        build_id=$(echo "$trigger_data" | jq -r '.build_id // empty')
-        if [ -z "$build_id" ]; then
-            build_id="$github_run_id"
-            debug "log" "使用GITHUB_RUN_ID作为build_id: $build_id"
-        else
-            debug "log" "使用trigger_data中的build_id: $build_id"
-        fi
-    else
-        # 手动触发：使用队列管理issue编号和run_id作为build_id
-        issue_number="1"  # 手动触发总是使用issue #1作为队列管理issue
-        build_id="$github_run_id"
-        debug "log" "手动触发，使用队列管理issue编号: $issue_number, build_id: $build_id"
-    fi
-
-  # 输出结果（可以通过eval捕获）
-  echo "ISSUE_NUMBER=$issue_number"
-  echo "BUILD_ID=$build_id"
-
-    debug "log" "触发类型: $github_event_name, Issue编号: $issue_number, Build ID: $build_id"
-  return 0
-}
+source .github/workflows/scripts/issue-manager.sh
 
 # 队列管理器 - 伪面向对象实现
 # 使用全局变量存储实例状态
+# 设计理念：队列管理器与触发方式解耦，统一使用Issue #1作为队列存储
+
+# 队列管理Issue编号（固定值）
+# 无论手动触发还是issue触发，都使用同一个Issue #1来管理队列状态
+_QUEUE_MANAGER_ISSUE_NUMBER="1"
 
 # 私有属性（全局变量）
-_QUEUE_MANAGER_ISSUE_NUMBER=""
 _QUEUE_MANAGER_QUEUE_DATA=""
-_QUEUE_MANAGER_CURRENT_TIME=""
 
-# 混合锁配置参数
+# 三锁架构配置参数
 _QUEUE_MANAGER_MAX_RETRIES=3
 _QUEUE_MANAGER_RETRY_DELAY=1
-_QUEUE_MANAGER_MAX_WAIT_TIME=7200  # 2小时 - 构建锁获取超时
-_QUEUE_MANAGER_CHECK_INTERVAL=30   # 30秒 - 检查间隔
-_QUEUE_MANAGER_ISSUE_LOCK_TIMEOUT=30     # Issue 锁超时（30秒）
-_QUEUE_MANAGER_QUEUE_LOCK_TIMEOUT=300    # 队列锁超时（5分钟）
-_QUEUE_MANAGER_BUILD_LOCK_TIMEOUT=7200   # 构建锁超时（2小时）
-_QUEUE_MANAGER_QUEUE_TIMEOUT_HOURS=6     # 队列项超时（6小时）
+_QUEUE_MANAGER_MAX_WAIT_TIME=7200      # 2小时 - 构建锁获取超时
+_QUEUE_MANAGER_CHECK_INTERVAL=30       # 30秒 - 检查间隔
+_QUEUE_MANAGER_ISSUE_LOCK_TIMEOUT=30   # Issue 锁超时（30秒）
+_QUEUE_MANAGER_QUEUE_LOCK_TIMEOUT=300  # 队列锁超时（5分钟）
+_QUEUE_MANAGER_BUILD_LOCK_TIMEOUT=7200 # 构建锁超时（2小时）
+_QUEUE_MANAGER_QUEUE_TIMEOUT_HOURS=6   # 队列项超时（6小时）
 
-# 构造函数
-queue_manager_init() {
-  local issue_number="${1:-1}"
-  _QUEUE_MANAGER_ISSUE_NUMBER="$issue_number"
-  _QUEUE_MANAGER_CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
-  debug "log" "Initializing queue manager with issue #$_QUEUE_MANAGER_ISSUE_NUMBER"
-  queue_manager_load_data
-}
+# 默认队列数据结构
+_QUEUE_MANAGER_DEFAULT_DATA='{"issue_locked_by":null,"queue_locked_by":null,"build_locked_by":null,"issue_lock_version":1,"queue_lock_version":1,"build_lock_version":1,"version":1,"queue":[]}'
 
 # 私有方法：加载队列数据
 queue_manager_load_data() {
-  debug "log" "Loading queue data for issue #$_QUEUE_MANAGER_ISSUE_NUMBER"
+  debug "log" "Loading queue data from issue #$_QUEUE_MANAGER_ISSUE_NUMBER"
 
   local queue_manager_content=$(queue_manager_get_content "$_QUEUE_MANAGER_ISSUE_NUMBER")
   if [ $? -ne 0 ]; then
@@ -98,39 +54,13 @@ queue_manager_load_data() {
 queue_manager_get_content() {
   local issue_number="$1"
 
-  # 在测试环境中，如果GITHUB_TOKEN是测试token，返回模拟数据
-  if [ "$GITHUB_TOKEN" = "test_token" ] || [ "$GITHUB_REPOSITORY" = "test/repo" ]; then
-    debug "log" "Using test environment, returning mock data"
-
-    # 如果全局队列数据已经存在，使用它；否则使用默认数据
-    if [ -n "$_QUEUE_MANAGER_QUEUE_DATA" ]; then
-      local current_time=$(date '+%Y-%m-%d %H:%M:%S')
-      local queue_length=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq '.queue | length // 0')
-      local version=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.version // 1')
-      local run_id=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.run_id // "null"')
-
-      # 生成模拟响应
-      local lock_status="空闲 🔓"
-      local current_build="无"
-      local lock_holder="无"
-      if [ "$run_id" != "null" ]; then
-        lock_status="占用 🔒"
-        current_build="$run_id"
-        lock_holder="$run_id"
-      fi
-
-      # 使用printf避免控制字符问题
-      local mock_body=$(printf '## 构建队列管理\n\n**最后更新时间：** %s\n\n### 当前状态\n- **构建锁状态：** %s\n- **当前构建：** %s\n- **锁持有者：** %s\n- **版本：** %s\n\n### 混合锁状态\n- **乐观锁（排队）：** 空闲 🔓\n- **悲观锁（构建）：** %s\n\n### 构建队列\n- **当前数量：** %s/5\n- **Issue触发：** 0/3\n- **手动触发：** %s/5\n\n```json\n%s\n```\n\n---' \
-        "$current_time" "$lock_status" "$current_build" "$lock_holder" "$version" "$lock_status" "$queue_length" "$queue_length" "$_QUEUE_MANAGER_QUEUE_DATA")
-
-      # 使用jq正确转义JSON
-      local mock_response=$(jq -n --arg body "$mock_body" '{"body": $body}')
-      echo "$mock_response"
-    else
-      echo '{"body": "## 构建队列管理\n\n**最后更新时间：** 2025-07-20 10:00:00\n\n### 当前状态\n- **构建锁状态：** 空闲 🔓\n- **当前构建：** 无\n- **锁持有者：** 无\n- **版本：** 1\n\n### 混合锁状态\n- **乐观锁（排队）：** 空闲 🔓\n- **悲观锁（构建）：** 空闲 🔓\n\n### 构建队列\n- **当前数量：** 0/5\n- **Issue触发：** 0/3\n- **手动触发：** 0/5\n\n```json\n{\"queue\":[],\"run_id\":null,\"version\":1}\n```\n\n---"}'
-    fi
-    return 0
+  # 确保issue_number有效
+  if [ -z "$issue_number" ]; then
+    debug "error" "Issue number is empty, using default issue #1"
+    issue_number="1"
   fi
+
+
 
   local response=$(curl -s \
     -H "Authorization: token $GITHUB_TOKEN" \
@@ -151,175 +81,145 @@ queue_manager_extract_json() {
 
   debug "log" "Extracting JSON from issue content..."
 
-  # 首先尝试从issue body中提取
+  # 从issue body中提取
   local body_content=$(echo "$issue_content" | jq -r '.body // empty')
 
   if [ -z "$body_content" ]; then
     debug "error" "No body content found in issue"
-        echo '{"queue":[],"issue_locked_by":null,"queue_locked_by":null,"build_locked_by":null,"issue_lock_version":1,"queue_lock_version":1,"build_lock_version":1,"version":1}'
+    echo "$_QUEUE_MANAGER_DEFAULT_DATA"
     return
   fi
 
-  # 尝试多种提取方法
-  local json_data=""
-
-  # 方法1：提取 ```json ... ``` 代码块
-  json_data=$(echo "$body_content" | sed -n '/```json/,/```/p' | sed '1d;$d' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-
-  if [ -n "$json_data" ]; then
-    debug "log" "Found JSON in code block"
-  else
-    # 方法2：直接查找JSON对象
-    debug "log" "No JSON code block found, trying to extract JSON object directly..."
-    json_data=$(echo "$body_content" | grep -o '{[^}]*"version"[^}]*"queue"[^}]*}' | head -1)
-
-    if [ -n "$json_data" ]; then
-      debug "log" "Found JSON object with version and queue"
-    else
-      # 方法3：查找包含queue字段的JSON
-      json_data=$(echo "$body_content" | grep -o '{[^}]*"queue"[^}]*}' | head -1)
-
-      if [ -n "$json_data" ]; then
-        debug "log" "Found JSON object with queue field"
-      else
-        # 方法4：查找任何看起来像JSON的对象
-        json_data=$(echo "$body_content" | grep -o '{[^}]*}' | head -1)
-
-        if [ -n "$json_data" ]; then
-          debug "log" "Found potential JSON object"
-        fi
-      fi
-    fi
-  fi
-
-  debug "log" "Extracted JSON data: $json_data"
+  # 提取 ```json ... ``` 代码块
+  local json_data=$(echo "$body_content" | sed -n '/```json/,/```/p' | sed '1d;$d' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
   # 验证JSON格式并返回
-  if [ -n "$json_data" ]; then
-    debug "log" "JSON data is not empty, attempting to parse..."
-        if echo "$json_data" | jq . > /dev/null 2>&1; then
-      local result=$(echo "$json_data" | jq -c .)
-      debug "log" "Valid JSON extracted: $result"
-      echo "$result"
-    else
-      debug "error" "JSON parsing failed, using default"
-            echo '{"queue":[],"issue_locked_by":null,"queue_locked_by":null,"build_locked_by":null,"issue_lock_version":1,"queue_lock_version":1,"build_lock_version":1,"version":1}'
-    fi
+  if [ -n "$json_data" ] && echo "$json_data" | jq . >/dev/null 2>&1; then
+    local result=$(echo "$json_data" | jq -c .)
+    debug "log" "Valid JSON extracted: $result"
+    echo "$result"
   else
-    debug "error" "JSON data is empty, using default"
-        echo '{"queue":[],"issue_locked_by":null,"queue_locked_by":null,"build_locked_by":null,"issue_lock_version":1,"queue_lock_version":1,"build_lock_version":1,"version":1}'
+    debug "error" "JSON parsing failed, using default"
+    echo "$_QUEUE_MANAGER_DEFAULT_DATA"
   fi
 }
 
-# 私有方法：更新issue
+# 私有方法：更新issue（使用模板）
 queue_manager_update_issue() {
-  local body="$1"
+  local queue_data="$1"
 
-    # 在测试环境中，直接返回成功
-  if [ "$GITHUB_TOKEN" = "test_token" ] || [ "$GITHUB_REPOSITORY" = "test/repo" ]; then
-        debug "log" "Test environment: skipping issue update"
-        return 0
-    fi
-    
-    debug "log" "Updating issue #$_QUEUE_MANAGER_ISSUE_NUMBER with body length: ${#body}"
-    debug "log" "Repository: $GITHUB_REPOSITORY"
-    debug "log" "Token available: $([ -n "$GITHUB_TOKEN" ] && echo "yes" || echo "no")"
-    
-    # 转义JSON数据中的特殊字符
-    local escaped_body=$(echo "$body" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g' | sed 's/\r/\\r/g' | sed 's/\t/\\t/g')
-    
-    debug "log" "Original body length: ${#body}"
-    debug "log" "Escaped body length: ${#escaped_body}"
-    debug "log" "Body preview: ${body:0:200}..."
-    
-    local response=$(curl -s -w "\n%{http_code}" -X PATCH \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        -H "Content-Type: application/json" \
-        "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$_QUEUE_MANAGER_ISSUE_NUMBER" \
-        -d "{\"body\": \"$escaped_body\"}")
-    
-    local http_code=$(echo "$response" | tail -n1)
-    local response_body=$(echo "$response" | head -n -1)
-    
-    debug "log" "HTTP response code: $http_code"
-    debug "log" "Response body: $response_body"
-    
-    if [ "$http_code" = "200" ] && echo "$response_body" | jq -e '.id' >/dev/null 2>&1; then
-        debug "success" "Issue updated successfully"
-        return 0
-    else
-        debug "error" "Failed to update issue (HTTP: $http_code)"
-        debug "error" "Response: $response_body"
-        return 1
-    fi
-}
 
-# 私有方法：更新评论
-queue_manager_update_comment() {
-    local body="$1"
-    local comment_id="${2:-}"
-    
-    # 在测试环境中，直接返回成功
-    if [ "$GITHUB_TOKEN" = "test_token" ] || [ "$GITHUB_REPOSITORY" = "test/repo" ]; then
-        debug "log" "Test environment: skipping comment update"
-    return 0
+
+  # 获取当前时间并生成body
+  local current_time=$(date '+%Y-%m-%d %H:%M:%S')
+  local version=$(echo "$queue_data" | jq -r '.version // 1')
+  
+  # 从队列数据中提取锁状态
+  local issue_locked_by=$(echo "$queue_data" | jq -r '.issue_locked_by // "无"')
+  local queue_locked_by=$(echo "$queue_data" | jq -r '.queue_locked_by // "无"')
+  local build_locked_by=$(echo "$queue_data" | jq -r '.build_locked_by // "无"')
+  
+  # 确定锁状态
+  local issue_lock_status="空闲 🔓"
+  local queue_lock_status="空闲 🔓"
+  local build_lock_status="空闲 🔓"
+  
+  if [ "$issue_locked_by" != "无" ] && [ "$issue_locked_by" != "null" ]; then
+    issue_lock_status="占用 🔒"
   fi
+  if [ "$queue_locked_by" != "无" ] && [ "$queue_locked_by" != "null" ]; then
+    queue_lock_status="占用 🔒"
+  fi
+  if [ "$build_locked_by" != "无" ] && [ "$build_locked_by" != "null" ]; then
+    build_lock_status="占用 🔒"
+  fi
+  
+  local body=$(generate_triple_lock_status_body "$current_time" "$queue_data" "$version" "$issue_lock_status" "$queue_lock_status" "$build_lock_status")
 
-    # 如果没有指定评论ID，尝试查找队列锁或构建锁评论
-    if [ -z "$comment_id" ]; then
-        if [ -n "${_QUEUE_MANAGER_QUEUE_COMMENT_ID:-}" ]; then
-            comment_id="$_QUEUE_MANAGER_QUEUE_COMMENT_ID"
-        elif [ -n "${_QUEUE_MANAGER_BUILD_COMMENT_ID:-}" ]; then
-            comment_id="$_QUEUE_MANAGER_BUILD_COMMENT_ID"
-        fi
-    fi
-    
-    if [ -z "$comment_id" ]; then
-        debug "warning" "No comment ID available for update (manual trigger mode)"
-        return 0  # 手动触发时，没有评论ID是正常的，不报错
-    fi
-    
-  debug "log" "Updating comment #$comment_id with body length: ${#body}"
-  
-  # 转义JSON数据中的特殊字符
-  local escaped_body=$(echo "$body" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g' | sed 's/\r/\\r/g' | sed 's/\t/\\t/g')
-  
-  debug "log" "Original body length: ${#body}"
-  debug "log" "Escaped body length: ${#escaped_body}"
-  debug "log" "Body preview: ${body:0:200}..."
-  
-  local response=$(curl -s -w "\n%{http_code}" -X PATCH \
-    -H "Authorization: token $GITHUB_TOKEN" \
-    -H "Accept: application/vnd.github.v3+json" \
-    -H "Content-Type: application/json" \
-        "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$_QUEUE_MANAGER_ISSUE_NUMBER/comments/$comment_id" \
-        -d "{\"body\": \"$escaped_body\"}")
+  debug "log" "Updating issue #$_QUEUE_MANAGER_ISSUE_NUMBER with template-generated body"
 
-  local http_code=$(echo "$response" | tail -n1)
-  local response_body=$(echo "$response" | head -n -1)
-  
-  debug "log" "HTTP response code: $http_code"
-  debug "log" "Response body: $response_body"
-
-  if [ "$http_code" = "200" ] && echo "$response_body" | jq -e '.id' >/dev/null 2>&1; then
-        debug "success" "Comment updated successfully"
+  # 使用 issue_manager 更新 issue 内容
+  if issue_manager "update-content" "$_QUEUE_MANAGER_ISSUE_NUMBER" "" "$body"; then
+    debug "success" "Issue updated successfully using template"
     return 0
   else
-        debug "error" "Failed to update comment (HTTP: $http_code)"
-        debug "error" "Response: $response_body"
+    debug "error" "Failed to update issue"
     return 1
   fi
 }
 
 # ========== 三锁架构核心函数 ==========
 
-# 私有方法：获取 Issue 锁（Issue 主体）
-queue_manager_acquire_issue_lock() {
-  local build_id="$1"
-  local timeout="${2:-$_QUEUE_MANAGER_ISSUE_LOCK_TIMEOUT}"
+# 私有方法：更新锁状态（统一函数）
+queue_manager_update_lock() {
+  local queue_data="$1"
+  local lock_type="$2" # issue/queue/build
+  local locked_by="${3:-无}"
 
-  debug "log" "尝试获取 Issue 锁，构建ID: $build_id，超时时间: ${timeout}s"
+  # 确定要更新的字段
+  local field_name=""
+  case "$lock_type" in
+  "issue") field_name="issue_locked_by" ;;
+  "queue") field_name="queue_locked_by" ;;
+  "build") field_name="build_locked_by" ;;
+  *)
+    debug "error" "Unknown lock type: $lock_type"
+    return 1
+    ;;
+  esac
+
+  # 更新队列数据中的锁字段
+  local updated_data=$(echo "$queue_data" | jq --arg locked_by "$locked_by" --arg field "$field_name" '.[$field] = $locked_by')
+
+  # 使用统一的更新函数
+  queue_manager_update_issue "$updated_data"
+}
+
+# 统一的锁操作函数
+queue_manager_lock_operation() {
+  local operation="$1" # acquire/release
+  local lock_type="$2" # issue/queue/build
+  local build_id="$3"
+  local timeout="$4"
+
+  # 设置默认超时时间
+  case "$lock_type" in
+  "issue")
+    timeout="${timeout:-$_QUEUE_MANAGER_ISSUE_LOCK_TIMEOUT}"
+    ;;
+  "queue")
+    timeout="${timeout:-$_QUEUE_MANAGER_QUEUE_LOCK_TIMEOUT}"
+    ;;
+  "build")
+    timeout="${timeout:-$_QUEUE_MANAGER_BUILD_LOCK_TIMEOUT}"
+    ;;
+  *)
+    debug "error" "未知的锁类型: $lock_type"
+    return 1
+    ;;
+  esac
+
+  debug "log" "执行锁操作: $operation $lock_type, 构建ID: $build_id, 超时: ${timeout}s"
+
+  case "$operation" in
+  "acquire")
+    queue_manager_acquire_lock_internal "$lock_type" "$build_id" "$timeout"
+    ;;
+  "release")
+    queue_manager_release_lock_internal "$lock_type" "$build_id"
+    ;;
+  *)
+    debug "error" "未知的操作类型: $operation"
+    return 1
+    ;;
+  esac
+}
+
+# 内部获取锁实现
+queue_manager_acquire_lock_internal() {
+  local lock_type="$1"
+  local build_id="$2"
+  local timeout="$3"
 
   local start_time=$(date +%s)
   local attempt=0
@@ -327,745 +227,345 @@ queue_manager_acquire_issue_lock() {
   while [ $(($(date +%s) - start_time)) -lt "$timeout" ]; do
     attempt=$((attempt + 1))
 
-    # 刷新队列数据
+    case "$lock_type" in
+    "issue")
+      # Issue锁逻辑
+      queue_manager_refresh
+      local locked_by=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.issue_locked_by // null')
+      local lock_version=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.issue_lock_version // 1')
+
+      if [ "$locked_by" = "null" ] || [ "$locked_by" = "$build_id" ]; then
+        local updated_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg build_id "$build_id" --arg version "$lock_version" '
+            if (.issue_lock_version | tonumber) == ($version | tonumber) then
+              .issue_locked_by = $build_id |
+              .issue_lock_version = (.issue_lock_version | tonumber) + 1
+            else
+              .
+            end
+          ')
+
+        local new_version=$(echo "$updated_data" | jq -r '.issue_lock_version // 1')
+        local new_locked_by=$(echo "$updated_data" | jq -r '.issue_locked_by // null')
+
+        if [ "$new_version" -gt "$lock_version" ] && [ "$new_locked_by" = "$build_id" ]; then
+          if queue_manager_update_lock "$updated_data" "issue" "$build_id"; then
+            debug "success" "成功获取 Issue 锁（版本: $lock_version → $new_version，尝试次数: $attempt）"
+            _QUEUE_MANAGER_QUEUE_DATA="$updated_data"
+            return 0
+          fi
+        else
+          debug "log" "版本检查失败，其他构建抢先获取了 Issue 锁（版本: $lock_version，尝试次数: $attempt）"
+        fi
+      else
+        debug "log" "Issue 锁被 $locked_by 持有，等待释放...（尝试次数: $attempt）"
+      fi
+      ;;
+
+    "queue" | "build")
+      # 队列锁和构建锁逻辑（简化版）
+      local comment_type="$lock_type"
+      local lock_field="${lock_type}_locked_by"
+      local version_field="${lock_type}_lock_version"
+
+      # 从issue body中获取锁数据
+      local lock_version=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r ".$version_field // 1")
+      local locked_by=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r ".$lock_field // null")
+
+      if [ "$locked_by" = "null" ] || [ "$locked_by" = "$build_id" ]; then
+        local updated_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg build_id "$build_id" --arg version "$lock_version" --arg lock_field "$lock_field" --arg version_field "$version_field" "
+            if (.$version_field | tonumber) == (\$version | tonumber) then
+              .$lock_field = \$build_id |
+              .$version_field = (.$version_field | tonumber) + 1
+            else
+              .
+            end
+          ")
+
+        local new_version=$(echo "$updated_data" | jq -r ".$version_field // 1")
+        local new_locked_by=$(echo "$updated_data" | jq -r ".$lock_field // null")
+
+        if [ "$new_version" -gt "$lock_version" ] && [ "$new_locked_by" = "$build_id" ]; then
+          if queue_manager_update_issue "$updated_data"; then
+            debug "success" "成功获取 ${comment_type} 锁（版本: $lock_version → $new_version，尝试次数: $attempt）"
+            _QUEUE_MANAGER_QUEUE_DATA="$updated_data"
+            return 0
+          fi
+        else
+          debug "log" "版本检查失败，其他构建抢先获取了 ${comment_type} 锁（版本: $lock_version，尝试次数: $attempt）"
+        fi
+      else
+        debug "log" "${comment_type} 锁被 $locked_by 持有，等待释放...（尝试次数: $attempt）"
+      fi
+      ;;
+    esac
+
+    # 指数退避延迟
+    if [ "$attempt" -gt 1 ]; then
+      local backoff_delay=$((_QUEUE_MANAGER_RETRY_DELAY * (2 ** (attempt - 1))))
+      local max_backoff=10
+      if [ "$backoff_delay" -gt "$max_backoff" ]; then
+        backoff_delay="$max_backoff"
+      fi
+      debug "log" "指数退避延迟${backoff_delay}秒"
+      sleep "$backoff_delay"
+    else
+      sleep "$_QUEUE_MANAGER_RETRY_DELAY"
+    fi
+  done
+
+  debug "error" "获取 $lock_type 锁超时（总尝试次数: $attempt）"
+  return 1
+}
+
+# 内部释放锁实现
+queue_manager_release_lock_internal() {
+  local lock_type="$1"
+  local build_id="$2"
+
+  debug "log" "释放 $lock_type 锁，构建ID: $build_id"
+
+  case "$lock_type" in
+  "issue")
+    # Issue锁释放逻辑
     queue_manager_refresh
+    local locked_by=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.issue_locked_by // null')
 
-    # 获取当前 Issue 锁状态
-    local issue_locked_by=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.issue_locked_by // null')
-    local issue_lock_version=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.issue_lock_version // 1')
+    if [ "$locked_by" = "$build_id" ]; then
+      local updated_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq '
+          .issue_locked_by = null |
+          .issue_lock_version = (.issue_lock_version // 0) + 1
+        ')
 
-    if [ "$issue_locked_by" = "null" ] || [ "$issue_locked_by" = "$build_id" ]; then
-      # 尝试获取 Issue 锁
-      local updated_queue_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg build_id "$build_id" --arg version "$issue_lock_version" '
-        if (.issue_lock_version | tonumber) == ($version | tonumber) then
-          .issue_locked_by = $build_id |
-          .issue_lock_version = (.issue_lock_version | tonumber) + 1
-        else
-          .  # 版本不匹配，保持原数据
-        end
-      ')
-
-      # 检查版本是否更新成功
-      local new_issue_lock_version=$(echo "$updated_queue_data" | jq -r '.issue_lock_version // 1')
-      local new_locked_by=$(echo "$updated_queue_data" | jq -r '.issue_locked_by // null')
-
-      if [ "$new_issue_lock_version" -gt "$issue_lock_version" ] && [ "$new_locked_by" = "$build_id" ]; then
-        # 版本更新成功，说明获取锁成功
-        local update_response=$(queue_manager_update_issue_lock "$updated_queue_data" "$build_id")
-
-        if [ $? -eq 0 ]; then
-          debug "success" "成功获取 Issue 锁（版本: $issue_lock_version → $new_issue_lock_version，尝试次数: $attempt）"
-          _QUEUE_MANAGER_QUEUE_DATA="$updated_queue_data"
-          return 0
-        fi
-      else
-        # 版本未更新，说明有其他构建抢先获取了锁
-        debug "log" "版本检查失败，其他构建抢先获取了 Issue 锁（版本: $issue_lock_version，尝试次数: $attempt）"
+      if queue_manager_update_lock "$updated_data" "issue" "无"; then
+        debug "success" "成功释放 Issue 锁"
+        _QUEUE_MANAGER_QUEUE_DATA="$updated_data"
+        return 0
       fi
     else
-      debug "log" "Issue 锁被 $issue_locked_by 持有，等待释放...（尝试次数: $attempt）"
-    fi
-
-    # 指数退避延迟
-    if [ "$attempt" -gt 1 ]; then
-      local backoff_delay=$((_QUEUE_MANAGER_RETRY_DELAY * (2 ** (attempt - 1))))
-      local max_backoff=5 # 最大延迟5秒
-      if [ "$backoff_delay" -gt "$max_backoff" ]; then
-        backoff_delay="$max_backoff"
-      fi
-      debug "log" "指数退避延迟${backoff_delay}秒"
-      sleep "$backoff_delay"
-    else
-      sleep "$_QUEUE_MANAGER_RETRY_DELAY"
-    fi
-  done
-
-  debug "error" "获取 Issue 锁超时（总尝试次数: $attempt）"
-  return 1
-}
-
-# 私有方法：释放 Issue 锁
-queue_manager_release_issue_lock() {
-  local build_id="$1"
-
-  debug "log" "释放 Issue 锁，构建ID: $build_id"
-
-  # 刷新队列数据
-  queue_manager_refresh
-
-  # 检查是否持有 Issue 锁
-  local issue_locked_by=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.issue_locked_by // null')
-
-  if [ "$issue_locked_by" = "$build_id" ]; then
-    # 释放 Issue 锁
-    local updated_queue_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq '
-      .issue_locked_by = null |
-      .issue_lock_version = (.issue_lock_version // 0) + 1
-    ')
-
-    local update_response=$(queue_manager_update_issue_lock "$updated_queue_data" "无")
-
-    if [ $? -eq 0 ]; then
-      debug "success" "成功释放 Issue 锁"
-      _QUEUE_MANAGER_QUEUE_DATA="$updated_queue_data"
+      debug "log" "未持有 Issue 锁，无需释放"
       return 0
     fi
-  else
-    debug "log" "未持有 Issue 锁，无需释放"
-    return 0
-  fi
+    ;;
 
-  debug "error" "释放 Issue 锁失败"
-  return 1
-}
+  "queue" | "build")
+    # 队列锁和构建锁释放逻辑（统一到issue body）
+    local lock_field="${lock_type}_locked_by"
+    local version_field="${lock_type}_lock_version"
 
-# 私有方法：更新 Issue 锁（Issue 主体）
-queue_manager_update_issue_lock() {
-  local queue_data="$1"
-  local issue_locked_by="${2:-无}"
+    local locked_by=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r ".$lock_field // null")
 
-  # 获取当前时间
-  local current_time=$(date '+%Y-%m-%d %H:%M:%S')
+    if [ "$locked_by" = "$build_id" ]; then
+      local updated_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg lock_field "$lock_field" --arg version_field "$version_field" "
+          .$lock_field = null |
+          .$version_field = (.$version_field // 0) + 1
+        ")
 
-  # 提取版本号
-  local issue_lock_version=$(echo "$queue_data" | jq -r '.issue_lock_version // 1')
-  local queue_locked_by=$(echo "$queue_data" | jq -r '.queue_locked_by // "无"')
-  local build_locked_by=$(echo "$queue_data" | jq -r '.build_locked_by // "无"')
-
-  # 生成 Issue 锁状态模板
-  local body=$(generate_issue_lock_body "$current_time" "$queue_data" "$issue_lock_version" "$issue_locked_by" "$queue_locked_by" "$build_locked_by")
-
-  # 更新 Issue 主体
-  queue_manager_update_issue "$body"
-}
-
-# 私有方法：获取队列锁（使用评论存储）
-queue_manager_acquire_queue_lock() {
-  local build_id="$1"
-  local timeout="${2:-$_QUEUE_MANAGER_QUEUE_LOCK_TIMEOUT}"
-
-  debug "log" "尝试获取队列锁，构建ID: $build_id，超时时间: ${timeout}s"
-
-  local start_time=$(date +%s)
-  local attempt=0
-
-  while [ $(($(date +%s) - start_time)) -lt "$timeout" ]; do
-    attempt=$((attempt + 1))
-
-    # 获取队列锁评论数据
-    local queue_comment_content=$(queue_manager_get_queue_comment)
-    if [ $? -ne 0 ]; then
-      debug "log" "队列锁评论不存在，正在创建..."
-      queue_manager_create_queue_comment
-      sleep 2
-      continue
-    fi
-
-    local queue_data=$(queue_manager_extract_json "$queue_comment_content")
-
-    local queue_lock_version=$(echo "$queue_data" | jq -r '.queue_lock_version // 1')
-    local queue_locked_by=$(echo "$queue_data" | jq -r '.queue_locked_by // null')
-
-    if [ "$queue_locked_by" = "null" ] || [ "$queue_locked_by" = "$build_id" ]; then
-      # 基于队列锁版本号尝试获取锁
-      local updated_queue_data=$(echo "$queue_data" | jq --arg build_id "$build_id" --arg version "$queue_lock_version" '
-        if (.queue_lock_version | tonumber) == ($version | tonumber) then
-          .queue_locked_by = $build_id |
-          .queue_lock_version = (.queue_lock_version | tonumber) + 1
-        else
-          .  # 版本不匹配，保持原数据
-        end
-      ')
-
-      # 检查版本是否更新成功
-      local new_queue_lock_version=$(echo "$updated_queue_data" | jq -r '.queue_lock_version // 1')
-      local new_locked_by=$(echo "$updated_queue_data" | jq -r '.queue_locked_by // null')
-
-      if [ "$new_queue_lock_version" -gt "$queue_lock_version" ] && [ "$new_locked_by" = "$build_id" ]; then
-        # 版本更新成功，说明获取锁成功
-        local update_response=$(queue_manager_update_queue_comment "$updated_queue_data" "$build_id")
-
-        if [ $? -eq 0 ]; then
-          debug "success" "成功获取队列锁（版本: $queue_lock_version → $new_queue_lock_version，尝试次数: $attempt）"
-          return 0
-        fi
-      else
-        # 版本未更新，说明有其他构建抢先获取了锁
-        debug "log" "版本检查失败，其他构建抢先获取了队列锁（版本: $queue_lock_version，尝试次数: $attempt）"
+      if queue_manager_update_issue "$updated_data"; then
+        debug "success" "成功释放 ${lock_type} 锁"
+        _QUEUE_MANAGER_QUEUE_DATA="$updated_data"
+        return 0
       fi
     else
-      debug "log" "队列锁被 $queue_locked_by 持有，等待释放...（尝试次数: $attempt）"
-    fi
-
-    # 指数退避延迟
-    if [ "$attempt" -gt 1 ]; then
-      local backoff_delay=$((_QUEUE_MANAGER_RETRY_DELAY * (2 ** (attempt - 1))))
-      local max_backoff=10 # 最大延迟10秒
-      if [ "$backoff_delay" -gt "$max_backoff" ]; then
-        backoff_delay="$max_backoff"
-      fi
-      debug "log" "指数退避延迟${backoff_delay}秒"
-      sleep "$backoff_delay"
-    else
-      sleep "$_QUEUE_MANAGER_RETRY_DELAY"
-    fi
-  done
-
-  debug "error" "获取队列锁超时（总尝试次数: $attempt）"
-  return 1
-}
-
-# 私有方法：释放队列锁
-queue_manager_release_queue_lock() {
-  local build_id="$1"
-
-  debug "log" "释放队列锁，构建ID: $build_id"
-
-  # 获取队列锁评论数据
-  local queue_comment_content=$(queue_manager_get_queue_comment)
-  if [ $? -ne 0 ]; then
-    debug "log" "队列锁评论不存在，无需释放"
-    return 0
-  fi
-
-  local queue_data=$(queue_manager_extract_json "$queue_comment_content")
-  local queue_locked_by=$(echo "$queue_data" | jq -r '.queue_locked_by // null')
-
-  if [ "$queue_locked_by" = "$build_id" ]; then
-    # 释放队列锁
-    local updated_queue_data=$(echo "$queue_data" | jq '
-      .queue_locked_by = null |
-      .queue_lock_version = (.queue_lock_version // 0) + 1
-    ')
-
-    local update_response=$(queue_manager_update_queue_comment "$updated_queue_data" "无")
-
-    if [ $? -eq 0 ]; then
-      debug "success" "成功释放队列锁"
+      debug "log" "未持有 ${lock_type} 锁，无需释放"
       return 0
     fi
-  else
-    debug "log" "未持有队列锁，无需释放"
-    return 0
-  fi
+    ;;
 
-  debug "error" "释放队列锁失败"
-  return 1
-}
-
-# 私有方法：更新队列锁评论
-queue_manager_update_queue_comment() {
-  local queue_data="$1"
-  local queue_locked_by="${2:-无}"
-
-  # 获取当前时间
-  local current_time=$(date '+%Y-%m-%d %H:%M:%S')
-
-  # 提取版本号
-  local queue_lock_version=$(echo "$queue_data" | jq -r '.queue_lock_version // 1')
-
-  # 生成队列锁状态模板
-  local body=$(generate_queue_lock_body "$current_time" "$queue_data" "$queue_lock_version" "$queue_locked_by")
-
-  # 检查是否有队列锁评论ID
-  if [ -n "$_QUEUE_MANAGER_QUEUE_COMMENT_ID" ]; then
-    # 有评论ID，更新评论
-    queue_manager_update_comment "$body" "$_QUEUE_MANAGER_QUEUE_COMMENT_ID"
-  else
-    # 没有评论ID（手动触发），更新issue主体
-    debug "log" "No queue comment ID available, updating issue body instead"
-    queue_manager_update_issue "$body"
-  fi
-}
-
-# 私有方法：获取队列锁评论
-queue_manager_get_queue_comment() {
-  local comment_id="${_QUEUE_MANAGER_QUEUE_COMMENT_ID:-}"
-
-  if [ -z "$comment_id" ]; then
-    debug "log" "队列锁评论ID未设置，尝试查找..."
-    queue_manager_find_queue_comment
-    comment_id="${_QUEUE_MANAGER_QUEUE_COMMENT_ID:-}"
-  fi
-
-  if [ -n "$comment_id" ]; then
-    local response=$(curl -s \
-      -H "Authorization: token $GITHUB_TOKEN" \
-      -H "Accept: application/vnd.github.v3+json" \
-      "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$_QUEUE_MANAGER_ISSUE_NUMBER/comments/$comment_id")
-
-    if echo "$response" | jq -e '.body' >/dev/null 2>&1; then
-      echo "$response"
-      return 0
-    fi
-  fi
-
-  return 1
-}
-
-# 私有方法：查找队列锁评论
-queue_manager_find_queue_comment() {
-  local response=$(curl -s \
-    -H "Authorization: token $GITHUB_TOKEN" \
-    -H "Accept: application/vnd.github.v3+json" \
-    "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$_QUEUE_MANAGER_ISSUE_NUMBER/comments")
-
-  if echo "$response" | jq -e '.[]' >/dev/null 2>&1; then
-    local comment_id=$(echo "$response" | jq -r '.[] | select(.body | contains("队列锁")) | .id // empty' | head -1)
-    if [ -n "$comment_id" ]; then
-      _QUEUE_MANAGER_QUEUE_COMMENT_ID="$comment_id"
-      debug "log" "找到队列锁评论ID: $comment_id"
-      return 0
-    fi
-  fi
-
-  return 1
-}
-
-# 私有方法：创建队列锁评论
-queue_manager_create_queue_comment() {
-  local current_time=$(date '+%Y-%m-%d %H:%M:%S')
-  local default_queue_data='{"queue":[],"queue_locked_by":null,"queue_lock_version":1}'
-
-  local body="# 队列锁管理
-
-**最后更新时间：** $current_time
-
-### 队列锁状态
-- **队列锁状态：** 空闲 🔓
-- **队列锁持有者：** 无
-- **版本：** 1
-
----
-
-### 队列锁数据
-\`\`\`json
-$default_queue_data
-\`\`\`"
-
-  local response=$(curl -s -X POST \
-    -H "Authorization: token $GITHUB_TOKEN" \
-    -H "Accept: application/vnd.github.v3+json" \
-    -H "Content-Type: application/json" \
-    "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$_QUEUE_MANAGER_ISSUE_NUMBER/comments" \
-    -d "{\"body\": \"$body\"}")
-
-  if echo "$response" | jq -e '.id' >/dev/null 2>&1; then
-    local comment_id=$(echo "$response" | jq -r '.id')
-    _QUEUE_MANAGER_QUEUE_COMMENT_ID="$comment_id"
-    debug "success" "创建队列锁评论成功，ID: $comment_id"
-    return 0
-  else
-    debug "error" "创建队列锁评论失败"
+  *)
+    debug "error" "未知的锁类型: $lock_type"
     return 1
-  fi
-}
+    ;;
+  esac
 
-# 私有方法：获取构建锁（使用评论存储）
-queue_manager_acquire_build_lock() {
-  local build_id="$1"
-  local timeout="${2:-$_QUEUE_MANAGER_BUILD_LOCK_TIMEOUT}"
-
-  debug "log" "尝试获取构建锁，构建ID: $build_id，超时时间: ${timeout}s"
-
-  local start_time=$(date +%s)
-  local attempt=0
-
-  while [ $(($(date +%s) - start_time)) -lt "$timeout" ]; do
-    attempt=$((attempt + 1))
-
-    # 获取构建锁评论数据
-    local build_comment_content=$(queue_manager_get_build_comment)
-    if [ $? -ne 0 ]; then
-      debug "log" "构建锁评论不存在，正在创建..."
-      queue_manager_create_build_comment
-      sleep 2
-      continue
-    fi
-
-    local build_data=$(queue_manager_extract_json "$build_comment_content")
-
-    local build_lock_version=$(echo "$build_data" | jq -r '.build_lock_version // 1')
-    local build_locked_by=$(echo "$build_data" | jq -r '.build_locked_by // null')
-
-    if [ "$build_locked_by" = "null" ] || [ "$build_locked_by" = "$build_id" ]; then
-      # 基于构建锁版本号尝试获取锁
-      local updated_build_data=$(echo "$build_data" | jq --arg build_id "$build_id" --arg version "$build_lock_version" '
-        if (.build_lock_version | tonumber) == ($version | tonumber) then
-          .build_locked_by = $build_id |
-          .build_lock_version = (.build_lock_version | tonumber) + 1
-        else
-          .  # 版本不匹配，保持原数据
-        end
-      ')
-
-      # 检查版本是否更新成功
-      local new_build_lock_version=$(echo "$updated_build_data" | jq -r '.build_lock_version // 1')
-      local new_locked_by=$(echo "$updated_build_data" | jq -r '.build_locked_by // null')
-
-      if [ "$new_build_lock_version" -gt "$build_lock_version" ] && [ "$new_locked_by" = "$build_id" ]; then
-        # 版本更新成功，说明获取锁成功
-        local update_response=$(queue_manager_update_build_comment "$updated_build_data" "$build_id")
-
-        if [ $? -eq 0 ]; then
-          debug "success" "成功获取构建锁（版本: $build_lock_version → $new_build_lock_version，尝试次数: $attempt）"
-          return 0
-        fi
-      else
-        # 版本未更新，说明有其他构建抢先获取了锁
-        debug "log" "版本检查失败，其他构建抢先获取了构建锁（版本: $build_lock_version，尝试次数: $attempt）"
-      fi
-    else
-      debug "log" "构建锁被 $build_locked_by 持有，等待释放...（尝试次数: $attempt）"
-    fi
-
-    # 指数退避延迟
-    if [ "$attempt" -gt 1 ]; then
-      local backoff_delay=$((_QUEUE_MANAGER_RETRY_DELAY * (2 ** (attempt - 1))))
-      local max_backoff=10 # 最大延迟10秒
-      if [ "$backoff_delay" -gt "$max_backoff" ]; then
-        backoff_delay="$max_backoff"
-      fi
-      debug "log" "指数退避延迟${backoff_delay}秒"
-      sleep "$backoff_delay"
-    else
-      sleep "$_QUEUE_MANAGER_RETRY_DELAY"
-    fi
-  done
-
-  debug "error" "获取构建锁超时（总尝试次数: $attempt）"
+  debug "error" "释放 $lock_type 锁失败"
   return 1
-}
-
-# 私有方法：释放构建锁
-queue_manager_release_build_lock() {
-  local build_id="$1"
-
-  debug "log" "释放构建锁，构建ID: $build_id"
-
-  # 获取构建锁评论数据
-  local build_comment_content=$(queue_manager_get_build_comment)
-  if [ $? -ne 0 ]; then
-    debug "log" "构建锁评论不存在，无需释放"
-    return 0
-  fi
-
-  local build_data=$(queue_manager_extract_json "$build_comment_content")
-  local build_locked_by=$(echo "$build_data" | jq -r '.build_locked_by // null')
-
-  if [ "$build_locked_by" = "$build_id" ]; then
-    # 释放构建锁
-    local updated_build_data=$(echo "$build_data" | jq '
-      .build_locked_by = null |
-      .build_lock_version = (.build_lock_version // 0) + 1
-    ')
-
-    local update_response=$(queue_manager_update_build_comment "$updated_build_data" "无")
-
-    if [ $? -eq 0 ]; then
-      debug "success" "成功释放构建锁"
-      return 0
-    fi
-  else
-    debug "log" "未持有构建锁，无需释放"
-    return 0
-  fi
-
-  debug "error" "释放构建锁失败"
-  return 1
-}
-
-# 私有方法：更新构建锁评论
-queue_manager_update_build_comment() {
-  local build_data="$1"
-  local build_locked_by="${2:-无}"
-
-  # 获取当前时间
-  local current_time=$(date '+%Y-%m-%d %H:%M:%S')
-
-  # 提取版本号
-  local build_lock_version=$(echo "$build_data" | jq -r '.build_lock_version // 1')
-
-  # 生成构建锁状态模板
-  local body=$(generate_build_lock_body "$current_time" "$build_data" "$build_lock_version" "$build_locked_by")
-
-  # 更新构建锁评论
-  queue_manager_update_comment "$body" "$_QUEUE_MANAGER_BUILD_COMMENT_ID"
-}
-
-# 私有方法：获取构建锁评论
-queue_manager_get_build_comment() {
-  local comment_id="${_QUEUE_MANAGER_BUILD_COMMENT_ID:-}"
-
-  if [ -z "$comment_id" ]; then
-    debug "log" "构建锁评论ID未设置，尝试查找..."
-    queue_manager_find_build_comment
-    comment_id="${_QUEUE_MANAGER_BUILD_COMMENT_ID:-}"
-  fi
-
-  if [ -n "$comment_id" ]; then
-    local response=$(curl -s \
-      -H "Authorization: token $GITHUB_TOKEN" \
-      -H "Accept: application/vnd.github.v3+json" \
-      "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$_QUEUE_MANAGER_ISSUE_NUMBER/comments/$comment_id")
-
-    if echo "$response" | jq -e '.body' >/dev/null 2>&1; then
-      echo "$response"
-      return 0
-    fi
-  fi
-
-  return 1
-}
-
-# 私有方法：查找构建锁评论
-queue_manager_find_build_comment() {
-  local response=$(curl -s \
-    -H "Authorization: token $GITHUB_TOKEN" \
-    -H "Accept: application/vnd.github.v3+json" \
-    "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$_QUEUE_MANAGER_ISSUE_NUMBER/comments")
-
-  if echo "$response" | jq -e '.[]' >/dev/null 2>&1; then
-    local comment_id=$(echo "$response" | jq -r '.[] | select(.body | contains("构建锁")) | .id // empty' | head -1)
-    if [ -n "$comment_id" ]; then
-      _QUEUE_MANAGER_BUILD_COMMENT_ID="$comment_id"
-      debug "log" "找到构建锁评论ID: $comment_id"
-      return 0
-    fi
-  fi
-
-  return 1
-}
-
-# 私有方法：创建构建锁评论
-queue_manager_create_build_comment() {
-  local current_time=$(date '+%Y-%m-%d %H:%M:%S')
-  local default_build_data='{"queue":[],"build_locked_by":null,"build_lock_version":1}'
-
-  local body="# 构建锁管理
-
-**最后更新时间：** $current_time
-
-### 构建锁状态
-- **构建锁状态：** 空闲 🔓
-- **构建锁持有者：** 无
-- **版本：** 1
-
----
-
-### 构建锁数据
-\`\`\`json
-$default_build_data
-\`\`\`"
-
-  local response=$(curl -s -X POST \
-    -H "Authorization: token $GITHUB_TOKEN" \
-    -H "Accept: application/vnd.github.v3+json" \
-    -H "Content-Type: application/json" \
-    "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$_QUEUE_MANAGER_ISSUE_NUMBER/comments" \
-    -d "{\"body\": \"$body\"}")
-
-  if echo "$response" | jq -e '.id' >/dev/null 2>&1; then
-    local comment_id=$(echo "$response" | jq -r '.id')
-    _QUEUE_MANAGER_BUILD_COMMENT_ID="$comment_id"
-    debug "success" "创建构建锁评论成功，ID: $comment_id"
-    return 0
-  else
-    debug "error" "创建构建锁评论失败"
-    return 1
-  fi
 }
 
 # 公共方法：获取队列状态
 queue_manager_get_status() {
-  local queue_length=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq '.queue | length // 0')
-    local issue_locked_by=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.issue_locked_by // "null"')
-    local queue_locked_by=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.queue_locked_by // "null"')
-    local build_locked_by=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.build_locked_by // "null"')
+  local queue_length=$(queue_manager_get_length)
+  local issue_locked_by=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.issue_locked_by // "null"')
+  local queue_locked_by=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.queue_locked_by // "null"')
+  local build_locked_by=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.build_locked_by // "null"')
   local version=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.version // 1')
 
   echo "队列统计:"
   echo "  总数量: $queue_length"
   echo "  版本: $version"
-    echo "  锁状态:"
-    echo "    Issue 锁: $issue_locked_by"
-    echo "    队列锁: $queue_locked_by"
-    echo "    构建锁: $build_locked_by"
+  echo "  锁状态:"
+  echo "    Issue 锁: $issue_locked_by"
+  echo "    队列锁: $queue_locked_by"
+  echo "    构建锁: $build_locked_by"
 }
 
 # 公共方法：悲观锁加入队列
 queue_manager_join() {
-  local issue_number="$1"
-  local trigger_data="$2"
-  local queue_limit="${3:-5}"
+  local trigger_data="$1"
+  local queue_limit="${2:-5}"
 
-    echo "=== 悲观锁加入队列 ==="
-    debug "log" "Starting pessimistic lock queue join process..."
+  echo "=== 悲观锁加入队列 ==="
+  debug "log" "Starting pessimistic lock queue join process..."
 
-    # 从trigger_data中提取build_id（现在由workflow中的通用函数处理）
-    local build_id=$(echo "$trigger_data" | jq -r '.build_id // empty')
+  # 统一使用 GITHUB_RUN_ID 作为构建标识符
+  local build_id="${GITHUB_RUN_ID:-}"
   if [ -z "$build_id" ]; then
-        build_id="${GITHUB_RUN_ID:-}"
-        if [ -z "$build_id" ]; then
-            debug "error" "No build_id found in trigger_data and no GITHUB_RUN_ID available"
+    debug "error" "GITHUB_RUN_ID not available"
     return 1
   fi
   debug "log" "Using GITHUB_RUN_ID as build_id: $build_id"
-    else
-        debug "log" "Using build_id from trigger_data: $build_id"
-    fi
 
-  # 对于手动触发，总是使用队列管理 issue #1
-  if [ "$issue_number" != "1" ]; then
-    debug "log" "Adjusting issue number to queue management issue #1 for manual trigger"
-    issue_number="1"
-  fi
-
-  # 初始化队列管理器
-  queue_manager_init "$issue_number"
+  # 加载队列数据
+  queue_manager_load_data
 
   # 执行统一的清理操作
   queue_manager_cleanup
 
-    # 获取 Issue 锁
-    if ! queue_manager_acquire_issue_lock "$build_id"; then
-        debug "error" "Failed to acquire issue lock"
-        return 1
-    fi
-    
-    # 获取队列锁
-    if ! queue_manager_acquire_queue_lock "$build_id"; then
-        debug "error" "Failed to acquire queue lock"
-        queue_manager_release_issue_lock "$build_id"
-        return 1
-    fi
-    
-    # 在队列锁保护下执行队列操作
-    debug "log" "Issue lock and queue lock acquired, performing queue operations..."
+  # 获取 Issue 锁
+  if ! queue_manager_lock_operation "acquire" "issue" "$build_id"; then
+    debug "error" "Failed to acquire issue lock"
+    return 1
+  fi
 
-    # 刷新队列数据
-    queue_manager_refresh
+  # 获取队列锁
+  if ! queue_manager_lock_operation "acquire" "queue" "$build_id"; then
+    debug "error" "Failed to acquire queue lock"
+    queue_manager_lock_operation "release" "issue" "$build_id"
+    return 1
+  fi
 
-    # 验证队列数据结构
-    local queue_data_valid=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -e '.queue != null and .version != null' >/dev/null 2>&1 && echo "true" || echo "false")
-    if [ "$queue_data_valid" != "true" ]; then
-        debug "error" "Invalid queue data structure"
-        queue_manager_release_queue_lock "$build_id"
-        queue_manager_release_issue_lock "$build_id"
-        return 1
-    fi
+  # 在队列锁保护下执行队列操作
+  debug "log" "Issue lock and queue lock acquired, performing queue operations..."
 
-    # 检查队列长度
-    local current_queue_length=$(queue_manager_get_length)
+  # 刷新队列数据
+  queue_manager_refresh
 
-    # 如果队列为空，重置队列状态到版本1
-    if [ "$current_queue_length" -eq 0 ]; then
-      debug "log" "Queue is empty, resetting queue state to version 1"
-      # 直接重置队列数据，因为已经持有issue锁和队列锁
-      local reset_queue_data='{"version": 1, "issue_locked_by": null, "queue_locked_by": null, "build_locked_by": null, "issue_lock_version": 1, "queue_lock_version": 1, "build_lock_version": 1, "queue": []}'
-      _QUEUE_MANAGER_QUEUE_DATA="$reset_queue_data"
-      current_queue_length=0
-    fi
+  # 验证队列数据结构
+  local queue_data_valid=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -e '.queue != null and .version != null' >/dev/null 2>&1 && echo "true" || echo "false")
+  if [ "$queue_data_valid" != "true" ]; then
+    debug "error" "Invalid queue data structure"
+    queue_manager_lock_operation "release" "queue" "$build_id"
+    queue_manager_lock_operation "release" "issue" "$build_id"
+    return 1
+  fi
 
-    if [ "$current_queue_length" -ge "$queue_limit" ]; then
-      debug "error" "Queue is full ($current_queue_length/$queue_limit)"
-        queue_manager_release_queue_lock "$build_id"
-        queue_manager_release_issue_lock "$build_id"
-      return 1
-    fi
+  # 检查队列长度
+  local current_queue_length=$(queue_manager_get_length)
 
-    # 检查是否已在队列中
-    local already_in_queue=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg build_id "$build_id" '.queue | map(select(.build_id == $build_id)) | length')
-    if [ "$already_in_queue" -gt 0 ]; then
-      debug "log" "Already in queue"
-        queue_manager_release_queue_lock "$build_id"
-        queue_manager_release_issue_lock "$build_id"
-      return 0
-    fi
+  # 如果队列为空，重置队列状态到版本1
+  if [ "$current_queue_length" -eq 0 ]; then
+    debug "log" "Queue is empty, resetting queue state to version 1"
+    # 直接重置队列数据，因为已经持有issue锁和队列锁
+    local reset_queue_data='{"issue_locked_by": null, "queue_locked_by": null, "build_locked_by": null, "issue_lock_version": 1, "queue_lock_version": 1, "build_lock_version": 1, "version": 1, "queue": []}'
+    _QUEUE_MANAGER_QUEUE_DATA="$reset_queue_data"
+    current_queue_length=0
+  fi
 
-    # 解析触发数据
-    debug "log" "Parsing trigger data: $trigger_data"
-    local parsed_trigger_data=$(echo "$trigger_data" | jq -c . 2>/dev/null || echo "{}")
-    debug "log" "Parsed trigger data: $parsed_trigger_data"
+  if [ "$current_queue_length" -ge "$queue_limit" ]; then
+    debug "error" "Queue is full ($current_queue_length/$queue_limit)"
+    queue_manager_lock_operation "release" "queue" "$build_id"
+    queue_manager_lock_operation "release" "issue" "$build_id"
+    return 1
+  fi
 
-    # 提取构建信息
-    debug "log" "Extracting build information..."
-    local tag=$(echo "$parsed_trigger_data" | jq -r '.build_params.tag // empty')
-    local email=$(echo "$parsed_trigger_data" | jq -r '.build_params.email // empty')
-    local customer=$(echo "$parsed_trigger_data" | jq -r '.build_params.customer // empty')
-    local customer_link=$(echo "$parsed_trigger_data" | jq -r '.build_params.customer_link // empty')
-    local super_password=$(echo "$parsed_trigger_data" | jq -r '.build_params.super_password // empty')
-    local slogan=$(echo "$parsed_trigger_data" | jq -r '.build_params.slogan // empty')
-    local rendezvous_server=$(echo "$parsed_trigger_data" | jq -r '.build_params.rendezvous_server // empty')
-    local rs_pub_key=$(echo "$parsed_trigger_data" | jq -r '.build_params.rs_pub_key // empty')
-    local api_server=$(echo "$parsed_trigger_data" | jq -r '.build_params.api_server // empty')
-    local trigger_type=$(echo "$parsed_trigger_data" | jq -r '.trigger_type // empty')
+  # 检查是否已在队列中
+  local already_in_queue=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg run_id "$build_id" '.queue | map(select(.run_id == $run_id)) | length')
+  if [ "$already_in_queue" -gt 0 ]; then
+    debug "log" "Already in queue"
+    queue_manager_lock_operation "release" "queue" "$build_id"
+    queue_manager_lock_operation "release" "issue" "$build_id"
+    return 0
+  fi
 
-    debug "log" "Extracted build info - tag: '$tag', email: '$email', customer: '$customer', slogan: '$slogan', trigger_type: '$trigger_type'"
-    debug "log" "Extracted privacy info - rendezvous_server: '$rendezvous_server', api_server: '$api_server'"
+  # 解析触发数据
+  debug "log" "Parsing trigger data: $trigger_data"
+  local parsed_trigger_data=$(echo "$trigger_data" | jq -c . 2>/dev/null || echo "{}")
+  debug "log" "Parsed trigger data: $parsed_trigger_data"
 
-    # 创建新队列项
-    debug "log" "Creating new queue item..."
-    local new_queue_item=$(jq -c -n \
-      --arg build_id "$build_id" \
-      --arg build_title "Custom Rustdesk Build" \
-      --arg tag "$tag" \
-      --arg email "$email" \
-      --arg customer "$customer" \
-      --arg customer_link "$customer_link" \
-      --arg super_password "$super_password" \
-      --arg slogan "$slogan" \
-      --arg rendezvous_server "$rendezvous_server" \
-      --arg rs_pub_key "$rs_pub_key" \
-      --arg api_server "$api_server" \
-      --arg trigger_type "$trigger_type" \
-      --arg join_time "$_QUEUE_MANAGER_CURRENT_TIME" \
-      '{build_id: $build_id, build_title: $build_title, tag: $tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, rs_pub_key: $rs_pub_key, api_server: $api_server, trigger_type: $trigger_type, join_time: $join_time}')
+  # 提取构建信息
+  debug "log" "Extracting build information..."
+  local tag=$(echo "$parsed_trigger_data" | jq -r '.build_params.tag // empty')
+  local email=$(echo "$parsed_trigger_data" | jq -r '.build_params.email // empty')
+  local customer=$(echo "$parsed_trigger_data" | jq -r '.build_params.customer // empty')
+  local customer_link=$(echo "$parsed_trigger_data" | jq -r '.build_params.customer_link // empty')
+  local super_password=$(echo "$parsed_trigger_data" | jq -r '.build_params.super_password // empty')
+  local slogan=$(echo "$parsed_trigger_data" | jq -r '.build_params.slogan // empty')
+  local rendezvous_server=$(echo "$parsed_trigger_data" | jq -r '.build_params.rendezvous_server // empty')
+  local rs_pub_key=$(echo "$parsed_trigger_data" | jq -r '.build_params.rs_pub_key // empty')
+  local api_server=$(echo "$parsed_trigger_data" | jq -r '.build_params.api_server // empty')
+  local trigger_type=$(echo "$parsed_trigger_data" | jq -r '.trigger_type // empty')
 
-    debug "log" "New queue item created: $new_queue_item"
+  debug "log" "Extracted build info - tag: '$tag', email: '$email', customer: '$customer', slogan: '$slogan', trigger_type: '$trigger_type'"
+  debug "log" "Extracted privacy info - rendezvous_server: '$rendezvous_server', api_server: '$api_server'"
 
-    # 添加新项到队列
-    debug "log" "Current queue data: $_QUEUE_MANAGER_QUEUE_DATA"
-    local new_queue_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --argjson new_item "$new_queue_item" '
+  # 创建新队列项
+  debug "log" "Creating new queue item..."
+  local new_queue_item=$(jq -c -n \
+    --arg run_id "$build_id" \
+    --arg build_title "Custom Rustdesk Build" \
+    --arg tag "$tag" \
+    --arg email "$email" \
+    --arg customer "$customer" \
+    --arg customer_link "$customer_link" \
+    --arg super_password "$super_password" \
+    --arg slogan "$slogan" \
+    --arg rendezvous_server "$rendezvous_server" \
+    --arg rs_pub_key "$rs_pub_key" \
+    --arg api_server "$api_server" \
+    --arg trigger_type "$trigger_type" \
+    --arg join_time "$(date '+%Y-%m-%d %H:%M:%S')" \
+    '{run_id: $run_id, build_title: $build_title, tag: $tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, rs_pub_key: $rs_pub_key, api_server: $api_server, trigger_type: $trigger_type, join_time: $join_time}')
+
+  debug "log" "New queue item created: $new_queue_item"
+
+  # 添加新项到队列
+  debug "log" "Current queue data: $_QUEUE_MANAGER_QUEUE_DATA"
+  local new_queue_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --argjson new_item "$new_queue_item" '
             .queue += [$new_item] |
             .version = (.version // 0) + 1
         ')
 
-    debug "log" "Updated queue data: $new_queue_data"
+  debug "log" "Updated queue data: $new_queue_data"
 
-    # 更新队列（在队列锁保护下）
-    local update_response=$(queue_manager_update_queue_comment "$new_queue_data" "$build_id")
+  # 更新队列（在队列锁保护下）
+  local update_response=$(queue_manager_update_lock "$new_queue_data" "queue" "$build_id")
 
-    if [ $? -eq 0 ]; then
-      local queue_position=$((current_queue_length + 1))
-      debug "success" "Successfully joined queue at position $queue_position"
-      _QUEUE_MANAGER_QUEUE_DATA="$new_queue_data"
+  if [ $? -eq 0 ]; then
+    local queue_position=$((current_queue_length + 1))
+    debug "success" "Successfully joined queue at position $queue_position"
+    _QUEUE_MANAGER_QUEUE_DATA="$new_queue_data"
 
-        # 释放队列锁和 Issue 锁
-        queue_manager_release_queue_lock "$build_id"
-        queue_manager_release_issue_lock "$build_id"
-      
-      # 返回包含队列位置的 JSON 数据
-      echo "{\"queue_position\": $queue_position, \"success\": true}"
-      return 0
-    else
-        debug "error" "Failed to update queue"
-        queue_manager_release_queue_lock "$build_id"
-        queue_manager_release_issue_lock "$build_id"
-      
-      # 返回失败信息
-      echo "{\"queue_position\": -1, \"success\": false}"
-      return 1
-    fi
+    # 释放队列锁和 Issue 锁
+    queue_manager_lock_operation "release" "queue" "$build_id"
+    queue_manager_lock_operation "release" "issue" "$build_id"
+
+    # 返回包含队列位置的 JSON 数据
+    echo "{\"queue_position\": $queue_position, \"success\": true}"
+    return 0
+  else
+    debug "error" "Failed to update queue"
+    queue_manager_lock_operation "release" "queue" "$build_id"
+    queue_manager_lock_operation "release" "issue" "$build_id"
+
+    # 返回失败信息
+    echo "{\"queue_position\": -1, \"success\": false}"
+    return 1
+  fi
 }
 
 # 公共方法：悲观锁获取构建权限
 queue_manager_acquire_lock() {
-  local build_id="$1"
   local queue_limit="${2:-5}"
 
   echo "=== 悲观锁获取构建权限 ==="
   debug "log" "Starting pessimistic lock acquisition..."
+
+  # 统一使用 GITHUB_RUN_ID 作为构建标识符
+  local build_id="${GITHUB_RUN_ID:-}"
+  if [ -z "$build_id" ]; then
+    debug "error" "GITHUB_RUN_ID not available"
+    return 1
+  fi
+  debug "log" "Using GITHUB_RUN_ID as build_id: $build_id"
 
   local start_time=$(date +%s)
 
@@ -1077,7 +577,7 @@ queue_manager_acquire_lock() {
     queue_manager_cleanup
 
     # 检查是否已在队列中
-    local in_queue=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg build_id "$build_id" '.queue | map(select(.build_id == $build_id)) | length')
+    local in_queue=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg run_id "$build_id" '.queue | map(select(.run_id == $run_id)) | length')
     if [ "$in_queue" -eq 0 ]; then
       debug "error" "Not in queue anymore"
       return 1
@@ -1085,44 +585,44 @@ queue_manager_acquire_lock() {
 
     # 检查是否轮到我们构建
     local current_run_id=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.run_id // null')
-    local queue_position=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg build_id "$build_id" '.queue | map(.build_id) | index($build_id) // -1')
+    local queue_position=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg run_id "$build_id" '.queue | map(.run_id) | index($run_id) // -1')
 
     if [ "$current_run_id" = "null" ] && [ "$queue_position" -eq 0 ]; then
-            # 获取 Issue 锁
-            if ! queue_manager_acquire_issue_lock "$build_id"; then
-                debug "error" "Failed to acquire issue lock for build"
-                sleep "$_QUEUE_MANAGER_CHECK_INTERVAL"
-                continue
-            fi
-            
-            # 获取构建锁
-            if queue_manager_acquire_build_lock "$build_id"; then
-                debug "success" "Successfully acquired build lock"
-                
-                # 更新队列数据，设置当前构建
-      local updated_queue_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg build_id "$build_id" '
-                .run_id = $build_id |
+      # 获取 Issue 锁
+      if ! queue_manager_lock_operation "acquire" "issue" "$build_id"; then
+        debug "error" "Failed to acquire issue lock for build"
+        sleep "$_QUEUE_MANAGER_CHECK_INTERVAL"
+        continue
+      fi
+
+      # 获取构建锁
+      if queue_manager_lock_operation "acquire" "build" "$build_id"; then
+        debug "success" "Successfully acquired build lock"
+
+        # 更新队列数据，设置当前构建
+        local updated_queue_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg run_id "$build_id" '
+                .run_id = $run_id |
                 .version = (.version // 0) + 1
             ')
 
-                # 更新队列锁评论
-                local update_response=$(queue_manager_update_queue_comment "$updated_queue_data" "无")
+        # 更新队列锁
+        local update_response=$(queue_manager_update_lock "$updated_queue_data" "queue" "无")
 
-      if [ $? -eq 0 ]; then
-                    debug "success" "Successfully updated queue with build lock"
-        _QUEUE_MANAGER_QUEUE_DATA="$updated_queue_data"
+        if [ $? -eq 0 ]; then
+          debug "success" "Successfully updated queue with build lock"
+          _QUEUE_MANAGER_QUEUE_DATA="$updated_queue_data"
 
-                    # 释放 Issue 锁（构建锁已获取，可以释放 Issue 锁）
-                    queue_manager_release_issue_lock "$build_id"
-        return 0
-                else
-                    debug "error" "Failed to update queue with build lock"
-                    queue_manager_release_build_lock "$build_id"
-                    queue_manager_release_issue_lock "$build_id"
-                fi
-            else
-                debug "error" "Failed to acquire build lock"
-                queue_manager_release_issue_lock "$build_id"
+          # 释放 Issue 锁（构建锁已获取，可以释放 Issue 锁）
+          queue_manager_lock_operation "release" "issue" "$build_id"
+          return 0
+        else
+          debug "error" "Failed to update queue with build lock"
+          queue_manager_lock_operation "release" "build" "$build_id"
+          queue_manager_lock_operation "release" "issue" "$build_id"
+        fi
+      else
+        debug "error" "Failed to acquire build lock"
+        queue_manager_lock_operation "release" "issue" "$build_id"
       fi
     elif [ "$current_run_id" = "$build_id" ]; then
       debug "log" "Already have build lock"
@@ -1140,45 +640,51 @@ queue_manager_acquire_lock() {
 
 # 公共方法：释放构建锁
 queue_manager_release_lock() {
-  local build_id="$1"
-
   echo "=== 释放构建锁 ==="
   debug "log" "Releasing build lock..."
-    
-    # 获取 Issue 锁
-    if ! queue_manager_acquire_issue_lock "$build_id"; then
-        debug "error" "Failed to acquire issue lock for release"
-        return 1
-    fi
+
+  # 统一使用 GITHUB_RUN_ID 作为构建标识符
+  local build_id="${GITHUB_RUN_ID:-}"
+  if [ -z "$build_id" ]; then
+    debug "error" "GITHUB_RUN_ID not available"
+    return 1
+  fi
+  debug "log" "Using GITHUB_RUN_ID as build_id: $build_id"
+
+  # 获取 Issue 锁
+  if ! queue_manager_lock_operation "acquire" "issue" "$build_id"; then
+    debug "error" "Failed to acquire issue lock for release"
+    return 1
+  fi
 
   # 刷新队列数据
   queue_manager_refresh
 
   # 从队列中移除当前构建
-  local updated_queue_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg build_id "$build_id" '
-        .queue = (.queue | map(select(.build_id != $build_id))) |
+  local updated_queue_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg run_id "$build_id" '
+        .queue = (.queue | map(select(.run_id != $run_id))) |
         .run_id = null |
         .version = (.version // 0) + 1
     ')
 
-    # 更新队列锁评论
-    local update_response=$(queue_manager_update_queue_comment "$updated_queue_data" "无")
+  # 更新队列锁
+  local update_response=$(queue_manager_update_lock "$updated_queue_data" "queue" "无")
 
   if [ $? -eq 0 ]; then
-        debug "success" "Successfully updated queue after build completion"
+    debug "success" "Successfully updated queue after build completion"
     _QUEUE_MANAGER_QUEUE_DATA="$updated_queue_data"
-        
-        # 释放构建锁
-        queue_manager_release_build_lock "$build_id"
-        
-        # 释放 Issue 锁
-        queue_manager_release_issue_lock "$build_id"
-        
-        debug "success" "Successfully released build lock"
+
+    # 释放构建锁
+    queue_manager_lock_operation "release" "build" "$build_id"
+
+    # 释放 Issue 锁
+    queue_manager_lock_operation "release" "issue" "$build_id"
+
+    debug "success" "Successfully released build lock"
     return 0
   else
-        debug "error" "Failed to update queue after build completion"
-        queue_manager_release_issue_lock "$build_id"
+    debug "error" "Failed to update queue after build completion"
+    queue_manager_lock_operation "release" "issue" "$build_id"
     return 1
   fi
 }
@@ -1196,77 +702,74 @@ queue_manager_cleanup() {
   # 计算超时秒数
   local queue_timeout_seconds=$((_QUEUE_MANAGER_QUEUE_TIMEOUT_HOURS * 3600))
 
-    # 移除超过队列超时时间的队列项
-    local cleaned_queue=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg current_time "$current_time" --arg timeout_seconds "$queue_timeout_seconds" '
+  # 移除超过队列超时时间的队列项
+  local cleaned_queue=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --arg current_time "$current_time" --arg timeout_seconds "$queue_timeout_seconds" '
             .queue = (.queue | map(select(
                 # 将日期字符串转换为时间戳进行比较
                 (($current_time | tonumber) - (try (.join_time | strptime("%Y-%m-%d %H:%M:%S") | mktime) catch 0)) < ($timeout_seconds | tonumber)
             )))
         ')
 
-    # 只有在队列数据发生变化时才更新
-    if [ "$cleaned_queue" != "$_QUEUE_MANAGER_QUEUE_DATA" ]; then
-        # 获取 Issue 锁来保护队列更新
-        local cleanup_build_id="cleanup_$(date +%s)"
-        if queue_manager_acquire_issue_lock "$cleanup_build_id"; then
-            local update_response=$(queue_manager_update_queue_comment "$cleaned_queue" "无")
-            if [ $? -eq 0 ]; then
-                debug "success" "Auto-clean completed"
-                _QUEUE_MANAGER_QUEUE_DATA="$cleaned_queue"
-            else
-                debug "error" "Auto-clean failed"
-            fi
-            queue_manager_release_issue_lock "$cleanup_build_id"
-        else
-            debug "warning" "Failed to acquire issue lock for cleanup, skipping queue update"
-        fi
+  # 只有在队列数据发生变化时才更新
+  if [ "$cleaned_queue" != "$_QUEUE_MANAGER_QUEUE_DATA" ]; then
+    # 获取 Issue 锁来保护队列更新
+    local cleanup_build_id="$GITHUB_RUN_ID"
+    if queue_manager_lock_operation "acquire" "issue" "$cleanup_build_id"; then
+      local update_response=$(queue_manager_update_lock "$cleaned_queue" "queue" "无")
+      if [ $? -eq 0 ]; then
+        debug "success" "Auto-clean completed"
+        _QUEUE_MANAGER_QUEUE_DATA="$cleaned_queue"
+      else
+        debug "error" "Auto-clean failed"
+      fi
+      queue_manager_lock_operation "release" "issue" "$cleanup_build_id"
     else
-        debug "log" "No expired items to clean"
+      debug "warning" "Failed to acquire issue lock for cleanup, skipping queue update"
     fi
+  else
+    debug "log" "No expired items to clean"
+  fi
 
   # 2. 清理已完成的工作流
   debug "log" "Step 2: Cleaning completed workflows"
-    local build_ids=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.queue[]?.build_id // empty')
-    local builds_to_remove=()
+  local build_ids=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq -r '.queue[]?.run_id // empty')
+  local builds_to_remove=()
 
-    if [ -n "$build_ids" ]; then
-        for build_id in $build_ids; do
+  if [ -n "$build_ids" ]; then
+    for build_id in $build_ids; do
       debug "log" "Checking build $build_id..."
 
-            # 获取工作流运行状态
+      # 获取工作流运行状态
       local run_status="unknown"
-      if [ -n "$GITHUB_TOKEN" ] && [ "$GITHUB_TOKEN" != "test_token" ] && [ "$GITHUB_REPOSITORY" != "test/repo" ]; then
-                local run_response=$(curl -s \
+      if [ -n "$GITHUB_TOKEN" ]; then
+        local run_response=$(curl -s \
           -H "Authorization: token $GITHUB_TOKEN" \
           -H "Accept: application/vnd.github.v3+json" \
           "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$build_id")
 
-                # 检查HTTP状态码
-                local http_status=$(echo "$run_response" | jq -r '.status // empty')
+        # 检查HTTP状态码
+        local http_status=$(echo "$run_response" | jq -r '.status // empty')
 
-                if [[ "$http_status" =~ ^[0-9]+$ ]] && [ "$http_status" -ge 400 ]; then
+        if [[ "$http_status" =~ ^[0-9]+$ ]] && [ "$http_status" -ge 400 ]; then
           run_status="not_found"
-                elif echo "$run_response" | jq -e '.message' | grep -q "Not Found"; then
+        elif echo "$run_response" | jq -e '.message' | grep -q "Not Found"; then
           run_status="not_found"
         else
-                    run_status=$(echo "$run_response" | jq -r '.status // "unknown"')
+          run_status=$(echo "$run_response" | jq -r '.status // "unknown"')
         fi
-      else
-        debug "log" "Test environment: assuming build is running"
-        run_status="in_progress"
-      fi
+
 
       # 检查是否需要清理 - 只清理明确完成或失败的工作流
       case "$run_status" in
-                "completed"|"cancelled"|"failure"|"skipped")
+      "completed" | "cancelled" | "failure" | "skipped")
         debug "log" "Build $build_id needs cleanup (status: $run_status)"
         builds_to_remove+=("$build_id")
         ;;
-                "queued"|"in_progress"|"waiting")
+      "queued" | "in_progress" | "waiting")
         debug "log" "Build $build_id is still running (status: $run_status), no cleanup needed"
         ;;
-      "not_found"|"unknown")
-                    debug "log" "Build $build_id has unknown/not_found status: $run_status, not cleaning to avoid removing waiting builds"
+      "not_found" | "unknown")
+        debug "log" "Build $build_id has unknown/not_found status: $run_status, not cleaning to avoid removing waiting builds"
         ;;
       *)
         debug "log" "Build $build_id has unexpected status: $run_status, not cleaning to avoid removing waiting builds"
@@ -1280,25 +783,25 @@ queue_manager_cleanup() {
 
       # 从队列中移除这些构建
       local cleaned_queue_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq --argjson builds_to_remove "$(printf '%s\n' "${builds_to_remove[@]}" | jq -R . | jq -s .)" '
-                .queue = (.queue | map(select(.build_id as $id | $builds_to_remove | index($id) | not))) |
+                .queue = (.queue | map(select(.run_id as $id | $builds_to_remove | index($id) | not))) |
                 .version = (.version // 0) + 1
             ')
 
       # 获取 Issue 锁来保护队列更新
-      local cleanup_build_id="cleanup_$(date +%s)"
-      if queue_manager_acquire_issue_lock "$cleanup_build_id"; then
-            # 更新队列
-            local update_response=$(queue_manager_update_queue_comment "$cleaned_queue_data" "无")
+      local cleanup_build_id="$GITHUB_RUN_ID"
+      if queue_manager_lock_operation "acquire" "issue" "$cleanup_build_id"; then
+        # 更新队列
+        local update_response=$(queue_manager_update_lock "$cleaned_queue_data" "queue" "无")
 
-      if [ $? -eq 0 ]; then
-        debug "success" "Successfully cleaned ${#builds_to_remove[@]} completed builds"
-        _QUEUE_MANAGER_QUEUE_DATA="$cleaned_queue_data"
+        if [ $? -eq 0 ]; then
+          debug "success" "Successfully cleaned ${#builds_to_remove[@]} completed builds"
+          _QUEUE_MANAGER_QUEUE_DATA="$cleaned_queue_data"
+        else
+          debug "error" "Failed to clean completed builds"
+        fi
+        queue_manager_lock_operation "release" "issue" "$cleanup_build_id"
       else
-        debug "error" "Failed to clean completed builds"
-      fi
-          queue_manager_release_issue_lock "$cleanup_build_id"
-      else
-          debug "warning" "Failed to acquire issue lock for cleanup, skipping queue update"
+        debug "warning" "Failed to acquire issue lock for cleanup, skipping queue update"
       fi
     else
       debug "log" "No builds need cleanup"
@@ -1316,58 +819,55 @@ queue_manager_cleanup() {
 
     # 检查当前持有构建锁的构建状态
     local run_status="unknown"
-    if [ -n "$GITHUB_TOKEN" ] && [ "$GITHUB_TOKEN" != "test_token" ] && [ "$GITHUB_REPOSITORY" != "test/repo" ]; then
-            local run_response=$(curl -s \
+    if [ -n "$GITHUB_TOKEN" ]; then
+      local run_response=$(curl -s \
         -H "Authorization: token $GITHUB_TOKEN" \
         -H "Accept: application/vnd.github.v3+json" \
         "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$current_run_id")
 
-            # 检查HTTP状态码
-            local http_status=$(echo "$run_response" | jq -r '.status // empty')
+      # 检查HTTP状态码
+      local http_status=$(echo "$run_response" | jq -r '.status // empty')
 
-            if [[ "$http_status" =~ ^[0-9]+$ ]] && [ "$http_status" -ge 400 ]; then
+      if [[ "$http_status" =~ ^[0-9]+$ ]] && [ "$http_status" -ge 400 ]; then
         run_status="not_found"
-            elif echo "$run_response" | jq -e '.message' | grep -q "Not Found"; then
+      elif echo "$run_response" | jq -e '.message' | grep -q "Not Found"; then
         run_status="not_found"
       else
-                run_status=$(echo "$run_response" | jq -r '.status // "unknown"')
+        run_status=$(echo "$run_response" | jq -r '.status // "unknown"')
       fi
-    else
-      debug "log" "Test environment: assuming build is running"
-      run_status="in_progress"
-    fi
+
 
     # 检查是否需要清理构建锁
     case "$run_status" in
-      "completed"|"cancelled"|"failure"|"skipped")
-        debug "log" "Current build lock holder needs cleanup (status: $run_status)"
+    "completed" | "cancelled" | "failure" | "skipped")
+      debug "log" "Current build lock holder needs cleanup (status: $run_status)"
 
-        # 获取 Issue 锁来保护构建锁清理
-        local cleanup_build_id="cleanup_$(date +%s)"
-        if queue_manager_acquire_issue_lock "$cleanup_build_id"; then
-            # 更新队列数据，释放构建锁
-            local updated_queue_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq '
+      # 获取 Issue 锁来保护构建锁清理
+      local cleanup_build_id="$GITHUB_RUN_ID"
+      if queue_manager_lock_operation "acquire" "issue" "$cleanup_build_id"; then
+        # 更新队列数据，释放构建锁
+        local updated_queue_data=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq '
                 .run_id = null |
                 .version = (.version // 0) + 1
             ')
 
-            debug "log" "Updated queue data after pessimistic lock release: $updated_queue_data"
+        debug "log" "Updated queue data after pessimistic lock release: $updated_queue_data"
 
-            # 更新时释放乐观锁和悲观锁
-            local update_response=$(queue_manager_update_queue_comment "$updated_queue_data" "无")
+        # 更新时释放三锁架构的所有锁
+        local update_response=$(queue_manager_update_lock "$updated_queue_data" "queue" "无")
 
-      if [ $? -eq 0 ]; then
-        debug "success" "Successfully released lock for completed build"
-        _QUEUE_MANAGER_QUEUE_DATA="$updated_queue_data"
-      else
-        debug "error" "Failed to release lock for completed build"
-      fi
-          queue_manager_release_issue_lock "$cleanup_build_id"
+        if [ $? -eq 0 ]; then
+          debug "success" "Successfully released lock for completed build"
+          _QUEUE_MANAGER_QUEUE_DATA="$updated_queue_data"
         else
-          debug "warning" "Failed to acquire issue lock for build lock cleanup, skipping"
+          debug "error" "Failed to release lock for completed build"
         fi
-        ;;
-            "queued"|"in_progress"|"waiting")
+        queue_manager_lock_operation "release" "issue" "$cleanup_build_id"
+      else
+        debug "warning" "Failed to acquire issue lock for build lock cleanup, skipping"
+      fi
+      ;;
+    "queued" | "in_progress" | "waiting")
       debug "log" "Current build lock holder is still running (status: $run_status), no cleanup needed"
       ;;
     "unknown")
@@ -1383,30 +883,30 @@ queue_manager_cleanup() {
 
   # 4. 移除重复项（可选，仅在需要时执行）
   debug "log" "Step 4: Removing duplicate items (if any)"
-  local current_queue_length=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq '.queue | length // 0')
-  local unique_queue_length=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq '.queue | group_by(.build_id) | length // 0')
+  local current_queue_length=$(queue_manager_get_length)
+  local unique_queue_length=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq '.queue | group_by(.run_id) | length // 0')
 
-  if [ "$current_queue_length" -gt "$unique_queue_length" ]; then
-    debug "log" "Found duplicate items, removing them"
-    local deduplicated_queue=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq '
-            .queue = (.queue | group_by(.build_id) | map(.[0])) |
-            .version = (.version // 0) + 1
-        ')
+      if [ "$current_queue_length" -gt "$unique_queue_length" ]; then
+      debug "log" "Found duplicate items, removing them"
+      local deduplicated_queue=$(echo "$_QUEUE_MANAGER_QUEUE_DATA" | jq '
+              .queue = (.queue | group_by(.run_id) | map(.[0])) |
+              .version = (.version // 0) + 1
+          ')
 
-    # 获取 Issue 锁来保护队列更新
-    local cleanup_build_id="cleanup_$(date +%s)"
-    if queue_manager_acquire_issue_lock "$cleanup_build_id"; then
-        local update_response=$(queue_manager_update_queue_comment "$deduplicated_queue" "无")
+      # 获取 Issue 锁来保护队列更新
+      local cleanup_build_id="$GITHUB_RUN_ID"
+    if queue_manager_lock_operation "acquire" "issue" "$cleanup_build_id"; then
+      local update_response=$(queue_manager_update_lock "$deduplicated_queue" "queue" "无")
 
-    if [ $? -eq 0 ]; then
-      debug "success" "Successfully removed duplicate items"
-      _QUEUE_MANAGER_QUEUE_DATA="$deduplicated_queue"
+      if [ $? -eq 0 ]; then
+        debug "success" "Successfully removed duplicate items"
+        _QUEUE_MANAGER_QUEUE_DATA="$deduplicated_queue"
+      else
+        debug "error" "Failed to remove duplicate items"
+      fi
+      queue_manager_lock_operation "release" "issue" "$cleanup_build_id"
     else
-      debug "error" "Failed to remove duplicate items"
-    fi
-        queue_manager_release_issue_lock "$cleanup_build_id"
-    else
-        debug "warning" "Failed to acquire issue lock for deduplication, skipping"
+      debug "warning" "Failed to acquire issue lock for deduplication, skipping"
     fi
   else
     debug "log" "No duplicate items found"
@@ -1422,31 +922,22 @@ queue_manager_reset() {
   debug "log" "Resetting queue to default state: $reason"
 
   local now=$(date '+%Y-%m-%d %H:%M:%S')
-    local reset_queue_data='{"version": 1, "issue_locked_by": null, "queue_locked_by": null, "build_locked_by": null, "issue_lock_version": 1, "queue_lock_version": 1, "build_lock_version": 1, "queue": []}'
+  local reset_queue_data='{"issue_locked_by": null, "queue_locked_by": null, "build_locked_by": null, "issue_lock_version": 1, "queue_lock_version": 1, "build_lock_version": 1, "version": 1, "queue": []}'
 
-  # 在测试环境中，直接设置全局变量
-  if [ "$GITHUB_TOKEN" = "test_token" ] || [ "$GITHUB_REPOSITORY" = "test/repo" ]; then
-    debug "log" "Test environment: directly setting global queue data"
-    _QUEUE_MANAGER_QUEUE_DATA="$reset_queue_data"
-    debug "success" "Queue reset successful in test environment"
-    return 0
-  fi
 
-  # 生成重置记录
-  local reset_body=$(generate_queue_reset_record "$now" "$reason" "$reset_queue_data")
 
   # 获取 Issue 锁来保护重置操作
-  local reset_build_id="reset_$(date +%s)"
-  if queue_manager_acquire_issue_lock "$reset_build_id"; then
-    # 更新issue
-    if queue_manager_update_issue "$reset_body"; then
+  local reset_build_id="$GITHUB_RUN_ID"
+  if queue_manager_lock_operation "acquire" "issue" "$reset_build_id"; then
+    # 更新issue（使用模板）
+    if queue_manager_update_issue "$reset_queue_data"; then
       debug "success" "Queue reset successful"
       _QUEUE_MANAGER_QUEUE_DATA="$reset_queue_data"
-      queue_manager_release_issue_lock "$reset_build_id"
+      queue_manager_lock_operation "release" "issue" "$reset_build_id"
       return 0
     else
       debug "error" "Queue reset failed"
-      queue_manager_release_issue_lock "$reset_build_id"
+      queue_manager_lock_operation "release" "issue" "$reset_build_id"
       return 1
     fi
   else
@@ -1473,24 +964,16 @@ queue_manager_get_length() {
 
 # 公共方法：检查队列是否为空
 queue_manager_is_empty() {
-  local length=$(queue_manager_get_length)
-  if [ "$length" -eq 0 ]; then
-        return 0  # 空
-  else
-        return 1  # 非空
-  fi
+  [ "$(queue_manager_get_length)" -eq 0 ]
 }
-
-
 
 # 主队列管理函数 - 供工作流调用
 queue_manager() {
   local operation="$1"
-  local issue_number="${2:-1}"
-  shift 2
+  shift 1
 
-  # 初始化队列管理器
-  queue_manager_init "$issue_number"
+  # 加载队列数据
+  queue_manager_load_data
 
   case "$operation" in
   "status")
@@ -1499,28 +982,14 @@ queue_manager() {
   "join")
     local trigger_data="$1"
     local queue_limit="${2:-5}"
-    queue_manager_join "$issue_number" "$trigger_data" "$queue_limit"
+    queue_manager_join "$trigger_data" "$queue_limit"
     ;;
   "acquire")
-    local build_id="$1"
     local queue_limit="${2:-5}"
-    queue_manager_acquire_lock "$build_id" "$queue_limit"
+    queue_manager_acquire_lock "$queue_limit"
     ;;
   "release")
-    local build_id="$1"
-    queue_manager_release_lock "$build_id"
-    ;;
-  "release-build-lock")
-    local build_id="$1"
-    queue_manager_release_build_lock "$build_id"
-    ;;
-  "release-queue-lock")
-    local build_id="$1"
-    queue_manager_release_queue_lock "$build_id"
-    ;;
-  "release-issue-lock")
-    local build_id="$1"
-    queue_manager_release_issue_lock "$build_id"
+    queue_manager_release_lock
     ;;
   "cleanup")
     queue_manager_cleanup

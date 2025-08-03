@@ -373,17 +373,17 @@ trigger_generate_final_data() {
         debug "var" "Generate - final api_server" "$api_server"
     fi
     
-    # 从event_data中提取build_id和issue_number
-    local build_id=""
+    # 统一使用 GITHUB_RUN_ID 作为构建标识符
+    local build_id="$GITHUB_RUN_ID"
+    
+    # 从event_data中提取issue_number
     local issue_number=""
     if echo "$event_data" | jq -e '.inputs' > /dev/null 2>&1; then
-        # workflow_dispatch事件，使用run_id
-        build_id="$GITHUB_RUN_ID"
+        # workflow_dispatch事件，没有issue编号
         issue_number="null"
     else
         # issues事件，使用issue number
-        build_id=$(echo "$event_data" | jq -r '.issue.number // empty')
-        issue_number="$build_id"
+        issue_number=$(echo "$event_data" | jq -r '.issue.number // empty')
     fi
     
     # 确定触发类型
@@ -424,24 +424,8 @@ trigger_update_issue_content() {
     
     debug "log" "Updating issue content for issue #$issue_number"
     
-    # 使用jq正确转义JSON
-    local json_payload=$(jq -n --arg body "$cleaned_body" '{"body": $body}')
-    
-    # 使用GitHub API更新issue
-    local response=$(curl -X PATCH \
-        -H "Authorization: token $GITHUB_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        -H "Content-Type: application/json" \
-        https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$issue_number \
-        -d "$json_payload")
-    
-    if echo "$response" | jq -e '.id' > /dev/null 2>&1; then
-        debug "success" "Issue #$issue_number updated successfully"
-        return 0
-    else
-        debug "error" "Failed to update issue #$issue_number"
-        return 1
-    fi
+    # 使用 issue_manager 更新 issue 内容
+    issue_manager "update-content" "$issue_number" "" "$cleaned_body"
 }
 
 # 私有方法：清理 issue 内容

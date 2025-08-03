@@ -41,57 +41,7 @@ $queue_data
 EOF
 }
 
-# 生成混合锁状态模板
-generate_hybrid_lock_status_body() {
-    local current_time="$1"
-    local queue_data="$2"
-    local version="$3"
-    local optimistic_lock_status="$4"
-    local pessimistic_lock_status="$5"
-    local current_build="${6:-无}"
-    local lock_holder="${7:-无}"
-    
-    # 计算队列统计信息
-    local queue_length=$(echo "$queue_data" | jq '.queue | length // 0')
-    local issue_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "issue")) | length // 0')
-    local workflow_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "workflow_dispatch")) | length // 0')
-    
-    # 确定锁状态显示
-    local lock_status_display
-    if [ "$pessimistic_lock_status" = "占用 🔒" ]; then
-        lock_status_display="占用 🔒"
-    else
-        lock_status_display="空闲 🔓"
-    fi
-    
-    cat <<EOF
-## 构建队列管理
 
-**最后更新时间：** $current_time
-
-### 当前状态
-- **构建锁状态：** $lock_status_display
-- **当前构建：** $current_build
-- **锁持有者：** $lock_holder
-- **版本：** $version
-
-### 混合锁状态
-- **乐观锁（排队）：** $optimistic_lock_status
-- **悲观锁（构建）：** $pessimistic_lock_status
-
-### 构建队列
-- **当前数量：** $queue_length/5
-- **Issue触发：** $issue_count/3
-- **手动触发：** $workflow_count/5
-
----
-
-### 队列数据
-\`\`\`json
-$queue_data
-\`\`\`
-EOF
-}
 
 # ========== 三锁架构模板函数 ==========
 
@@ -117,9 +67,9 @@ generate_issue_lock_body() {
   # 如果有锁持有者，尝试从队列中获取相关信息
   if [ "$issue_locked_by" != "无" ] && [ "$issue_locked_by" != "null" ]; then
     # 从队列中查找对应的构建信息
-    local queue_item=$(echo "$queue_data" | jq --arg build_id "$issue_locked_by" '.queue[] | select(.build_id == $build_id) // empty')
+        local queue_item=$(echo "$queue_data" | jq --arg run_id "$issue_locked_by" '.queue[] | select(.run_id == $run_id) // empty')
     if [ -n "$queue_item" ]; then
-      run_id=$(echo "$queue_item" | jq -r '.build_id // empty')
+        run_id=$(echo "$queue_item" | jq -r '.run_id // empty')
       issue_id=$(echo "$queue_item" | jq -r '.issue_number // empty')
     fi
   fi
@@ -199,7 +149,7 @@ $queue_data
 EOF
 }
 
-# 生成三锁状态模板（替代混合锁）
+# 生成三锁状态模板
 generate_triple_lock_status_body() {
   local current_time="$1"
   local queue_data="$2"
@@ -224,9 +174,9 @@ generate_triple_lock_status_body() {
   
   if [ "$build_locked_by" != "无" ] && [ "$build_locked_by" != "null" ]; then
     # 从队列中查找当前构建的信息
-    local current_build_item=$(echo "$queue_data" | jq --arg build_id "$build_locked_by" '.queue[] | select(.build_id == $build_id) // empty')
+    local current_build_item=$(echo "$queue_data" | jq --arg run_id "$build_locked_by" '.queue[] | select(.run_id == $run_id) // empty')
     if [ -n "$current_build_item" ]; then
-      current_run_id=$(echo "$current_build_item" | jq -r '.build_id // empty')
+              current_run_id=$(echo "$current_build_item" | jq -r '.run_id // empty')
       current_issue_id=$(echo "$current_build_item" | jq -r '.issue_number // empty')
     fi
   fi
@@ -388,9 +338,10 @@ generate_queue_reset_record() {
 - **当前构建：** 无
 - **锁持有者：** 无
 
-### 混合锁状态
-- **乐观锁（排队）：** 空闲 🔓
-- **悲观锁（构建）：** 空闲 🔓
+### 三锁状态
+- **Issue 锁状态：** 空闲 🔓
+- **队列锁状态：** 空闲 🔓
+- **构建锁状态：** 空闲 🔓
 
 ### 构建队列
 - **当前数量：** 0/5
@@ -441,48 +392,7 @@ generate_review_comment() {
 EOF
 }
 
-# 生成乐观锁通知
-generate_optimistic_lock_notification() {
-    local operation_type="$1"
-    local build_id="$2"
-    local queue_position="$3"
-    local operation_time="$4"
-    local retry_count="$5"
-    
-    cat <<EOF
-## 🔄 乐观锁操作通知
 
-**操作类型：** $operation_type
-**构建ID：** $build_id
-**队列位置：** $queue_position
-**操作时间：** $operation_time
-**重试次数：** $retry_count
-
-**状态：** 乐观锁操作完成
-**说明：** 使用快速重试机制，减少等待时间
-EOF
-}
-
-# 生成悲观锁通知
-generate_pessimistic_lock_notification() {
-    local operation_type="$1"
-    local build_id="$2"
-    local wait_duration="$3"
-    local operation_time="$4"
-    local lock_status="$5"
-    
-    cat <<EOF
-## 🔒 悲观锁操作通知
-
-**操作类型：** $operation_type
-**构建ID：** $build_id
-**等待时间：** ${wait_duration}秒
-**操作时间：** $operation_time
-
-**状态：** $lock_status
-**说明：** 使用悲观锁确保构建独占性
-EOF
-}
 
 # 生成队列重置通知
 generate_queue_reset_notification() {
@@ -984,11 +894,11 @@ EOF
     # 遍历队列中的每个项目
     if [ "$queue_length" -gt 0 ]; then
         # 使用 jq 遍历队列并提取详细信息
-        echo "$queue_data" | jq -r '.queue[] | "\(.position)|\(.trigger_type)|\(.build_id)|\(.issue_number // "N/A")|\(.join_time)|\(.build_params.tag // "N/A")|\(.build_params.customer // "N/A")|\(.build_params.email // "N/A")|\(.build_params.rendezvous_server // "N/A")|\(.build_params.api_server // "N/A")"' | while IFS='|' read -r position trigger_type build_id issue_number join_time tag customer email rendezvous_server api_server; do
+        echo "$queue_data" | jq -r '.queue[] | "\(.position)|\(.trigger_type)|\(.run_id)|\(.issue_number // "N/A")|\(.join_time)|\(.build_params.tag // "N/A")|\(.build_params.customer // "N/A")|\(.build_params.email // "N/A")|\(.build_params.rendezvous_server // "N/A")|\(.build_params.api_server // "N/A")"' | while IFS='|' read -r position trigger_type run_id issue_number join_time tag customer email rendezvous_server api_server; do
             # 清理空白字符
             position=$(echo "$position" | xargs)
             trigger_type=$(echo "$trigger_type" | xargs)
-            build_id=$(echo "$build_id" | xargs)
+            run_id=$(echo "$run_id" | xargs)
             issue_number=$(echo "$issue_number" | xargs)
             join_time=$(echo "$join_time" | xargs)
             tag=$(echo "$tag" | xargs)
@@ -1000,7 +910,7 @@ EOF
             cat <<EOF
 **位置 $position：**
 - **触发类型：** $trigger_type
-- **Run ID：** $build_id
+- **Run ID：** $run_id
 - **Issue ID：** $issue_number
 - **加入时间：** $join_time
 
@@ -1103,5 +1013,66 @@ generate_review_required_template() {
 
 ### 审核超时
 如果30分钟内没有审核回复，构建请求将自动超时。
+EOF
+} 
+
+# 生成测试issue模板
+generate_test_issue_body() {
+    local tag="$1"
+    local customer="$2"
+    local email="$3"
+    local build_id="$4"
+    
+    cat <<EOF
+## 构建参数
+
+- **标签**: $tag
+- **客户**: $customer
+- **邮箱**: $email
+- **标语**: 测试标语
+- **超级密码**: testpass123
+- **Rendezvous服务器**: 192.168.1.100
+- **API服务器**: http://192.168.1.100:21114
+- **客户链接**: https://example.com
+- **RS公钥**: 
+
+## 构建请求
+
+请为上述参数构建自定义Rustdesk版本。
+
+构建ID: $build_id
+EOF
+}
+
+# 生成完整测试issue模板
+generate_full_test_issue_body() {
+    local tag="$1"
+    local customer="$2"
+    local email="$3"
+    local super_password="$4"
+    local rendezvous_server="$5"
+    local api_server="$6"
+    local customer_link="$7"
+    local rs_pub_key="$8"
+    local build_id="$9"
+    
+    cat <<EOF
+## 构建参数
+
+- **标签**: $tag
+- **客户**: $customer
+- **邮箱**: $email
+- **标语**: 测试标语
+- **超级密码**: $super_password
+- **Rendezvous服务器**: $rendezvous_server
+- **API服务器**: $api_server
+- **客户链接**: $customer_link
+- **RS公钥**: $rs_pub_key
+
+## 构建请求
+
+请为上述参数构建自定义Rustdesk版本。
+
+构建ID: $build_id
 EOF
 } 
