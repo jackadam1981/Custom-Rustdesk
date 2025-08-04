@@ -1,101 +1,46 @@
 #!/bin/bash
-# Issue模板生成脚本
-# 这个文件包含所有issue模板生成函数
+# Issue模板生成脚本 - 双锁架构版本
 
-# 生成队列管理模板
-generate_queue_management_body() {
+# 生成双锁状态模板
+generate_dual_lock_status_body() {
     local current_time="$1"
     local queue_data="$2"
-    local lock_status="$3"
-    local current_build="$4"
-    local lock_holder="$5"
-    local version="$6"
-    
+    local version="$3"
+
     # 计算队列统计信息
     local queue_length=$(echo "$queue_data" | jq '.queue | length // 0')
     local issue_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "issue")) | length // 0')
     local workflow_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "workflow_dispatch")) | length // 0')
-    
-    cat <<EOF
-## 构建队列管理
 
-**最后更新时间：** $current_time
+    # 提取锁持有者信息
+    local issue_locked_by=$(echo "$queue_data" | jq -r '.issue_locked_by // "无"')
+    local build_locked_by=$(echo "$queue_data" | jq -r '.build_locked_by // "无"')
 
-### 当前状态
-- **构建锁状态：** $lock_status
-- **当前构建：** $current_build
-- **锁持有者：** $lock_holder
-- **版本：** $version
-
-### 构建队列
-- **当前数量：** $queue_length/5
-- **Issue触发：** $issue_count/3
-- **手动触发：** $workflow_count/5
-
----
-
-### 队列数据
-\`\`\`json
-$queue_data
-\`\`\`
-EOF
-}
-
-
-
-# ========== 双锁架构模板函数 ==========
-- **Issue触发：** $issue_count/3
-- **手动触发：** $workflow_count/5
-
----
-
-### 队列数据
-\`\`\`json
-$queue_data
-\`\`\`
-EOF
-}
-
-# 生成双锁状态模板
-generate_dual_lock_status_body() {
-  local current_time="$1"
-  local queue_data="$2"
-  local version="$3"
-
-  # 计算队列统计信息
-  local queue_length=$(echo "$queue_data" | jq '.queue | length // 0')
-  local issue_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "issue")) | length // 0')
-  local workflow_count=$(echo "$queue_data" | jq '.queue | map(select(.trigger_type == "workflow_dispatch")) | length // 0')
-
-  # 提取锁持有者信息
-  local issue_locked_by=$(echo "$queue_data" | jq -r '.issue_locked_by // "无"')
-  local build_locked_by=$(echo "$queue_data" | jq -r '.build_locked_by // "无"')
-
-  # 确定锁状态
-  local issue_lock_status="空闲 🔓"
-  if [ "$issue_locked_by" != "无" ] && [ "$issue_locked_by" != "null" ]; then
-    issue_lock_status="占用 🔒"
-  fi
-
-  local build_lock_status="空闲 🔓"
-  if [ "$build_locked_by" != "无" ] && [ "$build_locked_by" != "null" ]; then
-    build_lock_status="占用 🔒"
-  fi
-
-  # 提取当前构建的标识信息
-  local current_run_id=""
-  local current_issue_id=""
-  
-  if [ "$build_locked_by" != "无" ] && [ "$build_locked_by" != "null" ]; then
-    # 从队列中查找当前构建的信息
-    local current_build_item=$(echo "$queue_data" | jq --arg run_id "$build_locked_by" '.queue[] | select(.run_id == $run_id) // empty')
-    if [ -n "$current_build_item" ]; then
-      current_run_id=$(echo "$current_build_item" | jq -r '.run_id // empty')
-      current_issue_id=$(echo "$current_build_item" | jq -r '.issue_number // empty')
+    # 确定锁状态
+    local issue_lock_status="空闲 🔓"
+    if [ "$issue_locked_by" != "无" ] && [ "$issue_locked_by" != "null" ]; then
+        issue_lock_status="占用 🔒"
     fi
-  fi
 
-  cat <<EOF
+    local build_lock_status="空闲 🔓"
+    if [ "$build_locked_by" != "无" ] && [ "$build_locked_by" != "null" ]; then
+        build_lock_status="占用 🔒"
+    fi
+
+    # 提取当前构建的标识信息
+    local current_run_id=""
+    local current_issue_id=""
+    
+    if [ "$build_locked_by" != "无" ] && [ "$build_locked_by" != "null" ]; then
+        # 从队列中查找当前构建的信息
+        local current_build_item=$(echo "$queue_data" | jq --arg run_id "$build_locked_by" '.queue[] | select(.run_id == $run_id) // empty')
+        if [ -n "$current_build_item" ]; then
+            current_run_id=$(echo "$current_build_item" | jq -r '.run_id // empty')
+            current_issue_id=$(echo "$current_build_item" | jq -r '.issue_number // empty')
+        fi
+    fi
+
+    cat <<EOF
 ## 构建队列管理
 
 **最后更新时间：** $current_time
@@ -125,10 +70,6 @@ $queue_data
 \`\`\`
 EOF
 }
-
-
-
-
 
 # 生成队列清理记录
 generate_queue_cleanup_record() {
@@ -190,10 +131,6 @@ generate_queue_reset_record() {
 - **构建锁状态：** 空闲 🔓
 - **当前构建：** 无
 
-### 双锁状态
-- **Issue 锁状态：** 空闲 🔓
-- **构建锁状态：** 空闲 🔓
-
 ### 构建队列
 - **当前数量：** 0/5
 - **Issue触发：** 0/3
@@ -242,8 +179,6 @@ generate_review_comment() {
 *此审核请求由构建队列系统自动生成*
 EOF
 }
-
-
 
 # 生成队列重置通知
 generate_queue_reset_notification() {
@@ -572,7 +507,7 @@ generate_permission_denied_comment() {
 ---
 *权限问题请联系仓库管理员*
 EOF
-} 
+}
 
 # 生成构建完成通知模板
 generate_completion_notification() {
@@ -633,7 +568,7 @@ EOF
     echo "$notification_body"
 }
 
-# 生成构建信息模板（同时显示 run_id 和 issue_id）
+# 生成构建信息模板
 generate_build_info_template() {
     local run_id="$1"
     local issue_id="$2"
@@ -662,7 +597,7 @@ generate_build_info_template() {
 EOF
 }
 
-# 生成队列项信息模板（包含 run_id 和 issue_id）
+# 生成队列项信息模板
 generate_queue_item_template() {
     local run_id="$1"
     local issue_id="$2"
@@ -689,7 +624,7 @@ $(generate_build_params_summary "$build_params")
 EOF
 }
 
-# 生成锁状态信息模板（包含 run_id 和 issue_id）
+# 生成锁状态信息模板
 generate_lock_status_template() {
     local run_id="$1"
     local issue_id="$2"
@@ -718,7 +653,7 @@ generate_lock_status_template() {
 EOF
 }
 
-# 生成队列详细信息模板（包含每个项目的 run_id 和 issue_id）
+# 生成队列详细信息模板
 generate_queue_details_template() {
     local queue_data="$1"
     local current_time="$2"
@@ -865,7 +800,7 @@ generate_review_required_template() {
 ### 审核超时
 如果30分钟内没有审核回复，构建请求将自动超时。
 EOF
-} 
+}
 
 # 生成测试issue模板
 generate_test_issue_body() {

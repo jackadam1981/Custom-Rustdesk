@@ -1,13 +1,13 @@
 #!/bin/bash
-# 构建脚本
-# 这个文件处理构建逻辑和数据处理
-# 加载依赖脚本
+# 构建脚本 - 简化版本
 
+# 加载依赖脚本
 source .github/workflows/scripts/debug-utils.sh
 
 # 提取构建数据
-extract_build_data() {
+_extract_build_data() {
     local input="$1"
+    
     # 校验输入JSON格式
     if ! debug "validate" "build.sh-输入数据校验" "$input"; then
         debug "error" "build.sh输入的JSON格式不正确"
@@ -62,14 +62,14 @@ extract_build_data() {
 }
 
 # 暂停构建（用于队列测试）
-pause_for_test() {
+_pause_for_test() {
     local pause_seconds="${1:-300}"
     echo "Pausing for $pause_seconds seconds to test queue..."
     sleep "$pause_seconds"
 }
 
 # 执行实际的构建过程
-execute_build_process() {
+_execute_build_process() {
     local current_data="$1"
     
     # 校验输入JSON格式
@@ -102,8 +102,6 @@ execute_build_process() {
     sleep 3
     
     debug "log" "📦 步骤3: 应用定制参数..."
-    # 这里应该替换RustDesk源码中的相关参数
-    # 例如：替换客户名称、标语、服务器地址等
     sleep 2
     
     debug "log" "📦 步骤4: 编译RustDesk..."
@@ -150,8 +148,9 @@ execute_build_process() {
 }
 
 # 输出构建数据
-output_build_data() {
+_output_build_data() {
     local output_data="$1"
+    
     # 校验输出JSON格式
     if ! debug "validate" "build.sh-输出数据校验" "$output_data"; then
         debug "error" "build.sh输出的JSON格式不正确"
@@ -185,7 +184,7 @@ output_build_data() {
     fi
 }
 
-# 主构建管理函数 - 供工作流调用
+# 主构建管理函数
 build_manager() {
     local operation="$1"
     local input_data="$2"
@@ -193,17 +192,17 @@ build_manager() {
 
     case "$operation" in
         "extract-data")
-            extract_build_data "$input_data"
+            _extract_build_data "$input_data"
             ;;
         "process-data")
-            execute_build_process "$input_data"
+            _execute_build_process "$input_data"
             ;;
         "output-data")
             local output_data="$2"
-            output_build_data "$output_data"
+            _output_build_data "$output_data"
             ;;
         "pause")
-            pause_for_test "$pause_seconds"
+            _pause_for_test "$pause_seconds"
             ;;
         *)
             debug "error" "Unknown operation: $operation"

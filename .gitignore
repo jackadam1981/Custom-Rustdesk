@@ -1,0 +1,81 @@
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 临时文件
+*.tmp
+*.temp
+*.log
+*.bak
+*.backup
+
+# 构建产物
+build/
+dist/
+target/
+*.exe
+*.dmg
+*.deb
+*.rpm
+*.zip
+*.tar.gz
+
+# 依赖文件
+node_modules/
+vendor/
+.env
+.env.local
+.env.production
+
+# 测试文件
+coverage/
+.nyc_output/
+*.test.js
+*.spec.js
+
+# 缓存文件
+.cache/
+.tmp/
+.temp/
+
+# 日志文件
+logs/
+*.log
+
+# 密钥和敏感信息
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+config.local.*
+
+# GitHub Actions
+.github/workflows/.cache/
+.github/workflows/temp/
+
+# 自定义构建文件
+rustdesk-source/
+custom-build-*/
+
+# 调试文件
+debug_*.sh
+test_*.sh
+*.debug
+
+# 文档生成
+docs/_build/
+site/
+
+# 其他
+*.pid
+*.seed
+*.pid.lock 

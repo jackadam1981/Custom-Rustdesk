@@ -55,13 +55,16 @@ permissions:
   contents: read
   actions: read
 
+# 统一环境变量配置
 env:
   GITHUB_TOKEN: ${{ secrets.BUILD_TOKEN }}
   ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
-  # 队列管理配置
   QUEUE_ISSUE_NUMBER: '1'
-  # 调试配置 - 默认不开启调试，只在手动触发时可通过input控制
-  DEBUG_ENABLED: true
+  DEBUG_ENABLED: ${{ vars.DEBUG_ENABLED || 'false' }}
+  # 远程仓库配置 - 固定设置
+  RUSTDESK_REPO: 'rustdesk/rustdesk'
+  RUSTDESK_BRANCH: 'master'
+  REMOTE_WORKFLOW_NAME: 'Build'
   # 默认值配置
   DEFAULT_TAG: ${{ secrets.DEFAULT_TAG }}
   DEFAULT_EMAIL: ${{ secrets.DEFAULT_EMAIL }}
@@ -87,9 +90,6 @@ jobs:
         
       - name: Process trigger and validate parameters
         id: trigger
-        env:
-          GITHUB_TOKEN: ${{ secrets.BUILD_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           source .github/workflows/scripts/trigger.sh
           
@@ -119,9 +119,6 @@ jobs:
           validation_result=$(trigger_manager "validate-parameters" "$final_data")
           validation_exit_code=$?
           
-          # 如果是issue触发，暂时不清理issue内容，等待验证结果
-          # issue清理将在验证通过后由review阶段处理
-          
           # 输出到GitHub Actions
           trigger_manager "output-to-github" "$final_data"
           
@@ -149,17 +146,11 @@ jobs:
         shell: bash
         env:
           TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
-          GITHUB_TOKEN: ${{ secrets.BUILD_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: |
           source .github/workflows/scripts/review.sh
 
           # 重新获取 github.event
           EVENT_DATA='${{ toJSON(github.event) }}'
-
-          # 设置审核数据
-          echo "TRIGGER_OUTPUT=$TRIGGER_DATA" >> $GITHUB_ENV
           
           # 验证参数
           validation_result=$(review_manager "validate" "$EVENT_DATA" "$TRIGGER_DATA" || true)
@@ -176,7 +167,7 @@ jobs:
           # 检查是否需要审核
           need_review=$(review_manager "need-review" "$EVENT_DATA" "$TRIGGER_DATA" || true)
           
-          # 如果是issue触发，无论是否需要审核，都清理issue内容
+          # 如果是issue触发，清理issue内容
           if [ "${{ github.event_name }}" = "issues" ]; then
             source .github/workflows/scripts/trigger.sh
             
@@ -205,15 +196,12 @@ jobs:
             review_exit_code=$?
             
             if [ $review_exit_code -eq 0 ]; then
-              # 审核通过
               echo "review_passed=true" >> $GITHUB_OUTPUT
               echo "review_reason=" >> $GITHUB_OUTPUT
             elif [ $review_exit_code -eq 1 ]; then
-              # 审核被拒绝
               echo "review_passed=false" >> $GITHUB_OUTPUT
               echo "review_reason=审核被拒绝" >> $GITHUB_OUTPUT
             elif [ $review_exit_code -eq 2 ]; then
-              # 审核超时
               echo "review_passed=false" >> $GITHUB_OUTPUT
               echo "review_reason=审核超时" >> $GITHUB_OUTPUT
             fi
@@ -226,15 +214,10 @@ jobs:
           # 输出数据（传递审核结果）
           review_manager "output-data" "$EVENT_DATA" "$TRIGGER_DATA" "$([ "$need_review" = "true" ] && [ $review_exit_code -eq 1 ] && echo "true" || echo "false")" "$([ "$need_review" = "true" ] && [ $review_exit_code -eq 2 ] && echo "true" || echo "false")" || true
 
-  # 02-三锁队列管理 - 使用三锁架构加入队列
+  # 02-加入队列
   join-queue:
     needs: [trigger, review]
     if: needs.trigger.outputs.validation_passed == 'true' && needs.review.outputs.review_passed == 'true'
-    env:
-      TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
-      BUILD_ID: ${{ needs.trigger.outputs.build_id }}
-      GITHUB_TOKEN: ${{ secrets.BUILD_TOKEN }}
-      GITHUB_REPOSITORY: ${{ github.repository }}
     runs-on: ubuntu-latest
     outputs:
       join_success: ${{ steps.join-queue.outputs.join_success }}
@@ -245,6 +228,8 @@ jobs:
         
       - name: Join build queue
         id: join-queue
+        env:
+          TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
         run: |
           source .github/workflows/scripts/queue-manager.sh
 
@@ -267,15 +252,10 @@ jobs:
             echo "queue_position=-1" >> $GITHUB_OUTPUT
           fi
 
-  # 03-等待构建锁 - 使用三锁架构获取构建权限
+  # 03-等待构建锁
   wait-build-lock:
     needs: [trigger, review, join-queue]
     if: needs.trigger.outputs.validation_passed == 'true' && needs.review.outputs.review_passed == 'true' && needs.join-queue.outputs.join_success == 'true'
-    env:
-      TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
-      BUILD_ID: ${{ needs.trigger.outputs.build_id }}
-      GITHUB_TOKEN: ${{ secrets.BUILD_TOKEN }}
-      GITHUB_REPOSITORY: ${{ github.repository }}
     runs-on: ubuntu-latest
     outputs:
       build_lock_acquired: ${{ steps.wait-build-lock.outputs.build_lock_acquired }}
@@ -298,7 +278,7 @@ jobs:
             echo "build_lock_acquired=false" >> $GITHUB_OUTPUT
           fi
 
-  # 04-执行构建 - 构建过程
+  # 04-执行构建
   build:
     needs: [trigger, review, join-queue, wait-build-lock]
     if: needs.trigger.outputs.validation_passed == 'true' && needs.review.outputs.review_passed == 'true' && needs.join-queue.outputs.join_success == 'true' && needs.wait-build-lock.outputs.build_lock_acquired == 'true'
@@ -315,9 +295,6 @@ jobs:
         id: build
         env:
           TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
-          BUILD_ID: ${{ needs.trigger.outputs.build_id }}
-          GITHUB_TOKEN: ${{ secrets.BUILD_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           source .github/workflows/scripts/build.sh
           
@@ -351,7 +328,202 @@ jobs:
           # 输出构建数据
           build_manager "output-data" "$processed_data"
 
-  # 05-完成处理 - 清理和通知
+      # 步骤1: 克隆远程源码
+      - name: Clone RustDesk source code
+        id: clone-source
+        run: |
+          echo "🔧 Step 1: Cloning RustDesk source code..."
+          
+          # 设置Git配置
+          git config --global user.name "Custom Build Bot"
+          git config --global user.email "build@custom-rustdesk.com"
+          
+          # 克隆远程仓库
+          git clone --depth 1 --branch $RUSTDESK_BRANCH https://github.com/$RUSTDESK_REPO.git rustdesk-source
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Successfully cloned RustDesk source code"
+            echo "clone_success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to clone RustDesk source code"
+            echo "clone_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      # 步骤2: 修改源码
+      - name: Modify source code
+        id: modify-source
+        if: steps.clone-source.outputs.clone_success == 'true'
+        env:
+          BUILD_TAG: ${{ env.BUILD_TAG }}
+          BUILD_CUSTOMER: ${{ env.BUILD_CUSTOMER }}
+          BUILD_SLOGAN: ${{ env.BUILD_SLOGAN }}
+          BUILD_SUPER_PASSWORD: ${{ env.BUILD_SUPER_PASSWORD }}
+          BUILD_RENDEZVOUS_SERVER: ${{ env.BUILD_RENDEZVOUS_SERVER }}
+          BUILD_API_SERVER: ${{ env.BUILD_API_SERVER }}
+        run: |
+          echo "🔧 Step 2: Modifying source code with custom parameters..."
+          
+          cd rustdesk-source
+          
+          # 占位：修改源码中的相关参数
+          # TODO: 实现具体的源码修改逻辑
+          echo "📝 Modifying customer name: $BUILD_CUSTOMER"
+          echo "📝 Modifying slogan: $BUILD_SLOGAN"
+          echo "📝 Modifying super password: $BUILD_SUPER_PASSWORD"
+          echo "📝 Modifying rendezvous server: $BUILD_RENDEZVOUS_SERVER"
+          echo "📝 Modifying API server: $BUILD_API_SERVER"
+          
+          # 模拟修改过程
+          sleep 5
+          
+          echo "✅ Source code modification completed"
+          echo "modify_success=true" >> $GITHUB_OUTPUT
+
+      # 步骤3: 推送到本仓库
+      - name: Push to current repository
+        id: push-repo
+        if: steps.modify-source.outputs.modify_success == 'true'
+        run: |
+          echo "🔧 Step 3: Pushing modified code to current repository..."
+          
+          cd rustdesk-source
+          
+          # 添加远程仓库
+          git remote add custom-repo https://x-access-token:${{ secrets.BUILD_TOKEN }}@github.com/${{ github.repository }}.git
+          
+          # 创建新分支
+          git checkout -b custom-build-${{ github.run_id }}
+          
+          # 提交修改
+          git add .
+          git commit -m "Custom build for $BUILD_TAG - Customer: $BUILD_CUSTOMER"
+          
+          # 推送到本仓库
+          git push custom-repo custom-build-${{ github.run_id }}
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Successfully pushed to current repository"
+            echo "push_success=true" >> $GITHUB_OUTPUT
+            echo "branch_name=custom-build-${{ github.run_id }}" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to push to current repository"
+            echo "push_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      # 步骤4: 触发远程源码的工作流
+      - name: Trigger remote workflow
+        id: trigger-remote
+        if: steps.push-repo.outputs.push_success == 'true'
+        run: |
+          echo "🔧 Step 4: Triggering remote RustDesk workflow..."
+          
+          # 使用GitHub API触发远程仓库的工作流
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$RUSTDESK_REPO/dispatches \
+            -d '{
+              "event_type": "custom-build",
+              "client_payload": {
+                "build_id": "${{ github.run_id }}",
+                "customer": "$BUILD_CUSTOMER",
+                "tag": "$BUILD_TAG",
+                "source_repo": "${{ github.repository }}",
+                "source_branch": "custom-build-${{ github.run_id }}"
+              }
+            }'
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Successfully triggered remote workflow"
+            echo "trigger_success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to trigger remote workflow"
+            echo "trigger_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      # 步骤5: 等待远程构建完成
+      - name: Wait for remote build completion
+        id: wait-remote
+        if: steps.trigger-remote.outputs.trigger_success == 'true'
+        run: |
+          echo "🔧 Step 5: Waiting for remote build completion..."
+          
+          # 占位：等待远程构建完成
+          # TODO: 实现具体的等待逻辑
+          echo "⏳ Waiting for remote build to complete..."
+          
+          # 模拟等待过程
+          sleep 30
+          
+          echo "✅ Remote build completed"
+          echo "wait_success=true" >> $GITHUB_OUTPUT
+
+      # 步骤6: 回退仓库
+      - name: Revert repository
+        id: revert-repo
+        if: steps.wait-remote.outputs.wait_success == 'true'
+        run: |
+          echo "🔧 Step 6: Reverting repository changes..."
+          
+          # 删除推送的分支
+          curl -X DELETE \
+            -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/git/refs/heads/custom-build-${{ github.run_id }}
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Successfully deleted remote branch"
+          else
+            echo "⚠️ Failed to delete remote branch (branch may not exist)"
+          fi
+          
+          # 清理本地工作目录
+          echo "🧹 Cleaning up local workspace..."
+          
+          # 删除克隆的源码目录
+          if [ -d "rustdesk-source" ]; then
+            rm -rf rustdesk-source
+            echo "✅ Successfully cleaned up local source code directory"
+          else
+            echo "ℹ️ Local source code directory not found"
+          fi
+          
+          # 清理其他可能的临时文件
+          find . -name "*.tmp" -delete 2>/dev/null || true
+          find . -name "*.temp" -delete 2>/dev/null || true
+          
+          echo "✅ Successfully reverted repository and cleaned up workspace"
+          echo "revert_success=true" >> $GITHUB_OUTPUT
+
+      # 步骤7: 最终清理（无论成功还是失败）
+      - name: Final cleanup
+        id: final-cleanup
+        if: always()
+        run: |
+          echo "🧹 Final cleanup step..."
+          
+          # 确保清理本地源码目录
+          if [ -d "rustdesk-source" ]; then
+            rm -rf rustdesk-source
+            echo "✅ Cleaned up rustdesk-source directory"
+          fi
+          
+          # 清理其他临时文件
+          find . -name "*.tmp" -delete 2>/dev/null || true
+          find . -name "*.temp" -delete 2>/dev/null || true
+          find . -name "*.log" -delete 2>/dev/null || true
+          
+          # 清理Git配置
+          git config --global --unset user.name 2>/dev/null || true
+          git config --global --unset user.email 2>/dev/null || true
+          
+          echo "✅ Final cleanup completed"
+          echo "cleanup_completed=true" >> $GITHUB_OUTPUT
+
+  # 05-完成处理
   finish:
     needs: [trigger, review, join-queue, wait-build-lock, build]
     if: always() && needs.trigger.result != 'skipped'
@@ -361,7 +533,6 @@ jobs:
       notification_sent: ${{ steps.finish.outputs.notification_sent }}
       cleanup_completed: ${{ steps.finish.outputs.cleanup_completed }}
       lock_released: ${{ steps.finish.outputs.lock_released }}
-      finish_validation_passed: ${{ steps.finish.outputs.finish_validation_passed }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -370,11 +541,9 @@ jobs:
         id: finish
         env:
           TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
-          BUILD_ID: ${{ needs.trigger.outputs.build_id }}
-          GITHUB_TOKEN: ${{ secrets.BUILD_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           source .github/workflows/scripts/finish.sh
+          source .github/workflows/scripts/queue-manager.sh
           
           # 重新获取 github.event
           EVENT_DATA='${{ toJSON(github.event) }}'
@@ -394,20 +563,19 @@ jobs:
           tag=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
           customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
           email=$(echo "$TRIGGER_DATA" | jq -r '.build_params.email // empty')
-          build_id="$BUILD_ID"
+          build_id="${{ needs.trigger.outputs.build_id }}"
           
           # 设置构建参数
-          EMAIL="$email"
-          TAG="$tag"
-          CUSTOMER="$customer"
+              EMAIL="$email"
+              TAG="$tag"
+              CUSTOMER="$customer"
           
           # 清理构建环境
           echo "Cleaning up build environment..."
-          cleanup_completed="true"
+            cleanup_completed="true"
           
           # 释放所有锁
           echo "Releasing all locks..."
-          source .github/workflows/scripts/queue-manager.sh
           if release_all_locks; then
             lock_released="success"
             echo "✅ Successfully released all locks"
@@ -418,9 +586,18 @@ jobs:
           
           # 清理队列
           echo "Cleaning up queue..."
-          source .github/workflows/scripts/queue-manager.sh
           cleanup_queue
           echo "✅ Queue cleanup completed"
+          
+          # 生成完成通知
+          notification=$(generate_completion_notification "$build_status" "$tag" "$customer" "$download_url" "$error_message")
+          
+          # 发送通知
+          notification_sent="false"
+          if [ -n "$EMAIL" ]; then
+            echo "Sending notification to: $EMAIL"
+            notification_sent="true"
+          fi
           
           # 输出完成状态
           echo "Build completed with status: $build_status"
@@ -430,16 +607,5 @@ jobs:
           echo "notification_sent=$notification_sent" >> $GITHUB_OUTPUT
           echo "cleanup_completed=$cleanup_completed" >> $GITHUB_OUTPUT
           echo "lock_released=$lock_released" >> $GITHUB_OUTPUT
-          
-          # 生成完成通知（在结果输出后进行）
-          notification=$(generate_completion_notification "$build_status" "$tag" "$customer" "$download_url" "$error_message")
-          
-          # 发送通知
-          notification_sent="false"
-          if [ -n "$EMAIL" ]; then
-            echo "Sending notification to: $EMAIL"
-            notification_sent="true"
-            echo "notification_sent=true" >> $GITHUB_OUTPUT
-          fi 
           
  

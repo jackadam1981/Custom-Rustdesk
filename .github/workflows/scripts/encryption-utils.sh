@@ -7,17 +7,17 @@
 encrypt_params() {
   local json_data="$1"
   local encryption_key="${ENCRYPTION_KEY}"
-  
+
   if [ -z "$json_data" ]; then
     echo "No data to encrypt"
     return 1
   fi
-  
+
   if [ -z "$encryption_key" ]; then
     echo "ENCRYPTION_KEY not set"
     return 1
   fi
-  
+
   local iv=$(openssl rand -hex 16)
   local encrypted=$(echo -n "$json_data" | openssl enc -aes-256-cbc -iv "$iv" -K "$encryption_key" -base64 2>/dev/null)
   if [ $? -ne 0 ]; then
@@ -31,17 +31,17 @@ encrypt_params() {
 decrypt_params() {
   local encrypted_data="$1"
   local encryption_key="${ENCRYPTION_KEY}"
-  
+
   if [ -z "$encrypted_data" ]; then
     echo "No data to decrypt"
     return 1
   fi
-  
+
   if [ -z "$encryption_key" ]; then
     echo "ENCRYPTION_KEY not set"
     return 1
   fi
-  
+
   local iv=$(echo "$encrypted_data" | cut -d: -f1)
   local encrypted=$(echo "$encrypted_data" | cut -d: -f2-)
   if [ -z "$iv" ] || [ -z "$encrypted" ]; then
@@ -65,12 +65,12 @@ generate_encryption_key() {
 create_encrypted_queue_data() {
   local queue_data="$1"
   local sensitive_params="$2"
-  
+
   if [ -z "$queue_data" ]; then
     echo "Queue data not provided"
     return 1
   fi
-  
+
   # 加密敏感参数
   local encrypted_params=""
   if [ -n "$sensitive_params" ]; then
@@ -80,7 +80,7 @@ create_encrypted_queue_data() {
       return 1
     fi
   fi
-  
+
   # 创建包含加密参数的队列数据
   local final_queue_data
   if [ -n "$encrypted_params" ]; then
@@ -88,6 +88,6 @@ create_encrypted_queue_data() {
   else
     final_queue_data="$queue_data"
   fi
-  
+
   echo "$final_queue_data"
-} 
+}

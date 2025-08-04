@@ -1,6 +1,5 @@
 #!/bin/bash
-# Issue 管理器脚本 - 重构版本
-# 保留主调度函数设计，简化内部实现
+# Issue 管理器脚本 - 双锁架构版本
 
 # 加载依赖脚本
 source .github/workflows/scripts/debug-utils.sh
