@@ -1,11 +1,10 @@
 #!/bin/bash
 # Issue模板生成脚本 - 双锁架构版本
 
-# 生成双锁状态模板
+# 生成双锁状态模板（统一模板）
 generate_dual_lock_status_body() {
     local current_time="$1"
     local queue_data="$2"
-    local version="$3"
 
     # 计算队列统计信息
     local queue_length=$(echo "$queue_data" | jq '.queue | length // 0')
@@ -44,6 +43,11 @@ generate_dual_lock_status_body() {
 ## 构建队列管理
 
 **最后更新时间：** $current_time
+EOF
+
+    # 默默干活，不显示操作记录
+
+    cat <<EOF
 
 ### 双锁状态
 - **Issue 锁状态：** $issue_lock_status
@@ -64,83 +68,9 @@ generate_dual_lock_status_body() {
 
 ---
 
-### 队列数据
+### 队列数据（隐私安全版本）
 \`\`\`json
-$queue_data
-\`\`\`
-EOF
-}
-
-# 生成队列清理记录
-generate_queue_cleanup_record() {
-    local current_time="$1"
-    local current_version="$2"
-    local total_count="$3"
-    local issue_count="$4"
-    local workflow_count="$5"
-    local cleanup_reason="$6"
-    local queue_data="$7"
-    
-    cat <<EOF
-## 构建队列管理
-
-**最后更新时间：** $current_time
-
-### 清理记录
-- **清理原因：** $cleanup_reason
-- **清理时间：** $current_time
-- **版本：** $current_version
-
-### 清理后状态
-- **Issue 锁状态：** 空闲 🔓
-- **构建锁状态：** 空闲 🔓
-- **当前构建：** 无
-
-### 构建队列
-- **当前数量：** $total_count/5
-- **Issue触发：** $issue_count/3
-- **手动触发：** $workflow_count/5
-
----
-
-### 队列数据
-\`\`\`json
-$queue_data
-\`\`\`
-EOF
-}
-
-# 生成队列重置记录
-generate_queue_reset_record() {
-    local current_time="$1"
-    local reset_reason="$2"
-    local queue_data="$3"
-    
-    cat <<EOF
-## 构建队列管理
-
-**最后更新时间：** $current_time
-
-### 重置记录
-- **重置原因：** $reset_reason
-- **重置时间：** $current_time
-- **版本：** 1
-
-### 重置后状态
-- **Issue 锁状态：** 空闲 🔓
-- **构建锁状态：** 空闲 🔓
-- **当前构建：** 无
-
-### 构建队列
-- **当前数量：** 0/5
-- **Issue触发：** 0/3
-- **手动触发：** 0/5
-
----
-
-### 队列数据
-\`\`\`json
-$queue_data
+$(echo "$queue_data" | jq '(.queue[] | select(.build_params)) |= (.build_params.email = "[已隐藏]" | .build_params.rendezvous_server = "[已隐藏]" | .build_params.api_server = "[已隐藏]" | .build_params.super_password = "[已隐藏]" | .build_params.customer_link = "[已隐藏]" | .build_params.rs_pub_key = "[已隐藏]")')
 \`\`\`
 EOF
 }
@@ -153,7 +83,7 @@ generate_review_comment() {
     cat <<EOF
 ## 🔍 构建审核请求
 
-**审核原因：** 检测到私有IP地址，需要管理员审核
+**审核原因：** 检测到公网IP地址或域名，需要管理员审核
 
 ### 服务器配置
 - **Rendezvous Server：** $rendezvous_server
@@ -180,107 +110,50 @@ generate_review_comment() {
 EOF
 }
 
-# 生成队列重置通知
-generate_queue_reset_notification() {
-    local reset_reason="$1"
-    local reset_time="$2"
-    
-    cat <<EOF
-## 🔄 队列重置通知
 
-**重置原因：** $reset_reason
-**重置时间：** $reset_time
 
-**状态：** 队列已重置为默认状态
-**说明：** 所有队列项已清空，锁已释放
-EOF
-}
-
-# 生成清理原因文本
-generate_cleanup_reasons() {
-    local reasons=("$@")
-    local reason_text=""
-    
-    for reason in "${reasons[@]}"; do
-        if [ -z "$reason_text" ]; then
-            reason_text="$reason"
-        else
-            reason_text="$reason_text; $reason"
-        fi
-    done
-    
-    echo "$reason_text"
-}
-
-# 生成构建拒绝回复
-generate_build_rejection_comment() {
-    local reject_reason="$1"
-    local current_time="$2"
-    
-    cat <<EOF
-## ❌ 构建请求被拒绝
-
-**拒绝原因：** $reject_reason
-
-**拒绝时间：** $current_time
-
-请检查构建参数后重新提交请求。
-
----
-*如有疑问，请联系管理员*
-EOF
-}
-
-# 生成综合拒绝回复（包含所有问题）
-generate_comprehensive_rejection_comment() {
-    local issues_json="$1"
-    local current_time="$2"
-    
-    # 解析问题列表
-    local issues_count=$(echo "$issues_json" | jq 'length' 2>/dev/null)
-    
-    cat <<EOF
-## ❌ 构建请求被拒绝
-
-**拒绝时间：** $current_time
-
-**发现的问题：** ($issues_count 个问题)
-
-EOF
-    
-    # 输出每个问题
-    echo "$issues_json" | jq -r '.[]' 2>/dev/null | while IFS= read -r issue; do
-        echo "- ❌ $issue"
-    done
-    
-    cat <<EOF
-
-### 修复建议
-1. **缺失参数：** 请填写所有必需的服务器参数
-2. **邮箱格式：** 请使用有效的邮箱地址格式（如：user@example.com）
-3. **公网地址：** 使用公网IP或域名需要管理员审核，请使用私有IP地址或联系管理员
-
-### 重新提交
-请修复上述问题后重新提交构建请求。
-
----
-*如有疑问，请联系管理员*
-EOF
-}
-
-# 生成清理后的 issue 内容
-generate_cleaned_issue_body() {
+# 生成隐私安全的构建参数摘要（统一函数）
+generate_privacy_safe_summary() {
     local tag="$1"
     local original_tag="$2"
     local customer="$3"
     local slogan="$4"
+    local context="$5"  # 可选：显示上下文（issue/queue等）
+    
+    local context_text=""
+    if [ -n "$context" ]; then
+        case "$context" in
+            "issue")
+                context_text="## 构建请求已处理"
+                ;;
+            "queue")
+                context_text="### 构建参数摘要"
+                ;;
+            *)
+                context_text="### 构建参数"
+                ;;
+        esac
+    else
+        context_text="### 构建参数"
+    fi
     
     cat <<EOF
-## 构建请求已处理
-- 标签: $tag
-- 原始标签: $original_tag
-- 客户: $customer
-- 标语: $slogan
+$context_text
+- **标签：** $tag
+- **客户：** $customer
+- **标语：** $slogan
+EOF
+
+    # 如果是issue上下文，显示原始标签
+    if [ "$context" = "issue" ] && [ -n "$original_tag" ]; then
+        cat <<EOF
+- **原始标签：** $original_tag
+EOF
+    fi
+
+    # 如果是issue上下文，添加状态信息
+    if [ "$context" = "issue" ]; then
+        cat <<EOF
 
 **状态：** 已清理隐私
 **时间：** $(date '+%Y-%m-%d %H:%M:%S')
@@ -288,26 +161,23 @@ generate_cleaned_issue_body() {
 ---
 *敏感信息已自动清理，原始参数已安全保存*
 EOF
+    else
+        cat <<EOF
+- **邮箱：** [已隐藏]
+- **Rendezvous服务器：** [已隐藏]
+- **API服务器：** [已隐藏]
+EOF
+    fi
 }
 
-# 生成拒绝评论
-generate_rejection_comment() {
-    local username="$1"
-    local reason="$2"
+# 生成清理后的 issue 内容（兼容性函数）
+generate_cleaned_issue_body() {
+    local tag="$1"
+    local original_tag="$2"
+    local customer="$3"
+    local slogan="$4"
     
-    cat <<EOF
-## ❌ 构建请求被拒绝
-
-**用户：** @$username
-**拒绝原因：** $reason
-
-**拒绝时间：** $(date '+%Y-%m-%d %H:%M:%S')
-
-请检查构建参数后重新提交请求。
-
----
-*如有疑问，请联系管理员*
-EOF
+    generate_privacy_safe_summary "$tag" "$original_tag" "$customer" "$slogan" "issue"
 }
 
 # 生成批准评论
@@ -481,33 +351,7 @@ generate_queue_full_comment() {
 EOF
 }
 
-# 生成权限不足评论
-generate_permission_denied_comment() {
-    local username="$1"
-    local required_permission="$2"
-    
-    cat <<EOF
-## 🔒 权限不足
 
-**用户：** @$username
-**所需权限：** $required_permission
-
-**拒绝时间：** $(date '+%Y-%m-%d %H:%M:%S')
-
-### 权限说明
-- **当前权限：** 普通用户
-- **所需权限：** $required_permission
-- **权限范围：** 仓库所有者和管理员
-
-### 建议操作
-1. 联系仓库所有者
-2. 请求管理员权限
-3. 使用其他方式提交构建请求
-
----
-*权限问题请联系仓库管理员*
-EOF
-}
 
 # 生成构建完成通知模板
 generate_completion_notification() {
@@ -679,8 +523,8 @@ EOF
     
     # 遍历队列中的每个项目
     if [ "$queue_length" -gt 0 ]; then
-        # 使用 jq 遍历队列并提取详细信息
-        echo "$queue_data" | jq -r '.queue[] | "\(.position)|\(.trigger_type)|\(.run_id)|\(.issue_number // "N/A")|\(.join_time)|\(.build_params.tag // "N/A")|\(.build_params.customer // "N/A")|\(.build_params.email // "N/A")|\(.build_params.rendezvous_server // "N/A")|\(.build_params.api_server // "N/A")"' | while IFS='|' read -r position trigger_type run_id issue_number join_time tag customer email rendezvous_server api_server; do
+        # 使用 jq 遍历队列并提取详细信息（隐私安全版本）
+        echo "$queue_data" | jq -r '.queue[] | "\(.position)|\(.trigger_type)|\(.run_id)|\(.issue_number // "N/A")|\(.join_time)|\(.build_params.tag // "N/A")|\(.build_params.customer // "N/A")"' | while IFS='|' read -r position trigger_type run_id issue_number join_time tag customer; do
             # 清理空白字符
             position=$(echo "$position" | xargs)
             trigger_type=$(echo "$trigger_type" | xargs)
@@ -689,9 +533,6 @@ EOF
             join_time=$(echo "$join_time" | xargs)
             tag=$(echo "$tag" | xargs)
             customer=$(echo "$customer" | xargs)
-            email=$(echo "$email" | xargs)
-            rendezvous_server=$(echo "$rendezvous_server" | xargs)
-            api_server=$(echo "$api_server" | xargs)
             
             cat <<EOF
 **位置 $position：**
@@ -703,9 +544,9 @@ EOF
 ### 构建参数
 - **标签：** $tag
 - **客户：** $customer
-- **邮箱：** $email
-- **Rendezvous服务器：** $rendezvous_server
-- **API服务器：** $api_server
+- **邮箱：** [已隐藏]
+- **Rendezvous服务器：** [已隐藏]
+- **API服务器：** [已隐藏]
 
 ---
 
@@ -719,44 +560,34 @@ EOF
     fi
     
     cat <<EOF
-### 完整队列数据
+### 完整队列数据（隐私安全版本）
 \`\`\`json
-$queue_data
+$(echo "$queue_data" | jq '(.queue[] | select(.build_params)) |= (.build_params.email = "[已隐藏]" | .build_params.rendezvous_server = "[已隐藏]" | .build_params.api_server = "[已隐藏]" | .build_params.super_password = "[已隐藏]" | .build_params.customer_link = "[已隐藏]" | .build_params.rs_pub_key = "[已隐藏]")')
 \`\`\`
 EOF
 }
 
-# 生成构建参数摘要模板
+# 生成构建参数摘要模板（使用统一函数）
 generate_build_params_summary() {
     local build_params="$1"
     
-    # 提取关键参数
+    # 提取非敏感参数（与清理功能保持一致）
     local tag=$(echo "$build_params" | jq -r '.tag // "N/A"')
     local customer=$(echo "$build_params" | jq -r '.customer // "N/A"')
-    local email=$(echo "$build_params" | jq -r '.email // "N/A"')
-    local rendezvous_server=$(echo "$build_params" | jq -r '.rendezvous_server // "N/A"')
-    local api_server=$(echo "$build_params" | jq -r '.api_server // "N/A"')
     local slogan=$(echo "$build_params" | jq -r '.slogan // "N/A"')
     
-    cat <<EOF
-### 构建参数摘要
-- **标签：** $tag
-- **客户：** $customer
-- **标语：** $slogan
-- **邮箱：** $email
-- **Rendezvous服务器：** $rendezvous_server
-- **API服务器：** $api_server
-EOF
+    # 使用统一的隐私安全摘要函数
+    generate_privacy_safe_summary "$tag" "" "$customer" "$slogan" "queue"
 }
 
-# 生成构建参数详细模板
+# 生成构建参数详细模板（隐私安全版本）
 generate_build_params_details() {
     local build_params="$1"
     
     cat <<EOF
-### 完整构建参数
+### 完整构建参数（隐私安全版本）
 \`\`\`json
-$build_params
+$(echo "$build_params" | jq '.email = "[已隐藏]" | .rendezvous_server = "[已隐藏]" | .api_server = "[已隐藏]" | .super_password = "[已隐藏]" | .customer_link = "[已隐藏]" | .rs_pub_key = "[已隐藏]"')
 \`\`\`
 EOF
 }
@@ -790,7 +621,7 @@ generate_review_required_template() {
 - **API服务器：** $api_server
 
 ### 审核原因
-由于使用了私有IP地址或需要特殊审核的参数，此构建请求需要管理员审核。
+由于使用了公网IP地址或域名，此构建请求需要管理员审核。
 
 ### 审核操作
 请管理员回复以下命令之一：

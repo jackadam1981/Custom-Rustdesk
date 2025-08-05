@@ -41,27 +41,27 @@ _validate_server_address() {
     return 1
 }
 
-# 检查是否为私有IP地址
-_is_private_ip() {
-    local ip="$1"
+# 检查是否需要审核（公网IP或域名需要审核）
+_needs_review() {
+    local address="$1"
     
-    local clean_ip="$ip"
-    clean_ip="${clean_ip#*://}"
-    clean_ip="${clean_ip%%:*}"
-    clean_ip="${clean_ip%%/*}"
+    local clean_address="$address"
+    clean_address="${clean_address#*://}"
+    clean_address="${clean_address%%:*}"
+    clean_address="${clean_address%%/*}"
     
-    if [[ "$clean_ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-        if [[ "$clean_ip" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.) ]]; then
-            return 0  # 是私有IP
+    if [[ "$clean_address" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        if [[ "$clean_address" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.) ]]; then
+            return 1  # 私有IP，不需要审核
         else
-            return 1  # 是公网IP
+            return 0  # 公网IP，需要审核
         fi
+    else
+        return 0  # 域名，需要审核
     fi
-    
-    return 1  # 不是IP地址（是域名）
 }
 
-# 统一验证服务器地址（格式验证 + 公网检查）
+# 统一验证服务器地址（格式验证 + 审核检查）
 _validate_server_with_review() {
     local server_address="$1"
     local server_name="$2"
@@ -73,7 +73,7 @@ _validate_server_with_review() {
         if ! _validate_server_address "$server_address" "$server_name" > /dev/null 2>&1; then
             issues+=("$server_name 地址格式错误: $server_address (请提供有效的IP地址或完整域名)")
         else
-            if ! _is_private_ip "$server_address"; then
+            if _needs_review "$server_address"; then
                 needs_review=true
             fi
         fi
@@ -272,7 +272,7 @@ _handle_review() {
     
     # 如果是Issue触发，添加到原始Issue
     if [ -n "$original_issue_number" ]; then
-        issue_manager "add-comment" "$original_issue_number" "" "$review_comment"
+        issue_manager "add-comment" "$original_issue_number" "$review_comment"
     fi
     
     # 循环检查审核回复
@@ -353,7 +353,7 @@ _handle_rejection() {
                 reject_comment+=$'\n'"- $validation_result"
             fi
             
-            issue_manager "add-comment" "$original_issue_number" "" "$reject_comment" || true
+            issue_manager "add-comment" "$original_issue_number" "$reject_comment" || true
         fi
     fi
 

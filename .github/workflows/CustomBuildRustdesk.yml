@@ -374,8 +374,8 @@ jobs:
           echo "📝 Modifying rendezvous server: $BUILD_RENDEZVOUS_SERVER"
           echo "📝 Modifying API server: $BUILD_API_SERVER"
           
-          # 模拟修改过程
-          sleep 5
+          # 快速模拟修改过程（实际构建在build.sh中）
+          sleep 2
           
           echo "✅ Source code modification completed"
           echo "modify_success=true" >> $GITHUB_OUTPUT
@@ -455,8 +455,8 @@ jobs:
           # TODO: 实现具体的等待逻辑
           echo "⏳ Waiting for remote build to complete..."
           
-          # 模拟等待过程
-          sleep 30
+          # 快速模拟等待过程（实际构建在build.sh中）
+          sleep 5
           
           echo "✅ Remote build completed"
           echo "wait_success=true" >> $GITHUB_OUTPUT

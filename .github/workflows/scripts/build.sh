@@ -94,21 +94,21 @@ _execute_build_process() {
     # 构建开始时间
     local build_start_time=$(date -Iseconds)
     
-    # 模拟构建过程（实际项目中这里应该是真正的构建逻辑）
+    # 模拟构建过程（300秒，用于测试并发抢锁）
     debug "log" "📦 步骤1: 准备构建环境..."
-    sleep 2
+    sleep 30
     
     debug "log" "📦 步骤2: 同步RustDesk代码..."
-    sleep 3
+    sleep 60
     
     debug "log" "📦 步骤3: 应用定制参数..."
-    sleep 2
+    sleep 30
     
     debug "log" "📦 步骤4: 编译RustDesk..."
-    sleep 5
+    sleep 120
     
     debug "log" "📦 步骤5: 生成安装包..."
-    sleep 3
+    sleep 60
     
     # 构建结束时间
     local build_end_time=$(date -Iseconds)
