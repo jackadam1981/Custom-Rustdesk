@@ -73,6 +73,8 @@ show_help() {
     echo "  queue-reset        Test queue reset functionality"
     echo "  queue-status       Test queue status query functionality"
     echo "  queue-sequence     Test all queue functions in sequence"
+    echo "  queue-build-lock   Test build lock acquisition/release functionality"
+    echo "  queue-concurrent   Test concurrent build lock polling functionality"
     echo ""
     echo "Examples:"
     echo "  $0 --all                           # Run all tests"
@@ -83,6 +85,8 @@ show_help() {
     echo "  $0 queue-reset                    # Test queue reset"
     echo "  $0 queue-status                   # Test status queries"
     echo "  $0 queue-sequence                 # Test all functions in sequence"
+    echo "  $0 queue-build-lock               # Test build lock functionality"
+    echo "  $0 queue-concurrent               # Test concurrent lock polling"
     echo "  $0 queue-join --help              # Show help for specific test"
 }
 
@@ -97,6 +101,7 @@ list_tests() {
     echo "  queue-status       - Queue status query functionality test"
     echo "  queue-sequence     - All queue functions in sequence test"
     echo "  queue-build-lock   - Build lock acquisition/release functionality test"
+    echo "  queue-concurrent   - Concurrent build lock polling functionality test"
     echo ""
     echo "Test Scripts:"
     echo "  test_scripts/env-test.sh"
@@ -107,6 +112,7 @@ list_tests() {
     echo "  test_scripts/test-queue-status.sh"
     echo "  test_scripts/test-queue-sequence.sh"
     echo "  test_scripts/test-queue-build-lock.sh"
+    echo "  test_scripts/test-queue-concurrent.sh"
     echo ""
 }
 
@@ -159,6 +165,8 @@ main() {
             run_single_test "Queue Cleanup" "test_scripts/test-queue-cleanup.sh"
             run_single_test "Queue Reset" "test_scripts/test-queue-reset.sh"
             run_single_test "Queue Status" "test_scripts/test-queue-status.sh"
+            run_single_test "Queue Build Lock" "test_scripts/test-queue-build-lock.sh"
+            run_single_test "Queue Concurrent" "test_scripts/test-queue-concurrent.sh"
             ;;
         env-test)
             run_single_test "Environment Test" "test_scripts/env-test.sh"
@@ -183,6 +191,9 @@ main() {
             ;;
         queue-build-lock)
             run_single_test "Queue Build Lock" "test_scripts/test-queue-build-lock.sh"
+            ;;
+        queue-concurrent)
+            run_single_test "Queue Concurrent" "test_scripts/test-queue-concurrent.sh"
             ;;
         *)
             log_error "Unknown test: $1"
