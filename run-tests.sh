@@ -96,6 +96,7 @@ list_tests() {
     echo "  queue-reset        - Queue reset functionality test"
     echo "  queue-status       - Queue status query functionality test"
     echo "  queue-sequence     - All queue functions in sequence test"
+    echo "  queue-build-lock   - Build lock acquisition/release functionality test"
     echo ""
     echo "Test Scripts:"
     echo "  test_scripts/env-test.sh"
@@ -105,6 +106,7 @@ list_tests() {
     echo "  test_scripts/test-queue-reset.sh"
     echo "  test_scripts/test-queue-status.sh"
     echo "  test_scripts/test-queue-sequence.sh"
+    echo "  test_scripts/test-queue-build-lock.sh"
     echo ""
 }
 
@@ -178,6 +180,9 @@ main() {
             ;;
         queue-sequence)
             run_single_test "Queue Sequence" "test_scripts/test-queue-sequence.sh"
+            ;;
+        queue-build-lock)
+            run_single_test "Queue Build Lock" "test_scripts/test-queue-build-lock.sh"
             ;;
         *)
             log_error "Unknown test: $1"

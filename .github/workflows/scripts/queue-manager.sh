@@ -470,6 +470,20 @@ _release_build_lock() {
   # 释放构建锁
   if _release_lock "build" "$build_id"; then
     debug "success" "Successfully released build lock"
+    
+    # 从队列中移除当前任务（构建完成后自动离开队列）
+    _load_queue_data
+    local updated_data=$(echo "$QUEUE_DATA" | jq --arg run_id "$build_id" '
+      .queue = (.queue | map(select(.run_id != $run_id))) |
+      .version = (.version // 0) + 1
+    ')
+
+    if _update_queue_data "$updated_data"; then
+      debug "success" "Successfully removed task from queue after build completion"
+    else
+      debug "error" "Failed to remove task from queue after build completion"
+    fi
+    
     _release_lock "issue" "$build_id"
     return 0
   else
