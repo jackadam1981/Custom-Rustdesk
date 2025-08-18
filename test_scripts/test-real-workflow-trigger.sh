@@ -6,6 +6,67 @@
 # 导入测试框架
 source test_scripts/test-framework.sh
 
+# 清理测试环境
+cleanup_test_environment() {
+    log_info "=== 清理测试环境 ==="
+    
+    # 清理旧的Issues（保留#1）
+    log_info "🧹 清理旧的测试Issues..."
+    local open_issues=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --json number | jq -r '.[] | select(.number != 1) | .number' | grep -v '^$' || true)
+    local closed_issues=$(gh issue list --repo "$GITHUB_REPOSITORY" --state closed --limit 100 --json number | jq -r '.[] | select(.number != 1) | .number' | grep -v '^$' || true)
+    
+    local all_issues=$(echo -e "$open_issues\n$closed_issues" | sort -n | uniq | grep -v '^$' || true)
+    
+    if [ -n "$all_issues" ]; then
+        log_info "发现 $(echo "$all_issues" | wc -l) 个旧Issues需要清理"
+        local deleted_count=0
+        for issue in $all_issues; do
+            if gh issue delete "$issue" --repo "$GITHUB_REPOSITORY" --yes >/dev/null 2>&1; then
+                log_success "✅ 删除 Issue #$issue"
+                deleted_count=$((deleted_count + 1))
+            else
+                log_warning "⚠️ 删除 Issue #$issue 失败"
+            fi
+            sleep 1
+        done
+        log_info "清理完成：删除了 $deleted_count 个Issues"
+    else
+        log_info "✅ 没有需要清理的旧Issues"
+    fi
+    
+    # 清理旧的Workflow Runs
+    log_info "🧹 清理旧的Workflow Runs..."
+    local completed_runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs" --jq '.workflow_runs[] | select(.status == "completed") | .id' | head -50 || true)
+    
+    if [ -n "$completed_runs" ]; then
+        log_info "发现 $(echo "$completed_runs" | wc -l) 个已完成的Workflow Runs需要清理"
+        local deleted_count=0
+        for issue in $completed_runs; do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$issue" -X DELETE >/dev/null 2>&1; then
+                log_success "✅ 删除 Workflow Run #$issue"
+                deleted_count=$((deleted_count + 1))
+            else
+                log_warning "⚠️ 删除 Workflow Run #$issue 失败"
+            fi
+            sleep 1
+        done
+        log_info "清理完成：删除了 $deleted_count 个Workflow Runs"
+    else
+        log_info "✅ 没有需要清理的旧Workflow Runs"
+    fi
+    
+    # 重置队列状态
+    log_info "🔄 重置队列状态..."
+    if source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 'reset' >/dev/null 2>&1; then
+        log_success "✅ 队列状态重置成功"
+    else
+        log_warning "⚠️ 队列状态重置失败"
+    fi
+    
+    log_success "✅ 测试环境清理完成"
+    return 0
+}
+
 # 测试配置
 TOTAL_TESTS=6
 PASSED_TESTS=0
@@ -383,6 +444,16 @@ main_test() {
     
     # 测试1: 环境准备和队列重置
     log_info "=== 测试1: 环境准备和队列重置 ==="
+    
+    # 清理测试环境
+    log_info "🧹 清理测试环境..."
+    if cleanup_test_environment; then
+        log_success "✅ 测试环境清理成功"
+    else
+        log_warning "⚠️ 测试环境清理失败，继续测试"
+    fi
+    
+    # 重置队列状态
     if source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 'reset'; then
         log_success "✅ 测试1通过: 队列重置成功"
         PASSED_TESTS=$((PASSED_TESTS + 1))
