@@ -47,30 +47,17 @@ _extract_issue_params() {
         return 1
     fi
     
-    # 尝试从JSON格式提取参数
-    local tag=$(echo "$issue_body" | jq -r '.tag // empty' 2>/dev/null)
-    local email=$(echo "$issue_body" | jq -r '.email // empty' 2>/dev/null)
-    local customer=$(echo "$issue_body" | jq -r '.customer // empty' 2>/dev/null)
-    local customer_link=$(echo "$issue_body" | jq -r '.customer_link // empty' 2>/dev/null)
-    local super_password=$(echo "$issue_body" | jq -r '.super_password // empty' 2>/dev/null)
-    local slogan=$(echo "$issue_body" | jq -r '.slogan // empty' 2>/dev/null)
-    local rendezvous_server=$(echo "$issue_body" | jq -r '.rendezvous_server // empty' 2>/dev/null)
-    local rs_pub_key=$(echo "$issue_body" | jq -r '.rs_pub_key // empty' 2>/dev/null)
-    local api_server=$(echo "$issue_body" | jq -r '.api_server // empty' 2>/dev/null)
-    
-    # 如果JSON提取失败，尝试旧格式
-    if [ -z "$tag" ]; then
-        debug "log" "JSON extraction failed, trying legacy format"
-        tag=$(echo "$issue_body" | sed -n 's/.*tag:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
-        email=$(echo "$issue_body" | sed -n 's/.*email:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
-        customer=$(echo "$issue_body" | sed -n 's/.*customer:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
-        customer_link=$(echo "$issue_body" | sed -n 's/.*customer_link:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
-        super_password=$(echo "$issue_body" | sed -n 's/.*super_password:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
-        slogan=$(echo "$issue_body" | sed -n 's/.*slogan:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
-        rendezvous_server=$(echo "$issue_body" | sed -n 's/.*rendezvous_server:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
-        rs_pub_key=$(echo "$issue_body" | sed -n 's/.*rs_pub_key:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
-        api_server=$(echo "$issue_body" | sed -n 's/.*api_server:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
-    fi
+    # 从Issue内容中提取参数（key: value格式）
+    debug "log" "Extracting parameters from issue body using key:value format"
+    local tag=$(echo "$issue_body" | sed -n 's/.*tag:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local email=$(echo "$issue_body" | sed -n 's/.*email:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local customer=$(echo "$issue_body" | sed -n 's/.*customer:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local customer_link=$(echo "$issue_body" | sed -n 's/.*customer_link:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local super_password=$(echo "$issue_body" | sed -n 's/.*super_password:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local slogan=$(echo "$issue_body" | sed -n 's/.*slogan:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local rendezvous_server=$(echo "$issue_body" | sed -n 's/.*rendezvous_server:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local rs_pub_key=$(echo "$issue_body" | sed -n 's/.*rs_pub_key:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local api_server=$(echo "$issue_body" | sed -n 's/.*api_server:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
     
     echo "BUILD_ID=\"$build_id\""
     echo "TAG=\"$tag\""
