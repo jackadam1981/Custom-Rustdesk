@@ -230,11 +230,15 @@ jobs:
         id: join-queue
         env:
           TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
+          DEBUG_ENABLED: true
         run: |
           source .github/workflows/scripts/queue-manager.sh
 
           # 加入队列
           echo "Joining build queue..."
+          echo "DEBUG: TRIGGER_DATA = $TRIGGER_DATA"
+          echo "DEBUG: GITHUB_RUN_ID = $GITHUB_RUN_ID"
+          
           join_result=$(queue_manager 'queue_lock' 'join' "$TRIGGER_DATA")
           join_exit_code=$?
           
@@ -265,11 +269,15 @@ jobs:
         
       - name: Wait for build lock
         id: wait-build-lock
+        env:
+          DEBUG_ENABLED: true
         run: |
           source .github/workflows/scripts/queue-manager.sh
 
           # 获取构建锁
           echo "Acquiring build lock..."
+          echo "DEBUG: GITHUB_RUN_ID = $GITHUB_RUN_ID"
+          
           if queue_manager 'build_lock' 'acquire'; then
             echo "✅ Successfully acquired build lock"
             echo "build_lock_acquired=true" >> $GITHUB_OUTPUT
