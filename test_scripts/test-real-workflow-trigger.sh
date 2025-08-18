@@ -83,7 +83,18 @@ run_high_concurrency_test() {
 - 特性: default
 
 ## 测试目的
-验证高并发Issue触发下的队列行为。"
+验证高并发Issue触发下的队列行为。
+
+## 构建参数
+- tag: concurrency-test-$i
+- email: test$i@example.com
+- customer: test-customer-$i
+- customer_link: https://example.com/customer$i
+- super_password: password123
+- slogan: Custom Rustdesk Test $i
+- rendezvous_server: 192.168.1.100
+- rs_pub_key: 
+- api_server: http://192.168.1.100:21114"
         
         if gh issue create --title "$issue_title" --body "$issue_body" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             log_success "✅ Issue $i 创建成功"
@@ -107,7 +118,10 @@ run_high_concurrency_test() {
     local workflow_success_count=0
     
     for i in {1..3}; do
-        if gh workflow run "build.yml" --ref "main" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+        # 手动触发工作流需要提供必要的参数
+        local workflow_params="tag=manual-test-$i&customer=manual-customer-$i&email=manual$i@example.com&super_password=password123&rendezvous_server=192.168.1.100&api_server=http://192.168.1.100:21114&slogan=Manual Test $i&customer_link=https://example.com/manual$i&enable_debug=true"
+        
+        if gh workflow run "CustomBuildRustdesk.yml" --ref "main" --repo "$GITHUB_REPOSITORY" -f "$workflow_params" >/dev/null 2>&1; then
             log_success "✅ 手动工作流 $i 触发成功"
             workflow_success_count=$((workflow_success_count + 1))
         else
