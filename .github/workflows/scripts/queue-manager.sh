@@ -8,9 +8,38 @@ source .github/workflows/scripts/issue-manager.sh
 
 # 配置
 QUEUE_ISSUE_NUMBER="1"
-QUEUE_LIMIT=5
+QUEUE_LIMIT=5                # 总队列限制：5个
+ISSUE_TRIGGER_LIMIT=3        # Issue触发限制：3个
+MANUAL_TRIGGER_LIMIT=2       # 手动触发限制：2个
 ISSUE_LOCK_TIMEOUT=300       # 5分钟issue锁超时
 BUILD_LOCK_HOLD_TIMEOUT=5400 # 90分钟构建锁持有超时
+
+# 环境检测和配置
+if [ "${TEST_MODE:-}" = "true" ] || [ "${ENVIRONMENT:-}" = "test" ] || [ "${CI:-}" = "true" ]; then
+    # 测试环境：极速模式，最小等待时间
+    LOCK_RETRY_INTERVAL=0.05     # 0.05秒重试间隔（进一步减少）
+    LOCK_MAX_ATTEMPTS=1          # 测试环境：最多1次尝试（立即失败）
+    LOCK_BUSY_WAIT=0             # 测试环境：锁被占用时立即失败
+    ISSUE_LOCK_TIMEOUT=5         # 测试环境：5秒超时（进一步减少）
+    BUILD_LOCK_HOLD_TIMEOUT=60   # 测试环境：60秒超时（模拟60秒编译过程）
+    API_CACHE_DURATION=1         # 测试环境：API缓存1秒
+    # issue锁专用配置
+    ISSUE_LOCK_RETRY_INTERVAL=0.05  # issue锁重试间隔
+    ISSUE_LOCK_MAX_ATTEMPTS=1       # issue锁最大尝试次数
+    ISSUE_LOCK_BUSY_WAIT=0          # issue锁被占用时立即失败
+    debug "log" "Running in TEST mode: ultra-fast configuration for all locks (60s build timeout)"
+else
+    # 生产环境：正常重试，标准等待时间
+    LOCK_RETRY_INTERVAL=2        # 2秒重试间隔
+    LOCK_MAX_ATTEMPTS=10         # 最多10次尝试
+    LOCK_BUSY_WAIT=5             # 锁被占用时等待5秒
+    API_CACHE_DURATION=0         # 生产环境：无API缓存
+    # issue锁专用配置
+    ISSUE_LOCK_RETRY_INTERVAL=2     # issue锁重试间隔
+    ISSUE_LOCK_MAX_ATTEMPTS=10      # issue锁最大尝试次数
+    ISSUE_LOCK_BUSY_WAIT=5          # issue锁被占用时等待5秒
+    debug "log" "Running in PRODUCTION mode: standard retry configuration"
+fi
 
 # 默认队列数据（双锁架构）
 DEFAULT_QUEUE_DATA='{"issue_locked_by":null,"build_locked_by":null,"issue_lock_version":1,"build_lock_version":1,"version":1,"queue":[]}'
@@ -18,9 +47,20 @@ DEFAULT_QUEUE_DATA='{"issue_locked_by":null,"build_locked_by":null,"issue_lock_v
 # 全局状态
 QUEUE_DATA=""
 TRIGGER_DATA=""
+API_CACHE_TIMESTAMP=0
+API_CACHE_DATA=""
 
-# 加载队列数据
+# 加载队列数据（带缓存）
 _load_queue_data() {
+  local current_time=$(date +%s)
+  
+  # 检查缓存是否有效
+  if [ $API_CACHE_DURATION -gt 0 ] && [ $((current_time - API_CACHE_TIMESTAMP)) -lt $API_CACHE_DURATION ] && [ -n "$API_CACHE_DATA" ]; then
+    debug "log" "Using cached queue data (age: $((current_time - API_CACHE_TIMESTAMP))s)"
+    QUEUE_DATA="$API_CACHE_DATA"
+    return 0
+  fi
+  
   debug "log" "Loading queue data from issue #$QUEUE_ISSUE_NUMBER"
 
   local response=$(curl -s \
@@ -37,6 +77,8 @@ _load_queue_data() {
   if [ -z "$body_content" ]; then
     debug "log" "No body content, using default data"
     QUEUE_DATA="$DEFAULT_QUEUE_DATA"
+    API_CACHE_DATA="$DEFAULT_QUEUE_DATA"
+    API_CACHE_TIMESTAMP=$current_time
     return 0
   fi
 
@@ -45,11 +87,15 @@ _load_queue_data() {
 
   if [ -n "$json_data" ] && echo "$json_data" | jq . >/dev/null 2>&1; then
     QUEUE_DATA=$(echo "$json_data" | jq -c .)
-    debug "log" "Queue data loaded successfully"
+    API_CACHE_DATA="$QUEUE_DATA"
+    API_CACHE_TIMESTAMP=$current_time
+    debug "log" "Queue data loaded successfully and cached"
     return 0
   else
     debug "log" "Invalid JSON, using default data"
     QUEUE_DATA="$DEFAULT_QUEUE_DATA"
+    API_CACHE_DATA="$DEFAULT_QUEUE_DATA"
+    API_CACHE_TIMESTAMP=$current_time
     return 0
   fi
 }
@@ -83,10 +129,25 @@ _acquire_lock() {
 
   debug "log" "Acquiring $lock_type lock for $build_id"
 
+  # 根据锁类型选择配置参数
+  local retry_interval
+  local max_attempts
+  local busy_wait
+  
+  if [ "$lock_type" = "issue" ]; then
+    retry_interval=$ISSUE_LOCK_RETRY_INTERVAL
+    max_attempts=$ISSUE_LOCK_MAX_ATTEMPTS
+    busy_wait=$ISSUE_LOCK_BUSY_WAIT
+  else
+    retry_interval=$LOCK_RETRY_INTERVAL
+    max_attempts=$LOCK_MAX_ATTEMPTS
+    busy_wait=$LOCK_BUSY_WAIT
+  fi
+
   local start_time=$(date +%s)
   local attempt=0
 
-  while [ $(($(date +%s) - start_time)) -lt "$timeout" ]; do
+  while [ $(($(date +%s) - start_time)) -lt "$timeout" ] && [ $attempt -lt $max_attempts ]; do
     attempt=$((attempt + 1))
     debug "log" "Attempt $attempt: Loading queue data..."
     _load_queue_data
@@ -115,6 +176,8 @@ _acquire_lock() {
       if [ "$new_version" -gt "$lock_version" ] 2>/dev/null && [ "$new_locked_by" = "$build_id" ]; then
         if _update_queue_data "$updated_data"; then
           debug "success" "Successfully acquired $lock_type lock (attempt: $attempt)"
+          # 清除缓存，确保下次读取最新数据
+          API_CACHE_DATA=""
           return 0
         else
           debug "log" "Failed to update queue data, retrying... (attempt: $attempt)"
@@ -124,12 +187,24 @@ _acquire_lock() {
       fi
     else
       debug "log" "$lock_type lock held by $locked_by, waiting... (attempt: $attempt)"
+      
+      # 测试模式下，如果锁被占用，使用较短的重试间隔
+      if [ $busy_wait -eq 0 ]; then
+        debug "log" "TEST MODE: $lock_type lock busy, using short retry interval"
+        sleep $retry_interval
+        continue
+      fi
     fi
 
-    sleep 5
+    # 动态等待时间：如果锁被占用，等待更长时间
+    if [ "$locked_by" != "null" ] && [ "$locked_by" != "$build_id" ]; then
+      sleep $busy_wait  # 使用环境感知的等待时间
+    else
+      sleep $retry_interval   # 使用环境感知的重试间隔
+    fi
   done
 
-  debug "error" "Failed to acquire $lock_type lock after $timeout seconds"
+  debug "error" "Failed to acquire $lock_type lock after $timeout seconds and $attempt attempts"
   return 1
 }
 
@@ -204,20 +279,68 @@ _join_queue() {
     return 1
   fi
   
-  # 自动获取issue锁
-  if ! _acquire_lock "issue" "$build_id"; then
-    debug "error" "Failed to acquire issue lock for join queue"
-    return 1
-  fi
+  # 高并发重试机制：尝试获取issue锁
+  local max_attempts=5
+  local attempt=0
+  local retry_interval=0.1
+  
+  while [ $attempt -lt $max_attempts ]; do
+    attempt=$((attempt + 1))
+    debug "log" "Join queue attempt $attempt/$max_attempts for $build_id"
+    
+    # 尝试获取issue锁
+    if _acquire_lock "issue" "$build_id"; then
+      debug "log" "Successfully acquired issue lock for join queue (attempt: $attempt)"
+      break
+    else
+      if [ $attempt -lt $max_attempts ]; then
+        debug "log" "Failed to acquire issue lock, retrying in ${retry_interval}s... (attempt: $attempt)"
+        sleep $retry_interval
+        # 递增重试间隔，避免过度竞争
+        retry_interval=$(echo "$retry_interval * 1.5" | bc -l 2>/dev/null || echo "0.2")
+      else
+        debug "error" "Failed to acquire issue lock after $max_attempts attempts"
+        return 1
+      fi
+    fi
+  done
   
   # 执行队列操作
   _load_queue_data
   local queue_length=$(echo "$QUEUE_DATA" | jq '.queue | length // 0')
 
+  # 检查总队列限制
   if [ "$queue_length" -ge "$QUEUE_LIMIT" ]; then
     debug "error" "Queue is full ($queue_length/$QUEUE_LIMIT)"
     _release_lock "issue" "$build_id"
     return 1
+  fi
+
+  # 解析触发类型
+  local parsed_data=$(echo "$trigger_data" | jq -c . 2>/dev/null || echo "{}")
+  local trigger_type=$(echo "$parsed_data" | jq -r '.trigger_type // "workflow_dispatch"')
+  debug "log" "Parsed trigger data: $parsed_data, trigger_type: $trigger_type"
+  
+  # 检查issue触发限制（改进的高并发版本）
+  if [ "$trigger_type" = "issues" ]; then
+    local issue_trigger_count=$(echo "$QUEUE_DATA" | jq '.queue | map(select(.trigger_type == "issues")) | length // 0')
+    debug "log" "Current issue trigger count: $issue_trigger_count, limit: $ISSUE_TRIGGER_LIMIT"
+    if [ "$issue_trigger_count" -ge "$ISSUE_TRIGGER_LIMIT" ]; then
+      debug "error" "Issue trigger limit reached ($issue_trigger_count/$ISSUE_TRIGGER_LIMIT)"
+      _release_lock "issue" "$build_id"
+      return 1
+    fi
+  fi
+  
+  # 检查手动触发限制（改进的高并发版本）
+  if [ "$trigger_type" = "workflow_dispatch" ]; then
+    local manual_trigger_count=$(echo "$QUEUE_DATA" | jq '.queue | map(select(.trigger_type == "workflow_dispatch")) | length // 0')
+    debug "log" "Current manual trigger count: $manual_trigger_count, limit: $MANUAL_TRIGGER_LIMIT"
+    if [ "$manual_trigger_count" -ge "$MANUAL_TRIGGER_LIMIT" ]; then
+      debug "error" "Manual trigger limit reached ($manual_trigger_count/$MANUAL_TRIGGER_LIMIT)"
+      _release_lock "issue" "$build_id"
+      return 1
+    fi
   fi
 
   local already_in_queue=$(echo "$QUEUE_DATA" | jq --arg run_id "$build_id" '.queue | map(select(.run_id == $run_id)) | length')
@@ -227,11 +350,9 @@ _join_queue() {
     return 0
   fi
 
-  local parsed_data=$(echo "$trigger_data" | jq -c . 2>/dev/null || echo "{}")
   local tag=$(echo "$parsed_data" | jq -r '.tag // "latest"')
   local email=$(echo "$parsed_data" | jq -r '.email // "unknown"')
   local customer=$(echo "$parsed_data" | jq -r '.customer // "unknown"')
-  local trigger_type=$(echo "$parsed_data" | jq -r '.trigger_type // "workflow_dispatch"')
 
   local new_item=$(jq -n \
     --arg run_id "$build_id" \
@@ -302,6 +423,25 @@ _get_queue_status() {
   _load_queue_data
   local queue_length=$(echo "$QUEUE_DATA" | jq '.queue | length // 0')
   echo "Queue length: $queue_length"
+  
+  _release_lock "issue" "$build_id"
+  return 0
+}
+
+# 获取队列数据（JSON格式）
+_get_queue_data() {
+  local build_id="${GITHUB_RUN_ID:-}"
+  
+  debug "log" "Getting queue data for $build_id"
+  
+  # 自动获取issue锁
+  if ! _acquire_lock "issue" "$build_id"; then
+    debug "error" "Failed to acquire issue lock for get queue data"
+    return 1
+  fi
+  
+  _load_queue_data
+  echo "$QUEUE_DATA"
   
   _release_lock "issue" "$build_id"
   return 0
@@ -400,23 +540,22 @@ _cleanup_queue() {
 _reset_queue() {
   local build_id="${GITHUB_RUN_ID:-}"
   
+  echo "🔄 正在重置队列状态..."
   debug "log" "Resetting queue for $build_id"
   
-  # 自动获取issue锁
-  if ! _acquire_lock "issue" "$build_id"; then
-    debug "error" "Failed to acquire issue lock for reset queue"
-    return 1
-  fi
+  # reset命令：完全忽略锁检查，直接强制重置
+  echo "🚀 管理命令：忽略锁检查，直接重置队列"
   
+  # 强制重置为默认状态，确保完全清理
   local default_data='{"version":1,"issue_locked_by":null,"build_locked_by":null,"issue_lock_version":1,"build_lock_version":1,"queue":[]}'
   
   if _update_queue_data "$default_data"; then
-    debug "success" "Successfully reset queue"
-    _release_lock "issue" "$build_id"
+    echo "✅ 队列重置成功"
+    debug "success" "Successfully force reset queue (ignoring all locks)"
     return 0
   else
-    debug "error" "Failed to reset queue"
-    _release_lock "issue" "$build_id"
+    echo "❌ 队列重置失败"
+    debug "error" "Failed to force reset queue"
     return 1
   fi
 }
@@ -433,27 +572,87 @@ _acquire_build_lock() {
     return 1
   fi
   
-  # 检查队列位置
-  _load_queue_data
-  local current_build=$(echo "$QUEUE_DATA" | jq -r '.build_locked_by // null')
-  local queue_position=$(echo "$QUEUE_DATA" | jq --arg run_id "$build_id" '.queue | map(.run_id) | index($run_id) // -1')
+  # 在持有issue锁的情况下，原子性地检查和获取构建锁
+  local start_time=$(date +%s)
+  local attempt=0
+  local max_attempts=$LOCK_MAX_ATTEMPTS
   
-  if [ "$current_build" = "null" ] && [ "$queue_position" -eq 0 ]; then
-    # 获取构建锁
-    if _acquire_lock "build" "$build_id"; then
-      debug "success" "Successfully acquired build lock"
+  while [ $attempt -lt $max_attempts ]; do
+    attempt=$((attempt + 1))
+    debug "log" "Build lock acquisition attempt $attempt"
+    
+    # 重新加载队列数据（确保最新状态）
+    _load_queue_data
+    
+    local current_build=$(echo "$QUEUE_DATA" | jq -r '.build_locked_by // null')
+    local queue_position=$(echo "$QUEUE_DATA" | jq --arg run_id "$build_id" '.queue | map(.run_id) | index($run_id) // -1')
+    local queue_length=$(echo "$QUEUE_DATA" | jq '.queue | length')
+    local build_lock_version=$(echo "$QUEUE_DATA" | jq -r '.build_lock_version // 1')
+    
+    debug "log" "Build lock status: current_holder=$current_build, our_position=$queue_position, queue_length=$queue_length, version=$build_lock_version"
+    
+    # 检查是否在队列中
+    if [ "$queue_position" -eq -1 ]; then
+      debug "error" "Cannot acquire build lock: not in queue"
       _release_lock "issue" "$build_id"
-      return 0
-    else
-      debug "error" "Failed to acquire build lock"
-      _release_lock "issue" "$build_id"
-      return 1
+      return 2  # 特殊错误码：不在队列中
     fi
-  else
-    debug "log" "Not our turn: current=$current_build, position=$queue_position"
-    _release_lock "issue" "$build_id"
-    return 1
-  fi
+    
+    # 检查是否轮到我们（必须是队列第一位）
+    if [ "$queue_position" -ne 0 ]; then
+      debug "log" "Cannot acquire build lock: not at front of queue (position=$queue_position)"
+      _release_lock "issue" "$build_id"
+      return 3  # 特殊错误码：不在队列首位
+    fi
+    
+    # 检查构建锁是否已被占用
+    if [ "$current_build" != "null" ] && [ "$current_build" != "$build_id" ]; then
+      debug "log" "Cannot acquire build lock: already held by $current_build"
+      _release_lock "issue" "$build_id"
+      return 4  # 特殊错误码：锁已被其他进程占用
+    fi
+    
+    # 尝试原子性地获取构建锁（使用改进的乐观锁）
+    local updated_data=$(echo "$QUEUE_DATA" | jq --arg build_id "$build_id" --arg version "$build_lock_version" '
+      if (.build_lock_version | tonumber) == ($version | tonumber) then
+        .build_locked_by = $build_id |
+        .build_lock_version = (.build_lock_version | tonumber) + 1
+      else
+        .
+      end
+    ')
+    
+    local new_version=$(echo "$updated_data" | jq -r '.build_lock_version // 1')
+    local new_locked_by=$(echo "$updated_data" | jq -r '.build_locked_by // null')
+    
+    # 检查乐观锁是否成功
+    if [ "$new_version" -gt "$build_lock_version" ] 2>/dev/null && [ "$new_locked_by" = "$build_id" ]; then
+      # 原子性更新队列数据
+      if _update_queue_data "$updated_data"; then
+        debug "success" "Successfully acquired build lock (attempt: $attempt)"
+        _release_lock "issue" "$build_id"
+        return 0
+      else
+        debug "log" "Failed to update queue data, retrying... (attempt: $attempt)"
+      fi
+    else
+      debug "log" "Optimistic lock failed, version mismatch, retrying... (attempt: $attempt)"
+    fi
+    
+    # 改进的重试等待策略
+    if [ "$attempt" -lt 3 ]; then
+      # 前几次重试使用较短间隔
+      sleep $LOCK_RETRY_INTERVAL
+    else
+      # 后续重试使用递增间隔
+      local wait_time=$(echo "$LOCK_RETRY_INTERVAL * $attempt" | bc -l 2>/dev/null || echo "$LOCK_RETRY_INTERVAL")
+      sleep "$wait_time"
+    fi
+  done
+  
+  debug "error" "Failed to acquire build lock after $max_attempts attempts"
+  _release_lock "issue" "$build_id"
+  return 1
 }
 
 _release_build_lock() {
@@ -467,30 +666,81 @@ _release_build_lock() {
     return 1
   fi
   
-  # 释放构建锁
-  if _release_lock "build" "$build_id"; then
-    debug "success" "Successfully released build lock"
+  # 在持有issue锁的情况下，原子性地检查和释放构建锁
+  local start_time=$(date +%s)
+  local attempt=0
+  local max_attempts=$LOCK_MAX_ATTEMPTS
+  
+  while [ $attempt -lt $max_attempts ]; do
+    attempt=$((attempt + 1))
+    debug "log" "Build lock release attempt $attempt"
     
-    # 从队列中移除当前任务（构建完成后自动离开队列）
+    # 重新加载队列数据（确保最新状态）
     _load_queue_data
-    local updated_data=$(echo "$QUEUE_DATA" | jq --arg run_id "$build_id" '
-      .queue = (.queue | map(select(.run_id != $run_id))) |
-      .version = (.version // 0) + 1
-    ')
-
-    if _update_queue_data "$updated_data"; then
-      debug "success" "Successfully removed task from queue after build completion"
-    else
-      debug "error" "Failed to remove task from queue after build completion"
+    
+    local current_build=$(echo "$QUEUE_DATA" | jq -r '.build_locked_by // null')
+    local build_lock_version=$(echo "$QUEUE_DATA" | jq -r '.build_lock_version // 1')
+    
+    debug "log" "Current build lock holder: $current_build, version: $build_lock_version"
+    
+    # 检查是否有权限释放锁
+    if [ "$current_build" = "null" ]; then
+      debug "warning" "Build lock is not currently held by anyone"
+      _release_lock "issue" "$build_id"
+      return 2  # 特殊错误码：锁未被持有
     fi
     
-    _release_lock "issue" "$build_id"
-    return 0
-  else
-    debug "error" "Failed to release build lock"
-    _release_lock "issue" "$build_id"
-    return 1
-  fi
+    if [ "$current_build" != "$build_id" ]; then
+      debug "error" "Cannot release build lock: held by $current_build, not $build_id"
+      _release_lock "issue" "$build_id"
+      return 3  # 特殊错误码：锁被其他进程持有
+    fi
+    
+    # 尝试原子性地释放构建锁（使用乐观锁）
+    local updated_data=$(echo "$QUEUE_DATA" | jq --arg version "$build_lock_version" '
+      if (.build_lock_version | tonumber) == ($version | tonumber) then
+        .build_locked_by = null |
+        .build_lock_version = (.build_lock_version | tonumber) + 1
+      else
+        .
+      end
+    ')
+    
+    local new_version=$(echo "$updated_data" | jq -r '.build_lock_version // 1')
+    local new_locked_by=$(echo "$updated_data" | jq -r '.build_locked_by // null')
+    
+    # 检查乐观锁是否成功
+    if [ "$new_version" -gt "$build_lock_version" ] 2>/dev/null && [ "$new_locked_by" = "null" ]; then
+      # 原子性更新队列数据
+      if _update_queue_data "$updated_data"; then
+        debug "success" "Successfully released build lock (attempt: $attempt)"
+        
+        # 注意：任务需要主动调用leave_queue来离开队列
+        debug "log" "Build lock released, task should call leave_queue to exit queue"
+        
+        _release_lock "issue" "$build_id"
+        return 0
+      else
+        debug "log" "Failed to update queue data, retrying... (attempt: $attempt)"
+      fi
+    else
+      debug "log" "Optimistic lock failed, version mismatch, retrying... (attempt: $attempt)"
+    fi
+    
+    # 改进的重试等待策略
+    if [ "$attempt" -lt 3 ]; then
+      # 前几次重试使用较短间隔
+      sleep $LOCK_RETRY_INTERVAL
+    else
+      # 后续重试使用递增间隔
+      local wait_time=$(echo "$LOCK_RETRY_INTERVAL * $attempt" | bc -l 2>/dev/null || echo "$LOCK_RETRY_INTERVAL")
+      sleep "$wait_time"
+    fi
+  done
+  
+  debug "error" "Failed to release build lock after $max_attempts attempts"
+  _release_lock "issue" "$build_id"
+  return 1
 }
 
 _get_build_lock_status() {
@@ -535,16 +785,34 @@ _acquire_build_lock_with_retry() {
     attempt=$((attempt + 1))
 
     # 尝试获取构建锁
-    if _acquire_build_lock; then
-      debug "success" "Successfully acquired build lock after $attempt attempts"
-      return 0
-    fi
+    _acquire_build_lock
+    local exit_code=$?
+    
+    case $exit_code in
+      0)
+        debug "success" "Successfully acquired build lock after $attempt attempts"
+        return 0
+        ;;
+      2)
+        debug "error" "Cannot acquire build lock: not in queue (permanent failure)"
+        return 2
+        ;;
+      3)
+        debug "log" "Cannot acquire build lock: not at front of queue (attempt $attempt), waiting..."
+        ;;
+      4)
+        debug "log" "Cannot acquire build lock: held by another process (attempt $attempt), waiting..."
+        ;;
+      *)
+        debug "error" "Build lock acquisition failed with error $exit_code (attempt $attempt), retrying..."
+        ;;
+    esac
 
     debug "log" "Build lock acquisition failed, retrying in 30 seconds... (attempt: $attempt)"
     sleep 30
   done
 
-  debug "error" "Failed to acquire build lock after $BUILD_LOCK_HOLD_TIMEOUT seconds"
+  debug "error" "Failed to acquire build lock after $BUILD_LOCK_HOLD_TIMEOUT seconds and $attempt attempts"
   return 1
 }
 
@@ -566,6 +834,9 @@ queue_manager() {
       ;;
     "status")
       _get_queue_status
+      ;;
+    "get_data")
+      _get_queue_data
       ;;
     "cleanup")
       _cleanup_queue

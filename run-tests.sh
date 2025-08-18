@@ -40,7 +40,7 @@ run_single_test() {
     echo "----------------------------------------"
     
     if [ -f "$test_script" ]; then
-        if bash "$test_script"; then
+        if TEST_RUNNER_CALLED=1 TEST_MODE=true TEST_BUILD_PAUSE=10 bash "$test_script"; then
             log_success "Test PASSED: $test_name"
             PASSED_TESTS=$((PASSED_TESTS + 1))
         else
@@ -65,16 +65,20 @@ show_help() {
     echo "  -a, --all      Run all tests"
     echo "  -l, --list     List available tests"
     echo ""
-    echo "Available Tests:"
-    echo "  env-test           Test GitHub API environment and basic functionality"
-    echo "  queue-join         Test queue join functionality"
-    echo "  queue-leave        Test queue leave functionality"
-    echo "  queue-cleanup      Test queue cleanup functionality"
-    echo "  queue-reset        Test queue reset functionality"
-    echo "  queue-status       Test queue status query functionality"
-    echo "  queue-sequence     Test all queue functions in sequence"
-    echo "  queue-build-lock   Test build lock acquisition/release functionality"
-    echo "  queue-concurrent   Test concurrent build lock polling functionality"
+    echo "Available Tests (recommended order):"
+    echo "  env-test           0. Test GitHub API environment and basic functionality"
+    echo "  queue-status       1. Test queue status query functionality"
+    echo "  queue-cleanup      2. Test queue cleanup functionality"
+    echo "  queue-reset        3. Test queue reset functionality"
+    echo "  queue-join         4. Test queue join functionality"
+    echo "  queue-leave        5. Test queue leave functionality"
+    echo "  queue-join-leave   5.5. Test paired queue join and leave functionality"
+    echo "  queue-build-lock   6. Test build lock acquisition/release functionality"
+    echo "  queue-concurrent   7.5. Test concurrent build lock polling functionality"
+    echo "  queue-5-tasks     8. Test 5 tasks concurrent with queue lock mechanism"
+    echo "  queue-concurrent-simple 8.5. Test simplified high-concurrency queue functionality"
+    echo "  queue-sequence     9. Test all queue functions in sequence"
+    echo "  complete           10. Test complete end-to-end functionality"
     echo ""
     echo "Examples:"
     echo "  $0 --all                           # Run all tests"
@@ -87,32 +91,42 @@ show_help() {
     echo "  $0 queue-sequence                 # Test all functions in sequence"
     echo "  $0 queue-build-lock               # Test build lock functionality"
     echo "  $0 queue-concurrent               # Test concurrent lock polling"
+    echo "  $0 queue-5-tasks                  # Test 5 tasks concurrent with queue lock"
+    echo "  $0 queue-concurrent-simple        # Test simplified high-concurrency queue"
+    echo "  $0 complete                       # Test complete end-to-end functionality"
     echo "  $0 queue-join --help              # Show help for specific test"
 }
 
 # 列出可用测试
 list_tests() {
-    echo "Available Tests:"
-    echo "  env-test           - GitHub API environment and basic functionality test"
-    echo "  queue-join         - Queue join functionality test"
-    echo "  queue-leave        - Queue leave functionality test"
-    echo "  queue-cleanup      - Queue cleanup functionality test"
-    echo "  queue-reset        - Queue reset functionality test"
-    echo "  queue-status       - Queue status query functionality test"
-    echo "  queue-sequence     - All queue functions in sequence test"
-    echo "  queue-build-lock   - Build lock acquisition/release functionality test"
-    echo "  queue-concurrent   - Concurrent build lock polling functionality test"
+    echo "Available Tests (recommended execution order):"
+    echo "  env-test           - 0. GitHub API environment and basic functionality test"
+    echo "  queue-status       - 1. Queue status query functionality test"
+    echo "  queue-cleanup      - 2. Queue cleanup functionality test"
+    echo "  queue-reset        - 3. Queue reset functionality test"
+    echo "  queue-join         - 4. Queue join functionality test"
+    echo "  queue-leave        - 5. Queue leave functionality test"
+    echo "  queue-join-leave   - 5.5. Paired queue join and leave functionality test"
+    echo "  queue-build-lock   - 6. Build lock acquisition/release functionality test"
+    echo "  queue-concurrent   - 7.5. Concurrent build lock polling functionality test"
+    echo "  queue-5-tasks      - 8. 5 tasks concurrent with queue lock mechanism test"
+    echo "  queue-concurrent-simple - 8.5. Simplified high-concurrency queue functionality test"
+    echo "  queue-sequence     - 9. All queue functions in sequence test"
+    echo "  complete           - 10. Complete end-to-end functionality test"
     echo ""
     echo "Test Scripts:"
     echo "  test_scripts/env-test.sh"
-    echo "  test_scripts/test-queue-join.sh"
-    echo "  test_scripts/test-queue-leave.sh"
+    echo "  test_scripts/test-queue-status.sh"
     echo "  test_scripts/test-queue-cleanup.sh"
     echo "  test_scripts/test-queue-reset.sh"
-    echo "  test_scripts/test-queue-status.sh"
-    echo "  test_scripts/test-queue-sequence.sh"
+    echo "  test_scripts/test-queue-join.sh"
+    echo "  test_scripts/test-queue-leave.sh"
+    echo "  test_scripts/test-queue-join-leave.sh"
     echo "  test_scripts/test-queue-build-lock.sh"
-    echo "  test_scripts/test-queue-concurrent.sh"
+                echo "  test_scripts/test-queue-concurrent.sh"
+    echo "  test_scripts/test-queue-concurrent-simple.sh"
+    echo "  test_scripts/test-queue-sequence.sh"
+    echo "  test_scripts/test-complete.sh"
     echo ""
 }
 
@@ -158,15 +172,20 @@ main() {
             exit 0
             ;;
         -a|--all)
-            log_info "Running all tests..."
-            run_single_test "Environment Test" "test_scripts/env-test.sh"
-            run_single_test "Queue Join" "test_scripts/test-queue-join.sh"
-            run_single_test "Queue Leave" "test_scripts/test-queue-leave.sh"
-            run_single_test "Queue Cleanup" "test_scripts/test-queue-cleanup.sh"
-            run_single_test "Queue Reset" "test_scripts/test-queue-reset.sh"
-            run_single_test "Queue Status" "test_scripts/test-queue-status.sh"
-            run_single_test "Queue Build Lock" "test_scripts/test-queue-build-lock.sh"
-            run_single_test "Queue Concurrent" "test_scripts/test-queue-concurrent.sh"
+            log_info "Running all tests in recommended order..."
+            run_single_test "0. Environment Test" "test_scripts/env-test.sh"
+            run_single_test "1. Queue Status" "test_scripts/test-queue-status.sh"
+            run_single_test "2. Queue Cleanup" "test_scripts/test-queue-cleanup.sh"
+            run_single_test "3. Queue Reset" "test_scripts/test-queue-reset.sh"
+            run_single_test "4. Queue Join" "test_scripts/test-queue-join.sh"
+            run_single_test "5. Queue Leave" "test_scripts/test-queue-leave.sh"
+            run_single_test "5.5. Queue Join-Leave Paired" "test_scripts/test-queue-join-leave.sh"
+            run_single_test "6. Queue Build Lock" "test_scripts/test-queue-build-lock.sh"
+            run_single_test "7.5. Queue Concurrent" "test_scripts/test-queue-concurrent.sh"
+            run_single_test "8. Queue 5 Tasks Concurrent" "test_scripts/test-queue-5-tasks.sh"
+            run_single_test "8.5. Queue Concurrent Simple" "test_scripts/test-queue-concurrent-simple.sh"
+            run_single_test "9. Queue Sequence" "test_scripts/test-queue-sequence.sh"
+            run_single_test "10. Complete End-to-End Test" "test_scripts/test-complete.sh"
             ;;
         env-test)
             run_single_test "Environment Test" "test_scripts/env-test.sh"
@@ -194,6 +213,18 @@ main() {
             ;;
         queue-concurrent)
             run_single_test "Queue Concurrent" "test_scripts/test-queue-concurrent.sh"
+            ;;
+        queue-5-tasks)
+            run_single_test "Queue 5 Tasks Concurrent" "test_scripts/test-queue-5-tasks.sh"
+            ;;
+        queue-concurrent-simple)
+            run_single_test "Queue Concurrent Simple" "test_scripts/test-queue-concurrent-simple.sh"
+            ;;
+        complete)
+            run_single_test "Complete End-to-End Test" "test_scripts/test-complete.sh"
+            ;;
+        queue-join-leave)
+            run_single_test "Queue Join-Leave Paired Test" "test_scripts/test-queue-join-leave.sh"
             ;;
         *)
             log_error "Unknown test: $1"
