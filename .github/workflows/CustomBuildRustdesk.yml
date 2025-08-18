@@ -114,13 +114,16 @@ jobs:
           
           # 生成最终JSON数据
           final_data=$(trigger_manager "generate-data" "$EVENT_DATA" "$final_tag")
+          echo "DEBUG: final_data = $final_data"
           
           # 验证参数
           validation_result=$(trigger_manager "validate-parameters" "$final_data")
           validation_exit_code=$?
+          echo "DEBUG: validation_result = $validation_result, exit_code = $validation_exit_code"
           
           # 输出到GitHub Actions
           trigger_manager "output-to-github" "$final_data"
+          echo "DEBUG: output-to-github completed"
           
           # 设置验证结果
           if [ $validation_exit_code -eq 0 ]; then
