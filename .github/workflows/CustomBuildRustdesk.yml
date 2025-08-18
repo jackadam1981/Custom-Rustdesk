@@ -95,6 +95,9 @@ jobs:
           
           # 使用环境变量传递事件数据
           export EVENT_DATA='${{ toJSON(github.event) }}'
+          echo "DEBUG: EVENT_DATA = $EVENT_DATA"
+          echo "DEBUG: github.event_name = ${{ github.event_name }}"
+          echo "DEBUG: github.event.issue.number = ${{ github.event.issue.number }}"
           
           # 根据触发类型提取参数
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
