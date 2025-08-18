@@ -322,8 +322,8 @@ _join_queue() {
   debug "log" "Parsed trigger data: $parsed_data, trigger_type: $trigger_type"
   
   # 检查issue触发限制（改进的高并发版本）
-  if [ "$trigger_type" = "issues" ]; then
-    local issue_trigger_count=$(echo "$QUEUE_DATA" | jq '.queue | map(select(.trigger_type == "issues")) | length // 0')
+  if [ "$trigger_type" = "issue" ]; then
+    local issue_trigger_count=$(echo "$QUEUE_DATA" | jq '.queue | map(select(.trigger_type == "issue")) | length // 0')
     debug "log" "Current issue trigger count: $issue_trigger_count, limit: $ISSUE_TRIGGER_LIMIT"
     if [ "$issue_trigger_count" -ge "$ISSUE_TRIGGER_LIMIT" ]; then
       debug "error" "Issue trigger limit reached ($issue_trigger_count/$ISSUE_TRIGGER_LIMIT)"
