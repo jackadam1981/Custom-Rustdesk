@@ -1,89 +1,8 @@
 #!/bin/bash
 # 队列加入功能测试脚本
 
-# 设置测试环境
-set -e
-
-# 加载测试工具
-source test_scripts/test-utils.sh
-
-# 测试计数器
-TOTAL_TESTS=0
-PASSED_TESTS=0
-FAILED_TESTS=0
-
-# 测试结果记录
-TEST_RESULTS=()
-
-# 测试函数
-run_test() {
-    local test_name="$1"
-    local test_command="$2"
-    local expected_exit_code="${3:-0}"
-    
-    TOTAL_TESTS=$((TOTAL_TESTS + 1))
-    
-    echo ""
-    log_test "Running test: $test_name"
-    echo "Command: $test_command"
-    echo "Expected exit code: $expected_exit_code"
-    echo "----------------------------------------"
-    
-    # 显示执行进度
-    echo -n "Executing test... "
-    
-    # 记录开始时间
-    local start_time=$(date +%s)
-    
-    # 执行测试命令，确保环境变量传递
-    if bash -c "export GITHUB_TOKEN='$GITHUB_TOKEN'; export GITHUB_REPOSITORY='$GITHUB_REPOSITORY'; export GITHUB_RUN_ID='$GITHUB_RUN_ID'; $test_command" > /tmp/test_output.log 2>&1; then
-        actual_exit_code=$?
-    else
-        actual_exit_code=$?
-    fi
-    
-    # 记录结束时间
-    local end_time=$(date +%s)
-    local duration=$((end_time - start_time))
-    
-    echo "Done! (${duration}s)"
-    echo "Actual exit code: $actual_exit_code"
-    
-    # 检查退出码
-    if [ "$actual_exit_code" -eq "$expected_exit_code" ]; then
-        log_success "Test PASSED: $test_name (${duration}s)"
-        PASSED_TESTS=$((PASSED_TESTS + 1))
-        TEST_RESULTS+=("PASS: $test_name (${duration}s)")
-        
-        # 显示成功输出（如果有）
-        if [ -f /tmp/test_output.log ] && [ -s /tmp/test_output.log ]; then
-            echo "Test output:"
-            cat /tmp/test_output.log
-        fi
-    else
-        log_error "Test FAILED: $test_name (Expected: $expected_exit_code, Got: $actual_exit_code, ${duration}s)"
-        FAILED_TESTS=$((FAILED_TESTS + 1))
-        TEST_RESULTS+=("FAIL: $test_name (Expected: $expected_exit_code, Got: $actual_exit_code, ${duration}s)")
-        
-        # 显示错误输出
-        if [ -f /tmp/test_output.log ]; then
-            echo "Test output:"
-            cat /tmp/test_output.log
-        fi
-    fi
-    
-    echo "----------------------------------------"
-}
-
-# 清理测试环境
-cleanup_test_env() {
-    log_step "Cleaning up test environment..."
-    
-    # 清理临时文件
-    rm -f /tmp/test_output.log
-    
-    log_success "Test environment cleanup completed"
-}
+# 加载统一测试框架
+source test_scripts/test-framework.sh
 
 # 测试队列加入功能（带验证）
 test_queue_join_with_verification() {
@@ -119,69 +38,39 @@ test_queue_join_with_verification() {
     show_issue_status "After Queue Join Test"
 }
 
-# 显示测试结果
-show_test_results() {
-    echo ""
-    echo "========================================"
-    echo "           TEST RESULTS SUMMARY"
-    echo "========================================"
-    echo "Total Tests: $TOTAL_TESTS"
-    echo "Passed: $PASSED_TESTS"
-    echo "Failed: $FAILED_TESTS"
-    echo ""
-    
-    if [ $FAILED_TESTS -eq 0 ]; then
-        log_success "All tests passed! 🎉"
-        echo ""
-        echo "Detailed Results:"
-        for result in "${TEST_RESULTS[@]}"; do
-            echo "  ✅ $result"
-        done
-    else
-        log_error "Some tests failed! ❌"
-        echo ""
-        echo "Detailed Results:"
-        for result in "${TEST_RESULTS[@]}"; do
-            if [[ "$result" == "PASS:"* ]]; then
-                echo "  ✅ $result"
-            else
-                echo "  ❌ $result"
-            fi
-        done
-    fi
-    
-    echo ""
-    echo "========================================"
-}
+
 
 # 主函数
 main() {
+    # 初始化测试框架
+    init_test_framework
+    
     echo "========================================"
     echo "    Queue Join Function Tests"
     echo "========================================"
     echo ""
     
-    # 设置测试环境
-    setup_test_env
-    
-
-    
     # 运行测试
     test_queue_join_with_verification
     
-    # 清理测试环境
-    cleanup_test_env
-    
-    # 显示测试结果
-    show_test_results
-    
-    # 返回适当的退出码
-    if [ $FAILED_TESTS -eq 0 ]; then
-        exit 0
-    else
-        exit 1
-    fi
+    # 清理测试框架
+    cleanup_test_framework
 }
 
 # 运行主函数
 main "$@" 
+
+# 如果直接运行此脚本
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "错误：此测试脚本无法直接运行！"
+    echo ""
+    echo "请使用以下命令运行测试："
+    echo "  ./run-tests.sh queue-join"
+    echo ""
+    echo "或者查看所有可用测试："
+    echo "  ./run-tests.sh --list"
+    echo ""
+    echo "查看帮助信息："
+    echo "  ./run-tests.sh --help"
+    exit 1
+fi 

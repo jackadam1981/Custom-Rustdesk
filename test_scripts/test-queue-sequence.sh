@@ -1,15 +1,14 @@
 #!/bin/bash
 # 队列功能综合测试脚本
 
-set -e
-source test_scripts/test-utils.sh
+# 加载统一测试框架
+source test_scripts/test-framework.sh
 
-echo "========================================"
-echo "    Queue Function Sequence Tests"
-echo "========================================"
-
-# 设置测试环境
-setup_test_env
+# 执行综合序列测试
+run_sequence_tests() {
+    echo "========================================"
+    echo "    Queue Function Sequence Tests"
+    echo "========================================"
 
 # 重置队列状态
 log_info "Resetting queue state..."
@@ -246,7 +245,38 @@ source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 
 log_info "=== Issue #1 Full Content After Reset ==="
 gh issue view 1
 
-echo ""
-echo "========================================"
-echo "Test Sequence Completed Successfully! 🎉"
-echo "========================================" 
+    echo ""
+    echo "========================================"
+    echo "Test Sequence Completed Successfully! 🎉"
+    echo "========================================"
+}
+
+# 主函数
+main() {
+    # 初始化测试框架
+    init_test_framework
+    
+    # 运行序列测试
+    run_sequence_tests
+    
+    # 清理测试框架
+    cleanup_test_framework
+}
+
+# 运行主函数
+main "$@" 
+
+# 如果直接运行此脚本
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "错误：此测试脚本无法直接运行！"
+    echo ""
+    echo "请使用以下命令运行测试："
+    echo "  ./run-tests.sh queue-sequence"
+    echo ""
+    echo "或者查看所有可用测试："
+    echo "  ./run-tests.sh --list"
+    echo ""
+    echo "查看帮助信息："
+    echo "  ./run-tests.sh --help"
+    exit 1
+fi 

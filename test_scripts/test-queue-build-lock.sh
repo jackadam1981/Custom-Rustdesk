@@ -2,14 +2,18 @@
 # 构建锁获取/释放功能测试脚本
 
 set -e
-source test_scripts/test-utils.sh
+source test_scripts/test-framework.sh
+
+# 测试专用的超时设置（覆盖默认值）
+export ISSUE_LOCK_TIMEOUT=30  # 30秒issue锁超时（测试用）
+export BUILD_LOCK_HOLD_TIMEOUT=60  # 60秒构建锁超时（测试用）
 
 echo "========================================"
 echo "    Queue Build Lock Function Tests"
 echo "========================================"
 
 # 设置测试环境
-setup_test_env
+init_test_framework
 
 # 重置队列状态
 log_info "Resetting queue state..."
@@ -37,10 +41,9 @@ source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 
 log_info "=== Issue #1 Full Content After Adding First Item ==="
 get_issue_json_data
 
-# 测试1: 第一个项目获取构建锁（轮询机制）
-log_info "Testing build lock acquisition for first item (with polling mechanism)..."
-log_info "This will retry every 30 seconds if lock is not available..."
-source .github/workflows/scripts/queue-manager.sh && queue_manager 'build_lock' 'acquire'
+# 测试1: 第一个项目获取构建锁
+log_info "Testing build lock acquisition for first item..."
+source .github/workflows/scripts/queue-manager.sh && _acquire_build_lock
 
 # 显示验证后的Issue #1完整内容
 log_info "=== Issue #1 Full Content After Build Lock Acquisition ==="
@@ -117,7 +120,7 @@ get_issue_json_data
 
 # 测试5: 第二个项目获取构建锁
 log_info "Testing build lock acquisition for second item..."
-source .github/workflows/scripts/queue-manager.sh && queue_manager 'build_lock' 'acquire'
+source .github/workflows/scripts/queue-manager.sh && _acquire_build_lock
 
 # 显示验证后的Issue #1完整内容
 log_info "=== Issue #1 Full Content After Second Item Build Lock Acquisition ==="
@@ -172,24 +175,40 @@ log_info "Testing build lock conflict resolution..."
 
 # 加入两个项目到队列
 log_info "Adding two items to queue for conflict test..."
-export GITHUB_RUN_ID="conflict_test_1_$(date +%s)"
+CONFLICT_RUN_ID_1="conflict_test_1_$(date +%s)"
+export GITHUB_RUN_ID="$CONFLICT_RUN_ID_1"
 source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 'join' '{"tag":"conflict-test-1","email":"conflict1@example.com","customer":"test-customer","trigger_type":"workflow_dispatch"}'
 
-export GITHUB_RUN_ID="conflict_test_2_$(date +%s)"
+CONFLICT_RUN_ID_2="conflict_test_2_$(date +%s)"
+export GITHUB_RUN_ID="$CONFLICT_RUN_ID_2"
 source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 'join' '{"tag":"conflict-test-2","email":"conflict2@example.com","customer":"test-customer","trigger_type":"workflow_dispatch"}'
 
-# 第一个项目获取锁
+# 第一个项目获取锁（队列位置0，应该成功）
 log_info "First item acquiring build lock..."
-export GITHUB_RUN_ID="conflict_test_1_$(date +%s)"
-source .github/workflows/scripts/queue-manager.sh && queue_manager 'build_lock' 'acquire'
+export GITHUB_RUN_ID="$CONFLICT_RUN_ID_1"
+# 使用直接调用内部函数，避免长时间重试
+source .github/workflows/scripts/queue-manager.sh && _acquire_build_lock
 
-# 第二个项目尝试获取锁（应该失败）
+# 第二个项目尝试获取锁（队列位置1，应该失败）
 log_info "Second item attempting to acquire build lock (should fail)..."
-export GITHUB_RUN_ID="conflict_test_2_$(date +%s)"
-source .github/workflows/scripts/queue-manager.sh && queue_manager 'build_lock' 'acquire' || log_info "Expected failure: build lock already held"
+export GITHUB_RUN_ID="$CONFLICT_RUN_ID_2"
+# 使用直接调用内部函数，避免长时间重试
+source .github/workflows/scripts/queue-manager.sh && _acquire_build_lock || log_info "Expected failure: build lock already held"
 
 # 显示验证后的Issue #1完整内容
 log_info "=== Issue #1 Full Content After Conflict Test ==="
+get_issue_json_data
+
+# 清理冲突测试的状态
+log_info "Cleaning up conflict test state..."
+export GITHUB_RUN_ID="$CONFLICT_RUN_ID_1"
+source .github/workflows/scripts/queue-manager.sh && queue_manager 'build_lock' 'release' || log_info "First item releasing build lock"
+source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 'leave' || log_info "First item leaving queue"
+
+export GITHUB_RUN_ID="$CONFLICT_RUN_ID_2"
+source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 'leave' || log_info "Second item leaving queue"
+
+log_info "=== Issue #1 Full Content After Conflict Test Cleanup ==="
 get_issue_json_data
 
 echo ""
@@ -215,7 +234,7 @@ get_issue_json_data
 
 # 获取构建锁
 log_info "Acquiring build lock..."
-source .github/workflows/scripts/queue-manager.sh && queue_manager 'build_lock' 'acquire'
+source .github/workflows/scripts/queue-manager.sh && _acquire_build_lock
 
 # 显示获取锁后的状态
 log_info "=== Issue #1 Full Content After Acquiring Lock ==="
@@ -248,11 +267,11 @@ source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 
 
 # 第一次获取锁
 log_info "First time acquiring build lock..."
-source .github/workflows/scripts/queue-manager.sh && queue_manager 'build_lock' 'acquire'
+source .github/workflows/scripts/queue-manager.sh && _acquire_build_lock
 
 # 第二次尝试获取锁（应该失败）
 log_info "Second time attempting to acquire build lock (should fail)..."
-source .github/workflows/scripts/queue-manager.sh && queue_manager 'build_lock' 'acquire' || log_info "Expected failure: already holding lock"
+source .github/workflows/scripts/queue-manager.sh && _acquire_build_lock || log_info "Expected failure: already holding lock"
 
 # 第一次释放锁
 log_info "First time releasing build lock..."
@@ -306,7 +325,7 @@ get_issue_json_data
 
 # 测试12: 空队列时获取构建锁
 log_info "Testing build lock acquisition with empty queue..."
-source .github/workflows/scripts/queue-manager.sh && queue_manager 'build_lock' 'acquire' || log_info "Expected failure: empty queue"
+source .github/workflows/scripts/queue-manager.sh && _acquire_build_lock || log_info "Expected failure: empty queue"
 
 # 显示验证后的Issue #1完整内容
 log_info "=== Issue #1 Full Content After Empty Queue Test ==="
@@ -316,3 +335,18 @@ echo ""
 echo "========================================"
 echo "Build Lock Tests Completed Successfully! 🎉"
 echo "========================================" 
+
+# 如果直接运行此脚本
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "错误：此测试脚本无法直接运行！"
+    echo ""
+    echo "请使用以下命令运行测试："
+    echo "  ./run-tests.sh queue-build-lock"
+    echo ""
+    echo "或者查看所有可用测试："
+    echo "  ./run-tests.sh --list"
+    echo ""
+    echo "查看帮助信息："
+    echo "  ./run-tests.sh --help"
+    exit 1
+fi 

@@ -1,0 +1,22 @@
+========================================
+Step 8: Test Build Lock Conflict Resolution
+========================================
+[INFO] === Current Issue #1 Full Content (Before Conflict Test) ===
+{
+"issue_locked_by": null,
+"build_locked_by": null,
+"issue_lock_version": 13,
+"build_lock_version": 3,
+"version": 5,
+"queue": []
+}
+[INFO] Testing build lock conflict resolution...
+[INFO] Adding two items to queue for conflict test...
+{"queue_position": 1, "success": true}
+{"queue_position": 2, "success": true}
+[INFO] First item acquiring build lock...
+[ERROR] Test FAILED: Queue Build Lock
+
+[INFO] Running test: Queue Concurrent
+Script: test_scripts/test-queue-concurrent.sh
+----------------------------------------

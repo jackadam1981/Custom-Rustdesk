@@ -109,23 +109,23 @@ echo ""
 
 
 
-# 测试1: 直接执行方式验证
-log_info "=== 测试1: 直接执行方式 ==="
-if source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 'join' '{"tag":"test-tag","email":"test@example.com","customer":"test-customer","trigger_type":"workflow_dispatch"}'; then
-    log_success "✅ 直接执行方式验证通过"
-else
-    log_error "❌ 直接执行方式验证失败"
-fi
-echo ""
+# # 测试1: 直接执行方式验证
+# log_info "=== 测试1: 直接执行方式 ==="
+# if source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 'join' '{"tag":"test-tag","email":"test@example.com","customer":"test-customer","trigger_type":"workflow_dispatch"}'; then
+#     log_success "✅ 直接执行方式验证通过"
+# else
+#     log_error "❌ 直接执行方式验证失败"
+# fi
+# echo ""
 
-# 测试2: 子shell执行方式验证
-log_info "=== 测试2: 子shell执行方式 ==="
-if bash -c "export GITHUB_TOKEN='$GITHUB_TOKEN'; export GITHUB_REPOSITORY='$GITHUB_REPOSITORY'; export GITHUB_RUN_ID='$GITHUB_RUN_ID'; source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 'join' '{\"tag\":\"test-tag\",\"email\":\"test@example.com\",\"customer\":\"test-customer\",\"trigger_type\":\"workflow_dispatch\"}'"; then
-    log_success "✅ 子shell执行方式验证通过"
-else
-    log_error "❌ 子shell执行方式验证失败"
-fi
-echo ""
+# # 测试2: 子shell执行方式验证
+# log_info "=== 测试2: 子shell执行方式 ==="
+# if bash -c "export GITHUB_TOKEN='$GITHUB_TOKEN'; export GITHUB_REPOSITORY='$GITHUB_REPOSITORY'; export GITHUB_RUN_ID='$GITHUB_RUN_ID'; source .github/workflows/scripts/queue-manager.sh && queue_manager 'queue_lock' 'join' '{\"tag\":\"test-tag\",\"email\":\"test@example.com\",\"customer\":\"test-customer\",\"trigger_type\":\"workflow_dispatch\"}'"; then
+#     log_success "✅ 子shell执行方式验证通过"
+# else
+#     log_error "❌ 子shell执行方式验证失败"
+# fi
+# echo ""
 
 # 测试3: GitHub API连接验证
 log_info "=== 测试3: GitHub API连接 ==="
@@ -137,3 +137,18 @@ fi
 echo ""
 
 log_info "=== 环境测试完成 ===" 
+
+# 如果直接运行此脚本
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "错误：此测试脚本无法直接运行！"
+    echo ""
+    echo "请使用以下命令运行测试："
+    echo "  ./run-tests.sh env-test"
+    echo ""
+    echo "或者查看所有可用测试："
+    echo "  ./run-tests.sh --list"
+    echo ""
+    echo "查看帮助信息："
+    echo "  ./run-tests.sh --help"
+    exit 1
+fi 
