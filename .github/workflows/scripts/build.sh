@@ -63,8 +63,11 @@ _extract_build_data() {
 
 # 暂停构建（用于队列测试）
 _pause_for_test() {
-    local pause_seconds="${1:-300}"
+    # 使用环境变量控制测试等待时间，提供灵活性
+    local default_pause="${TEST_BUILD_PAUSE:-60}"  # 默认60秒，可通过TEST_BUILD_PAUSE环境变量覆盖
+    local pause_seconds="${1:-$default_pause}"
     echo "Pausing for $pause_seconds seconds to test queue..."
+    echo "Test build pause time: ${TEST_BUILD_PAUSE:-60}s (default)"
     sleep "$pause_seconds"
 }
 
