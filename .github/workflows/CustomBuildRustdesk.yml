@@ -235,7 +235,7 @@ jobs:
 
           # 加入队列
           echo "Joining build queue..."
-          join_result=$(join_queue "$TRIGGER_DATA")
+          join_result=$(queue_manager 'queue_lock' 'join' "$TRIGGER_DATA")
           join_exit_code=$?
           
           # 检查加入结果
@@ -270,7 +270,7 @@ jobs:
 
           # 获取构建锁
           echo "Acquiring build lock..."
-          if acquire_build_lock; then
+          if queue_manager 'build_lock' 'acquire'; then
             echo "✅ Successfully acquired build lock"
             echo "build_lock_acquired=true" >> $GITHUB_OUTPUT
           else
