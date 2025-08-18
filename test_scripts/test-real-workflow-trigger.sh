@@ -41,12 +41,12 @@ cleanup_test_environment() {
     if [ -n "$completed_runs" ]; then
         log_info "发现 $(echo "$completed_runs" | wc -l) 个已完成的Workflow Runs需要清理"
         local deleted_count=0
-        for issue in $completed_runs; do
-            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$issue" -X DELETE >/dev/null 2>&1; then
-                log_success "✅ 删除 Workflow Run #$issue"
+        for run_id in $completed_runs; do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" -X DELETE >/dev/null 2>&1; then
+                log_success "✅ 删除 Workflow Run #$run_id"
                 deleted_count=$((deleted_count + 1))
             else
-                log_warning "⚠️ 删除 Workflow Run #$issue 失败"
+                log_warning "⚠️ 删除 Workflow Run #$run_id 失败"
             fi
             sleep 1
         done
