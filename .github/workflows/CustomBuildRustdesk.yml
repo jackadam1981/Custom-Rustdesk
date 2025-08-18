@@ -99,18 +99,26 @@ jobs:
           # 根据触发类型提取参数
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             params=$(trigger_manager "extract-workflow-dispatch" "$EVENT_DATA")
+            echo "DEBUG: workflow_dispatch params = $params"
             eval "$params"
           else
             params=$(trigger_manager "extract-issue" "$EVENT_DATA")
+            echo "DEBUG: issue params = $params"
             eval "$params"
           fi
           
+          echo "DEBUG: After extract, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
+          
           # 应用默认值
           final_params=$(trigger_manager "apply-defaults" "$EVENT_DATA")
+          echo "DEBUG: final_params = $final_params"
           eval "$final_params"
+          
+          echo "DEBUG: After apply-defaults, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
           
           # 处理tag时间戳
           final_tag=$(trigger_manager "process-tag" "$EVENT_DATA")
+          echo "DEBUG: final_tag = $final_tag"
           
           # 生成最终JSON数据
           final_data=$(trigger_manager "generate-data" "$EVENT_DATA" "$final_tag")
