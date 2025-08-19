@@ -72,13 +72,9 @@ show_help() {
     echo "  queue-reset        3. Test queue reset functionality"
     echo "  queue-join         4. Test queue join functionality"
     echo "  queue-leave        5. Test queue leave functionality"
-    echo "  queue-join-leave   5.5. Test paired queue join and leave functionality"
     echo "  queue-build-lock   6. Test build lock acquisition/release functionality"
-    echo "  queue-concurrent   7.5. Test concurrent build lock polling functionality"
-    echo "  queue-5-tasks     8. Test 5 tasks concurrent with queue lock mechanism"
-    echo "  real-workflow      8.5. Test real GitHub workflow triggers and queue behavior"
-    echo "  queue-sequence     9. Test all queue functions in sequence"
-    echo "  complete           10. Test complete end-to-end functionality"
+    echo "  real-workflow      7. Test real GitHub workflow triggers and queue behavior (comprehensive)"
+    echo "  queue-sequence     8. Test all queue functions in sequence"
     echo ""
     echo "Examples:"
     echo "  $0 --all                           # Run all tests"
@@ -90,11 +86,7 @@ show_help() {
     echo "  $0 queue-status                   # Test status queries"
     echo "  $0 queue-sequence                 # Test all functions in sequence"
     echo "  $0 queue-build-lock               # Test build lock functionality"
-    echo "  $0 queue-concurrent               # Test concurrent lock polling"
-    echo "  $0 queue-5-tasks                  # Test 5 tasks concurrent with queue lock"
-    echo "  $0 real-workflow                  # Test real GitHub workflow triggers"
-    echo "  $0 complete                       # Test complete end-to-end functionality"
-    echo "  $0 queue-join --help              # Show help for specific test"
+    echo "  $0 real-workflow                  # Test real GitHub workflow triggers (comprehensive)"
 }
 
 # 列出可用测试
@@ -106,13 +98,9 @@ list_tests() {
     echo "  queue-reset        - 3. Queue reset functionality test"
     echo "  queue-join         - 4. Queue join functionality test"
     echo "  queue-leave        - 5. Queue leave functionality test"
-    echo "  queue-join-leave   - 5.5. Paired queue join and leave functionality test"
     echo "  queue-build-lock   - 6. Build lock acquisition/release functionality test"
-    echo "  queue-concurrent   - 7.5. Concurrent build lock polling functionality test"
-    echo "  queue-5-tasks      - 8. 5 tasks concurrent with queue lock mechanism test"
-    echo "  real-workflow      - 8.5. Real GitHub workflow triggers and queue behavior test"
-    echo "  queue-sequence     - 9. All queue functions in sequence test"
-    echo "  complete           - 10. Complete end-to-end functionality test"
+    echo "  real-workflow      - 7. Real GitHub workflow triggers and queue behavior test (comprehensive)"
+    echo "  queue-sequence     - 8. All queue functions in sequence test"
     echo ""
     echo "Test Scripts:"
     echo "  test_scripts/env-test.sh"
@@ -121,12 +109,9 @@ list_tests() {
     echo "  test_scripts/test-queue-reset.sh"
     echo "  test_scripts/test-queue-join.sh"
     echo "  test_scripts/test-queue-leave.sh"
-    echo "  test_scripts/test-queue-join-leave.sh"
     echo "  test_scripts/test-queue-build-lock.sh"
-                echo "  test_scripts/test-queue-concurrent.sh"
     echo "  test_scripts/test-real-workflow-trigger.sh"
     echo "  test_scripts/test-queue-sequence.sh"
-    echo "  test_scripts/test-complete.sh"
     echo ""
 }
 
@@ -179,13 +164,9 @@ main() {
             run_single_test "3. Queue Reset" "test_scripts/test-queue-reset.sh"
             run_single_test "4. Queue Join" "test_scripts/test-queue-join.sh"
             run_single_test "5. Queue Leave" "test_scripts/test-queue-leave.sh"
-            run_single_test "5.5. Queue Join-Leave Paired" "test_scripts/test-queue-join-leave.sh"
             run_single_test "6. Queue Build Lock" "test_scripts/test-queue-build-lock.sh"
-            run_single_test "7.5. Queue Concurrent" "test_scripts/test-queue-concurrent.sh"
-            run_single_test "8. Queue 5 Tasks Concurrent" "test_scripts/test-queue-5-tasks.sh"
-            run_single_test "8.5. Real Workflow Trigger" "test_scripts/test-real-workflow-trigger.sh"
-            run_single_test "9. Queue Sequence" "test_scripts/test-queue-sequence.sh"
-            run_single_test "10. Complete End-to-End Test" "test_scripts/test-complete.sh"
+            run_single_test "7. Real Workflow Trigger (Comprehensive)" "test_scripts/test-real-workflow-trigger.sh"
+            run_single_test "8. Queue Sequence" "test_scripts/test-queue-sequence.sh"
             ;;
         env-test)
             run_single_test "Environment Test" "test_scripts/env-test.sh"
@@ -211,20 +192,8 @@ main() {
         queue-build-lock)
             run_single_test "Queue Build Lock" "test_scripts/test-queue-build-lock.sh"
             ;;
-        queue-concurrent)
-            run_single_test "Queue Concurrent" "test_scripts/test-queue-concurrent.sh"
-            ;;
-        queue-5-tasks)
-            run_single_test "Queue 5 Tasks Concurrent" "test_scripts/test-queue-5-tasks.sh"
-            ;;
         real-workflow)
-            run_single_test "Real Workflow Trigger" "test_scripts/test-real-workflow-trigger.sh"
-            ;;
-        complete)
-            run_single_test "Complete End-to-End Test" "test_scripts/test-complete.sh"
-            ;;
-        queue-join-leave)
-            run_single_test "Queue Join-Leave Paired Test" "test_scripts/test-queue-join-leave.sh"
+            run_single_test "Real Workflow Trigger (Comprehensive)" "test_scripts/test-real-workflow-trigger.sh"
             ;;
         *)
             log_error "Unknown test: $1"

@@ -49,15 +49,34 @@ _extract_issue_params() {
     
     # 从Issue内容中提取参数（key: value格式）
     debug "log" "Extracting parameters from issue body using key:value format"
+    debug "log" "Raw issue body: '$issue_body'"
+
     local tag=$(echo "$issue_body" | sed -n 's/.*tag:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    debug "log" "Extracted tag: '$tag'"
+
     local email=$(echo "$issue_body" | sed -n 's/.*email:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    debug "log" "Extracted email: '$email'"
+
     local customer=$(echo "$issue_body" | sed -n 's/.*customer:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    debug "log" "Extracted customer: '$customer'"
+
     local customer_link=$(echo "$issue_body" | sed -n 's/.*customer_link:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    debug "log" "Extracted customer_link: '$customer_link'"
+
     local super_password=$(echo "$issue_body" | sed -n 's/.*super_password:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    debug "log" "Extracted super_password: '$super_password'"
+
     local slogan=$(echo "$issue_body" | sed -n 's/.*slogan:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    debug "log" "Extracted slogan: '$slogan'"
+
     local rendezvous_server=$(echo "$issue_body" | sed -n 's/.*rendezvous_server:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    debug "log" "Extracted rendezvous_server: '$rendezvous_server'"
+
     local rs_pub_key=$(echo "$issue_body" | sed -n 's/.*rs_pub_key:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    debug "log" "Extracted rs_pub_key: '$rs_pub_key'"
+
     local api_server=$(echo "$issue_body" | sed -n 's/.*api_server:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    debug "log" "Extracted api_server: '$api_server'"
     
     echo "BUILD_ID=\"$build_id\""
     echo "TAG=\"$tag\""
