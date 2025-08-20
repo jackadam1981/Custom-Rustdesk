@@ -15,18 +15,30 @@ function utils_queue_length() {
     
     # 获取Issue #1的主体
     local issue_body=$(gh issue view 1 --repo $GITHUB_REPOSITORY)
-    log_debug "Issue #1 主体内容: $issue_body"
     
     # 提取JSON数据部分
     local json_data=$(echo "$issue_body" | grep -A 10 '队列数据（隐私安全版本）' | grep -B 10 '}' | grep -v '队列数据（隐私安全版本）')
-    log_debug "提取的JSON数据: $json_data"
     
-    # 解析队列长度
-    local queue_length=$(echo "$json_data" | grep -c '"queue": \[\]')
-    if [ $queue_length -eq 1 ]; then
+    # 解析队列长度 - 计算实际的队列项目数量
+    local queue_length=0
+    
+    # 检查队列是否为空
+    if echo "$json_data" | grep -q '"queue": \[\]'; then
         queue_length=0
     else
-        queue_length=$(echo "$json_data" | grep -oP '"queue": \[.*?\]' | grep -oP '(?<=\[).*?(?=\])' | wc -l)
+        # 计算队列中的实际项目数量
+        # 使用jq解析JSON，计算queue数组的长度
+        queue_length=$(echo "$json_data" | jq -r '.queue | length' 2>/dev/null)
+        
+        # 如果jq失败，使用grep方法作为备选
+        if [ -z "$queue_length" ] || [ "$queue_length" = "null" ]; then
+            # 计算queue数组中对象的数量
+            queue_length=$(echo "$json_data" | grep -o '"queue": \[' | wc -l)
+            if [ $queue_length -gt 0 ]; then
+                # 计算queue数组中的项目数量
+                queue_length=$(echo "$json_data" | grep -oP '"queue": \[.*?\]' | grep -oP '(?<=\[).*?(?=\])' | grep -c '^[^,]*$')
+            fi
+        fi
     fi
     
     if [ -z "$queue_length" ]; then
@@ -52,18 +64,15 @@ function utils_queue_content() {
     
     # 获取Issue #1的主体
     local issue_body=$(gh issue view 1 --repo $GITHUB_REPOSITORY)
-    log_debug "Issue #1 主体内容: $issue_body"
     
     # 提取JSON数据部分
     local json_data=$(echo "$issue_body" | grep -A 10 '队列数据（隐私安全版本）' | grep -B 10 '}' | grep -v '队列数据（隐私安全版本）')
-    log_debug "提取的JSON数据: $json_data"
     
     if echo "$json_data" | grep -q "$expected_content"; then
         log_info "队列内容符合预期: $expected_content"
         return 0
     else
         log_error "队列内容不符合预期，预期: $expected_content"
-        log_debug "实际内容: $json_data"
         return 1
     fi
 }
@@ -74,10 +83,8 @@ function utils_queue_management() {
     
     # 获取Issue #1的主体
     local issue_body=$(gh issue view 1 --repo $GITHUB_REPOSITORY)
-    log_debug "Issue #1 主体内容: $issue_body"
     
-    log_info "队列管理内容:"
-    log_info "$issue_body"
+    log_info "队列管理内容已获取"
     return 0
 }
 
@@ -87,7 +94,6 @@ function utils_workflow_count() {
     log_info "检查工作流数量..."
     
     local workflow_count=$(gh run list --repo $GITHUB_REPOSITORY --limit 10 --json databaseId,status --jq '[.[] | select(.status == "in_progress" or .status == "queued" or .status == "waiting" or .status == "requested")] | length')
-    log_debug "检查工作流数量命令输出: $workflow_count"
     
     log_info "当前工作流数量: $workflow_count"
     
@@ -108,7 +114,6 @@ function utils_workflow_status() {
     
     # 确保 run_id 只包含数字
     run_id=$(echo "$run_id" | grep -o '[0-9]\{5,\}')
-    log_debug "处理后的 run_id: $run_id"
     
     if [ -z "$run_id" ]; then
         log_error "无效的 run_id，无法检查工作流状态"
@@ -118,7 +123,6 @@ function utils_workflow_status() {
     # 直接使用JSON格式获取工作流状态
     local json_output=$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json status,conclusion 2>&1)
     local status=$(echo "$json_output" | jq -r '.conclusion // .status' 2>/dev/null)
-    log_debug "JSON格式获取的状态: $status"
     
     # 如果无法获取状态，使用默认值
     if [ -z "$status" ] || [ "$status" = "null" ]; then
@@ -143,10 +147,8 @@ function utils_workflow_logs() {
     log_info "读取工作流日志..."
     
     local logs=$(gh run view $run_id --log --repo $GITHUB_REPOSITORY)
-    log_debug "读取工作流日志命令输出: $logs"
     
-    log_info "工作流日志:"
-    log_info "$logs"
+    log_info "工作流日志已获取"
     return 0
 }
 

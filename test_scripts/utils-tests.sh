@@ -88,7 +88,6 @@ function test_utils_workflow_status() {
     log_info "测试检查工作流状态..."
     # 获取最新的工作流运行ID，只调用一次
     local run_id=$(utils_latest_workflow_run)
-    log_debug "获取最新工作流运行ID: $run_id"
     
     if [ -z "$run_id" ]; then
         log_warn "无法获取最新的工作流运行ID，可能是因为不存在工作流或工作流处于错误状态"
@@ -99,7 +98,6 @@ function test_utils_workflow_status() {
     
     # 清理 run_id，确保只包含数字
     run_id=$(echo "$run_id" | grep -o '[0-9]\{5,\}')
-    log_debug "清理后的 run_id: $run_id"
     
     log_info "最新工作流运行ID: $run_id"
     
@@ -113,21 +111,13 @@ function test_utils_workflow_status() {
         local status_output=$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json status,conclusion 2>&1)
         expected_status=$(echo "$status_output" | jq -r '.status' 2>/dev/null)
         local conclusion=$(echo "$status_output" | jq -r '.conclusion' 2>/dev/null)
-        if [ -z "$expected_status" ]; then
-            log_warn "无法从输出中提取状态，可能是命令执行失败或输出格式不正确"
-            log_info "尝试使用另一种方法获取状态"
-            expected_status=$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" | grep 'Status:' | awk '{print $2}')
-            log_debug "使用另一种方法获取的状态: $expected_status"
-        fi
         
         if [ -n "$conclusion" ] && [ "$conclusion" != "null" ]; then
             expected_status="$conclusion"
-            log_info "使用 conclusion 作为状态: $expected_status"
         fi
         
         if [ -z "$expected_status" ]; then
             expected_status="completed"  # 默认值
-            log_warn "无法确定当前状态，使用默认值: $expected_status"
         fi
         log_info "自动检测到预期工作流状态: $expected_status"
     fi
@@ -172,7 +162,6 @@ function test_utils_latest_workflow_run() {
     log_info "测试获取最近的工作流运行ID..."
     
     local run_id=$(utils_latest_workflow_run)
-    log_debug "获取最新工作流运行ID: $run_id"
     
     if [ -z "$run_id" ]; then
         log_warn "无法获取最新的工作流运行ID，可能是因为不存在工作流或工作流处于错误状态"
