@@ -5,7 +5,7 @@
 
 # 加载测试框架
 if [ -z "$TEST_RUNNER_CALLED" ]; then
-    source test_scripts/test-framework.sh
+    source test_scripts/framework.sh
     standalone=true
 else
     standalone=false

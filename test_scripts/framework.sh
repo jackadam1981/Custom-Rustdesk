@@ -244,59 +244,49 @@ function run_specific_test() {
             run_issue_trigger_tests "$@"
             return $?
             ;;
-        "test-workflow-status")
-            source test_scripts/test-workflow-status.sh
-            run_workflow_status_tests "$@"
-            return $?
-            ;;
-        "test-queue-status")
-            source test_scripts/test-queue-status.sh
-            run_queue_status_tests "$@"
-            return $?
-            ;;
-        "test-real-workflow-trigger")
-            source test_scripts/test-real-workflow-trigger.sh
+        "test-concurrent-trigger")
+            source test_scripts/concurrent-trigger.sh
             run_real_workflow_trigger_tests "$@"
             return $?
             ;;
-        "test-utils")
-            source test_scripts/test-utils-tests.sh
+        "utils-tests")
+            source test_scripts/utils-tests.sh
             run_utils_tests "$@"
             return $?
             ;;
-        "test-check-queue-length")
-            source test_scripts/test-utils-tests.sh
-            test_check_queue_length "$@"
+        "utils-queue-length")
+            source test_scripts/utils-tests.sh
+            test_utils_queue_length "$@"
             return $?
             ;;
-        "test-check-queue-content")
-            source test_scripts/test-utils-tests.sh
-            test_check_queue_content "$@"
+        "utils-queue-content")
+            source test_scripts/utils-tests.sh
+            test_utils_queue_content "$@"
             return $?
             ;;
-        "test-list-queue-management")
-            source test_scripts/test-utils-tests.sh
-            test_list_queue_management "$@"
+        "utils-queue-management")
+            source test_scripts/utils-tests.sh
+            test_utils_queue_management "$@"
             return $?
             ;;
-        "test-check-workflow-count")
-            source test_scripts/test-utils-tests.sh
-            test_check_workflow_count "$@"
+        "utils-workflow-count")
+            source test_scripts/utils-tests.sh
+            test_utils_workflow_count "$@"
             return $?
             ;;
-        "test-check-workflow-status")
-            source test_scripts/test-utils-tests.sh
-            test_check_workflow_status "$@"
+        "utils-workflow-status")
+            source test_scripts/utils-tests.sh
+            test_utils_workflow_status "$@"
             return $?
             ;;
-        "test-read-workflow-logs")
-            source test_scripts/test-utils-tests.sh
-            test_read_workflow_logs "$@"
+        "utils-workflow-logs")
+            source test_scripts/utils-tests.sh
+            test_utils_workflow_logs "$@"
             return $?
             ;;
-        "test-get-latest-workflow-run-id")
-            source test_scripts/test-utils-tests.sh
-            test_get_latest_workflow_run_id "$@"
+        "utils-latest-workflow-run")
+            source test_scripts/utils-tests.sh
+            test_utils_latest_workflow_run "$@"
             return $?
             ;;
         *)

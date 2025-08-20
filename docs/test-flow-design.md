@@ -55,8 +55,8 @@
 ## 测试脚本结构
 
 - `run-tests.sh`：主测试脚本，负责运行所有测试流程
-- `test_scripts/test-framework.sh`：测试框架，提供通用测试功能
-- `test_scripts/test-utils.sh`：测试工具函数
+- `test_scripts/framework.sh`：测试框架，提供通用测试功能
+- `test_scripts/utils-tests.sh`：测试工具函数
 - `test_scripts/test-manual-trigger.sh`：手动触发测试
 - `test_scripts/test-issue-trigger.sh`：Issue触发测试
 - `test_scripts/test-queue-status.sh`：队列状态测试
