@@ -3,13 +3,8 @@
 # 手动触发测试脚本
 # 该脚本测试手动触发构建的功能
 
-# 加载测试框架
-if [ -z "$TEST_RUNNER_CALLED" ]; then
-    source test_scripts/framework.sh
-    standalone=true
-else
-    standalone=false
-fi
+# 该脚本已重构，请使用 run-tests.sh 运行测试
+standalone=true
 
 # 测试手动触发构建
 function test_manual_trigger_build() {
@@ -31,28 +26,11 @@ function test_manual_trigger_build() {
     return 0
 }
 
-# 运行所有手动触发测试
-function run_manual_trigger_tests() {
-    log_info "开始运行手动触发测试..."
-    test_manual_trigger_build
-    local result=$?
-    log_info "手动触发测试完成"
-    return $result
-}
 
-# 如果作为独立脚本运行
+# 该脚本已重构，请使用 run-tests.sh 运行测试
+# 使用示例: ./run-tests.sh test-manual-trigger
 if [ "$standalone" = true ]; then
-    init_test_framework
-    if setup_test_environment; then
-        run_manual_trigger_tests
-        show_test_results
-    else
-        log_error "测试环境设置失败，退出测试"
-        exit 1
-    fi
-    cleanup_test_framework
-    if [ $TEST_FAIL_COUNT -gt 0 ]; then
-        exit 1
-    fi
-    exit 0
+    echo "该脚本已重构，请使用 run-tests.sh 运行测试"
+    echo "使用示例: ./run-tests.sh test-manual-trigger"
+    exit 1
 fi

@@ -3,16 +3,15 @@
 # 工具函数测试脚本
 # 该脚本测试 utils.sh 中的功能
 
-# 加载测试框架
+# 该脚本已重构，请使用 run-tests.sh 运行测试
+# 当通过 run-tests.sh 调用时，TEST_RUNNER_CALLED 会被设置
 if [ -z "$TEST_RUNNER_CALLED" ]; then
-    source test_scripts/framework.sh
     standalone=true
 else
     standalone=false
+    # 加载工具函数
+    source test_scripts/utils.sh
 fi
-
-# 加载工具函数
-source test_scripts/utils.sh
 
 # 测试检查队列长度
 function test_utils_queue_length() {
@@ -190,27 +189,10 @@ function run_utils_tests() {
     return $failed
 }
 
-# 如果作为独立脚本运行
+# 该脚本已重构，请使用 run-tests.sh 运行测试
+# 使用示例: ./run-tests.sh utils-tests
 if [ "$standalone" = true ]; then
-    init_test_framework
-    if setup_test_environment; then
-        if [ $# -gt 0 ]; then
-            test_utils_queue_length $1
-        elif [ $# -gt 1 ]; then
-            test_utils_workflow_count $2
-        elif [ $# -gt 2 ]; then
-            test_utils_workflow_status $3
-        else
-            run_utils_tests
-        fi
-        show_test_results
-    else
-        log_error "测试环境设置失败，退出测试"
-        exit 1
-    fi
-    cleanup_test_framework
-    if [ $TEST_FAIL_COUNT -gt 0 ]; then
-        exit 1
-    fi
-    exit 0
+    echo "该脚本已重构，请使用 run-tests.sh 运行测试"
+    echo "使用示例: ./run-tests.sh utils-tests"
+    exit 1
 fi
