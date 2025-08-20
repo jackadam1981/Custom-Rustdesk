@@ -1,217 +1,129 @@
 #!/bin/bash
-# 测试调度脚本
 
-# 颜色定义
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# 主测试脚本
+# 该脚本负责运行Custom Rustdesk构建系统的完整测试流程
 
-# 测试结果
-TOTAL_TESTS=0
-PASSED_TESTS=0
-FAILED_TESTS=0
+# 加载测试框架
+source test_scripts/test-framework.sh
 
-# 日志函数
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+# 设置默认日志级别为INFO
+log_level="info"
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# 运行单个测试
-run_single_test() {
-    local test_name="$1"
-    local test_script="$2"
-    
-    log_info "Running test: $test_name"
-    echo "Script: $test_script"
-    echo "----------------------------------------"
-    
-    if [ -f "$test_script" ]; then
-        if TEST_RUNNER_CALLED=1 TEST_MODE=true TEST_BUILD_PAUSE=10 bash "$test_script"; then
-            log_success "Test PASSED: $test_name"
-            PASSED_TESTS=$((PASSED_TESTS + 1))
-        else
-            log_error "Test FAILED: $test_name"
-            FAILED_TESTS=$((FAILED_TESTS + 1))
-        fi
-    else
-        log_error "Test script not found: $test_script"
-        FAILED_TESTS=$((FAILED_TESTS + 1))
-    fi
-    
-    TOTAL_TESTS=$((TOTAL_TESTS + 1))
-    echo ""
-}
-
-# 显示帮助信息
-show_help() {
-    echo "Usage: $0 [OPTIONS] [TEST_NAMES...]"
-    echo ""
-    echo "Options:"
-    echo "  -h, --help     Show this help message"
-    echo "  -a, --all      Run all tests"
-    echo "  -l, --list     List available tests"
-    echo ""
-    echo "Available Tests (recommended order):"
-    echo "  env-test           0. Test GitHub API environment and basic functionality"
-    echo "  queue-status       1. Test queue status query functionality"
-    echo "  queue-cleanup      2. Test queue cleanup functionality"
-    echo "  queue-reset        3. Test queue reset functionality"
-    echo "  queue-join         4. Test queue join functionality"
-    echo "  queue-leave        5. Test queue leave functionality"
-    echo "  queue-build-lock   6. Test build lock acquisition/release functionality"
-    echo "  real-workflow      7. Test real GitHub workflow triggers and queue behavior (comprehensive)"
-    echo "  queue-sequence     8. Test all queue functions in sequence"
-    echo ""
-    echo "Examples:"
-    echo "  $0 --all                           # Run all tests"
-    echo "  $0 env-test                       # Test environment"
-    echo "  $0 queue-join                     # Test queue join"
-    echo "  $0 queue-leave                    # Test queue leave"
-    echo "  $0 queue-cleanup                  # Test queue cleanup"
-    echo "  $0 queue-reset                    # Test queue reset"
-    echo "  $0 queue-status                   # Test status queries"
-    echo "  $0 queue-sequence                 # Test all functions in sequence"
-    echo "  $0 queue-build-lock               # Test build lock functionality"
-    echo "  $0 real-workflow                  # Test real GitHub workflow triggers (comprehensive)"
-}
-
-# 列出可用测试
-list_tests() {
-    echo "Available Tests (recommended execution order):"
-    echo "  env-test           - 0. GitHub API environment and basic functionality test"
-    echo "  queue-status       - 1. Queue status query functionality test"
-    echo "  queue-cleanup      - 2. Queue cleanup functionality test"
-    echo "  queue-reset        - 3. Queue reset functionality test"
-    echo "  queue-join         - 4. Queue join functionality test"
-    echo "  queue-leave        - 5. Queue leave functionality test"
-    echo "  queue-build-lock   - 6. Build lock acquisition/release functionality test"
-    echo "  real-workflow      - 7. Real GitHub workflow triggers and queue behavior test (comprehensive)"
-    echo "  queue-sequence     - 8. All queue functions in sequence test"
-    echo ""
-    echo "Test Scripts:"
-    echo "  test_scripts/env-test.sh"
-    echo "  test_scripts/test-queue-status.sh"
-    echo "  test_scripts/test-queue-cleanup.sh"
-    echo "  test_scripts/test-queue-reset.sh"
-    echo "  test_scripts/test-queue-join.sh"
-    echo "  test_scripts/test-queue-leave.sh"
-    echo "  test_scripts/test-queue-build-lock.sh"
-    echo "  test_scripts/test-real-workflow-trigger.sh"
-    echo "  test_scripts/test-queue-sequence.sh"
-    echo ""
-}
-
-# 显示测试结果
-show_results() {
-    echo ""
-    echo "========================================"
-    echo "           OVERALL TEST RESULTS"
-    echo "========================================"
-    echo "Total Tests: $TOTAL_TESTS"
-    echo "Passed: $PASSED_TESTS"
-    echo "Failed: $FAILED_TESTS"
-    echo ""
-    
-    if [ $FAILED_TESTS -eq 0 ] && [ $TOTAL_TESTS -gt 0 ]; then
-        log_success "All tests passed! 🎉"
-    elif [ $TOTAL_TESTS -gt 0 ]; then
-        log_error "Some tests failed! ❌"
-    else
-        log_warning "No tests were run."
-    fi
-    
-    echo ""
-    echo "========================================"
-}
-
-# 主函数
-main() {
-    # 检查参数
-    if [ $# -eq 0 ]; then
-        show_help
-        exit 1
-    fi
-    
-    # 处理参数
-    case "$1" in
-        -h|--help)
-            show_help
-            exit 0
-            ;;
-        -l|--list)
-            list_tests
-            exit 0
-            ;;
-        -a|--all)
-            log_info "Running all tests in recommended order..."
-            run_single_test "0. Environment Test" "test_scripts/env-test.sh"
-            run_single_test "1. Queue Status" "test_scripts/test-queue-status.sh"
-            run_single_test "2. Queue Cleanup" "test_scripts/test-queue-cleanup.sh"
-            run_single_test "3. Queue Reset" "test_scripts/test-queue-reset.sh"
-            run_single_test "4. Queue Join" "test_scripts/test-queue-join.sh"
-            run_single_test "5. Queue Leave" "test_scripts/test-queue-leave.sh"
-            run_single_test "6. Queue Build Lock" "test_scripts/test-queue-build-lock.sh"
-            run_single_test "7. Real Workflow Trigger (Comprehensive)" "test_scripts/test-real-workflow-trigger.sh"
-            run_single_test "8. Queue Sequence" "test_scripts/test-queue-sequence.sh"
-            ;;
-        env-test)
-            run_single_test "Environment Test" "test_scripts/env-test.sh"
-            ;;
-        queue-join)
-            run_single_test "Queue Join" "test_scripts/test-queue-join.sh"
-            ;;
-        queue-leave)
-            run_single_test "Queue Leave" "test_scripts/test-queue-leave.sh"
-            ;;
-        queue-cleanup)
-            run_single_test "Queue Cleanup" "test_scripts/test-queue-cleanup.sh"
-            ;;
-        queue-reset)
-            run_single_test "Queue Reset" "test_scripts/test-queue-reset.sh"
-            ;;
-        queue-status)
-            run_single_test "Queue Status" "test_scripts/test-queue-status.sh"
-            ;;
-        queue-sequence)
-            run_single_test "Queue Sequence" "test_scripts/test-queue-sequence.sh"
-            ;;
-        queue-build-lock)
-            run_single_test "Queue Build Lock" "test_scripts/test-queue-build-lock.sh"
-            ;;
-        real-workflow)
-            run_single_test "Real Workflow Trigger (Comprehensive)" "test_scripts/test-real-workflow-trigger.sh"
+# 检查是否提供了日志级别参数
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --log-level)
+            log_level="$2"
+            shift 2
             ;;
         *)
-            log_error "Unknown test: $1"
-            show_help
-            exit 1
+            break
             ;;
     esac
-    
-    # 显示结果
-    show_results
-    
-    # 返回适当的退出码
-    if [ $FAILED_TESTS -eq 0 ] && [ $TOTAL_TESTS -gt 0 ]; then
-        exit 0
-    else
+done
+
+# 设置日志级别
+set_log_level "$log_level"
+
+# 初始化测试框架
+init_test_framework
+
+# 检查是否提供了特定测试名称参数
+if [ $# -gt 0 ]; then
+    # 设置测试环境
+    if ! setup_test_environment; then
+        log_error "测试环境设置失败，退出测试"
         exit 1
     fi
-}
-
-# 运行主函数
-main "$@" 
+    test_name="$1"
+    shift 1  # 移除测试名称参数，以便后续参数可以传递给测试函数
+    if [ "$test_name" == "all" ]; then
+        log_info "运行所有测试..."
+        # 运行手动触发测试
+        log_info "开始手动触发测试"
+        source test_scripts/test-manual-trigger.sh
+        if run_manual_trigger_tests; then
+            log_info "手动触发测试完成"
+        else
+            log_error "手动触发测试失败"
+        fi
+        # 运行问题触发测试
+        log_info "开始问题触发测试"
+        source test_scripts/test-issue-trigger.sh
+        if run_issue_trigger_tests; then
+            log_info "问题触发测试完成"
+        else
+            log_error "问题触发测试失败"
+        fi
+        # 运行工作流状态测试
+        log_info "开始工作流状态测试"
+        source test_scripts/test-workflow-status.sh
+        if run_workflow_status_tests; then
+            log_info "工作流状态测试完成"
+        else
+            log_error "工作流状态测试失败"
+        fi
+        # 运行队列状态测试
+        log_info "开始队列状态测试"
+        source test_scripts/test-queue-status.sh
+        if run_queue_status_tests; then
+            log_info "队列状态测试完成"
+        else
+            log_error "队列状态测试失败"
+        fi
+        # 运行真实工作流触发测试
+        log_info "开始真实工作流触发测试"
+        source test_scripts/test-real-workflow-trigger.sh
+        if run_real_workflow_trigger_tests; then
+            log_info "真实工作流触发测试完成"
+        else
+            log_error "真实工作流触发测试失败"
+        fi
+        # 运行工具函数测试
+        log_info "开始工具函数测试"
+        source test_scripts/test-utils-tests.sh
+        if run_utils_tests; then
+            log_info "工具函数测试完成"
+        else
+            log_error "工具函数测试失败"
+        fi
+        # 显示测试结果
+        show_test_results
+        # 清理测试环境
+        cleanup_test_framework
+        # 根据测试结果设置退出码
+        if [ $TEST_FAIL_COUNT -gt 0 ]; then
+            exit 1
+        fi
+        exit 0
+    else
+        if run_specific_test "$test_name" "$@"; then
+            log_info "测试 $test_name 完成"
+        else
+            log_error "测试 $test_name 失败"
+        fi
+        show_test_results
+        cleanup_test_framework
+        exit $?
+    fi
+else
+    log_info "未提供测试参数。以下是可用的测试参数："
+    log_info "  - test-manual-trigger：运行手动触发测试"
+    log_info "  - test-issue-trigger：运行问题触发测试"
+    log_info "  - test-workflow-status：运行工作流状态测试"
+    log_info "  - test-queue-status：运行队列状态测试"
+    log_info "  - test-real-workflow-trigger：运行真实工作流触发测试"
+    log_info "  - test-utils：运行所有工具函数测试"
+    log_info "  - test-check-queue-length：测试检查队列长度函数"
+    log_info "  - test-check-queue-content：测试检查队列内容函数"
+    log_info "  - test-list-queue-management：测试列出队列管理内容函数"
+    log_info "  - test-check-workflow-count：测试检查工作流数量函数"
+    log_info "  - test-check-workflow-status：测试检查工作流状态函数"
+    log_info "  - test-read-workflow-logs：测试读取工作流日志函数"
+    log_info "  - test-get-latest-workflow-run-id：测试获取最近的工作流运行ID函数"
+    log_info "  - all：运行所有测试"
+    log_info "使用示例：./run-tests.sh test-manual-trigger"
+    log_info "可以通过 --log-level 参数设置日志级别，例如：./run-tests.sh --log-level debug test-manual-trigger"
+    log_info "对于特定测试，可以传递额外参数，例如：./run-tests.sh test-check-workflow-status failure"
+        exit 1
+    fi
