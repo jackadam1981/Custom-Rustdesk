@@ -235,12 +235,12 @@ function run_specific_test() {
     
     case "$test_name" in
         "test-manual-trigger")
-            source test_scripts/test-manual-trigger.sh
+            source test_scripts/manual-trigger.sh
             run_manual_trigger_tests "$@"
             return $?
             ;;
         "test-issue-trigger")
-            source test_scripts/test-issue-trigger.sh
+            source test_scripts/issue-trigger.sh
             run_issue_trigger_tests "$@"
             return $?
             ;;

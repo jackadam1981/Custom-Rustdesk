@@ -101,40 +101,64 @@ jobs:
           
           # 根据触发类型提取参数
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # 提取参数并设置环境变量
             params=$(trigger_manager "extract-workflow-dispatch" "$EVENT_DATA")
             echo "DEBUG: workflow_dispatch params = $params"
             eval "$params"
+            
+            # 应用默认值
+            final_params=$(trigger_manager "apply-defaults" "$EVENT_DATA")
+            echo "DEBUG: final_params = $final_params"
+            eval "$final_params"
+            
+            echo "DEBUG: After apply-defaults, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
+            
+            # 处理tag时间戳
+            final_tag=$(trigger_manager "process-tag" "$EVENT_DATA")
+            echo "DEBUG: final_tag = $final_tag"
+            
+            # 生成最终JSON数据
+            final_data=$(trigger_manager "generate-data" "$EVENT_DATA" "$final_tag")
+            echo "DEBUG: final_data = $final_data"
+            
+            # 验证参数
+            validation_result=$(trigger_manager "validate-parameters" "$final_data")
+            validation_exit_code=$?
+            echo "DEBUG: validation_result = $validation_result, exit_code = $validation_exit_code"
+            
+            # 输出到GitHub Actions
+            trigger_manager "output-to-github" "$final_data"
+            echo "DEBUG: output-to-github completed"
           else
+            # Issue触发的情况
             params=$(trigger_manager "extract-issue" "$EVENT_DATA")
             echo "DEBUG: issue params = $params"
             eval "$params"
+            
+            # 应用默认值
+            final_params=$(trigger_manager "apply-defaults" "$EVENT_DATA")
+            echo "DEBUG: final_params = $final_params"
+            eval "$final_params"
+            
+            echo "DEBUG: After apply-defaults, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
+            
+            # 处理tag时间戳
+            final_tag=$(trigger_manager "process-tag" "$EVENT_DATA")
+            echo "DEBUG: final_tag = $final_tag"
+            
+            # 生成最终JSON数据
+            final_data=$(trigger_manager "generate-data" "$EVENT_DATA" "$final_tag")
+            echo "DEBUG: final_data = $final_data"
+            
+            # 验证参数
+            validation_result=$(trigger_manager "validate-parameters" "$final_data")
+            validation_exit_code=$?
+            echo "DEBUG: validation_result = $validation_result, exit_code = $validation_exit_code"
+            
+            # 输出到GitHub Actions
+            trigger_manager "output-to-github" "$final_data"
+            echo "DEBUG: output-to-github completed"
           fi
-          
-          echo "DEBUG: After extract, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
-          
-          # 应用默认值
-          final_params=$(trigger_manager "apply-defaults" "$EVENT_DATA")
-          echo "DEBUG: final_params = $final_params"
-          eval "$final_params"
-          
-          echo "DEBUG: After apply-defaults, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
-          
-          # 处理tag时间戳
-          final_tag=$(trigger_manager "process-tag" "$EVENT_DATA")
-          echo "DEBUG: final_tag = $final_tag"
-          
-          # 生成最终JSON数据
-          final_data=$(trigger_manager "generate-data" "$EVENT_DATA" "$final_tag")
-          echo "DEBUG: final_data = $final_data"
-          
-          # 验证参数
-          validation_result=$(trigger_manager "validate-parameters" "$final_data")
-          validation_exit_code=$?
-          echo "DEBUG: validation_result = $validation_result, exit_code = $validation_exit_code"
-          
-          # 输出到GitHub Actions
-          trigger_manager "output-to-github" "$final_data"
-          echo "DEBUG: output-to-github completed"
           
           # 设置验证结果
           if [ $validation_exit_code -eq 0 ]; then
