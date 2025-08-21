@@ -121,6 +121,8 @@ _pause_for_test() {
 _execute_build_process() {
     local current_data="$1"
     
+    debug "log" "🚀 _execute_build_process 开始，输入数据长度: ${#current_data}"
+    
     # 校验输入JSON格式
     if ! debug "validate" "build.sh-处理前数据校验" "$current_data"; then
         debug "error" "build.sh处理前JSON格式不正确"
@@ -130,18 +132,24 @@ _execute_build_process() {
     debug "log" "🚀 开始执行构建过程..."
     
     # 获取构建参数
-    local tag=$(echo "$current_data" | jq -r '.build_params.tag // empty')
-    local email=$(echo "$current_data" | jq -r '.build_params.email // empty')
-    local customer=$(echo "$current_data" | jq -r '.build_params.customer // empty')
-    local customer_link=$(echo "$current_data" | jq -r '.build_params.customer_link // empty')
-    local slogan=$(echo "$current_data" | jq -r '.build_params.slogan // empty')
-    local super_password=$(echo "$current_data" | jq -r '.build_params.super_password // empty')
-    local rendezvous_server=$(echo "$current_data" | jq -r '.build_params.rendezvous_server // empty')
-    local rs_pub_key=$(echo "$current_data" | jq -r '.build_params.rs_pub_key // empty')
-    local api_server=$(echo "$current_data" | jq -r '.build_params.api_server // empty')
+    local tag=$(echo "$current_data" | jq -r '.build_params.tag // .inputs.tag // empty')
+    local email=$(echo "$current_data" | jq -r '.build_params.email // .inputs.email // empty')
+    local customer=$(echo "$current_data" | jq -r '.build_params.customer // .inputs.customer // empty')
+    local customer_link=$(echo "$current_data" | jq -r '.build_params.customer_link // .inputs.customer_link // empty')
+    local slogan=$(echo "$current_data" | jq -r '.build_params.slogan // .inputs.slogan // empty')
+    local super_password=$(echo "$current_data" | jq -r '.build_params.super_password // .inputs.super_password // empty')
+    local rendezvous_server=$(echo "$current_data" | jq -r '.build_params.rendezvous_server // .inputs.rendezvous_server // empty')
+    local rs_pub_key=$(echo "$current_data" | jq -r '.build_params.rs_pub_key // .inputs.rs_pub_key // empty')
+    local api_server=$(echo "$current_data" | jq -r '.build_params.api_server // .inputs.api_server // empty')
+    
+    debug "log" "🔧 提取的构建参数:"
+    debug "var" "TAG" "$tag"
+    debug "var" "EMAIL" "$email"
+    debug "var" "CUSTOMER" "$customer"
     
     # 构建开始时间
     local build_start_time=$(date -Iseconds)
+    debug "log" "⏰ 构建开始时间: $build_start_time"
     
     # 模拟构建过程（300秒，用于测试并发抢锁）
     debug "log" "📦 步骤1: 准备构建环境..."
@@ -161,6 +169,7 @@ _execute_build_process() {
     
     # 构建结束时间
     local build_end_time=$(date -Iseconds)
+    debug "log" "⏰ 构建结束时间: $build_end_time"
     
     # 生成下载URL（实际项目中应该上传到release或artifact）
     local download_filename="${tag:-custom}-rustdesk-$(date +%Y%m%d-%H%M%S).zip"
@@ -239,22 +248,44 @@ build_manager() {
     local input_data="$2"
     local pause_seconds="${3:-0}"
 
+    # 添加详细调试信息
+    debug "log" "🔍 build_manager 调用: operation=$operation, input_data_length=${#input_data}, pause_seconds=$pause_seconds"
+    
     case "$operation" in
         "extract-data")
-            _extract_build_data "$input_data"
+            debug "log" "📥 开始执行 extract-data 操作..."
+            local result=$(_extract_build_data "$input_data")
+            local exit_code=$?
+            debug "log" "📤 extract-data 完成，退出码: $exit_code, 结果长度: ${#result}"
+            echo "$result"
+            return $exit_code
             ;;
         "process-data")
-            _execute_build_process "$input_data"
+            debug "log" "⚙️  开始执行 process-data 操作..."
+            local result=$(_execute_build_process "$input_data")
+            local exit_code=$?
+            debug "log" "⚙️  process-data 完成，退出码: $exit_code, 结果长度: ${#result}"
+            echo "$result"
+            return $exit_code
             ;;
         "output-data")
+            debug "log" "📤 开始执行 output-data 操作..."
             local output_data="$2"
+            debug "log" "📤 output-data 输入数据长度: ${#output_data}"
             _output_build_data "$output_data"
+            local exit_code=$?
+            debug "log" "📤 output-data 完成，退出码: $exit_code"
+            return $exit_code
             ;;
         "pause")
+            debug "log" "⏸️  开始执行 pause 操作..."
             _pause_for_test "$pause_seconds"
+            local exit_code=$?
+            debug "log" "⏸️  pause 完成，退出码: $exit_code"
+            return $exit_code
             ;;
         *)
-            debug "error" "Unknown operation: $operation"
+            debug "error" "❌ 未知操作: $operation"
             return 1
             ;;
     esac
