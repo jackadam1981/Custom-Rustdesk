@@ -540,21 +540,21 @@ _cleanup_queue() {
 _reset_queue() {
   local build_id="${GITHUB_RUN_ID:-}"
   
-  echo "🔄 正在重置队列状态..."
+  echo "🔄 正在复位队列状态..."
   debug "log" "Resetting queue for $build_id"
   
-  # reset命令：完全忽略锁检查，直接强制重置
-  echo "🚀 管理命令：忽略锁检查，直接重置队列"
+  # reset命令：完全忽略锁检查，直接强制复位
+  echo "🚀 管理命令：忽略锁检查，直接复位队列"
   
-  # 强制重置为默认状态，确保完全清理
+  # 强制复位为默认状态，确保完全清理
   local default_data='{"version":1,"issue_locked_by":null,"build_locked_by":null,"issue_lock_version":1,"build_lock_version":1,"queue":[]}'
   
   if _update_queue_data "$default_data"; then
-    echo "✅ 队列重置成功"
+    echo "✅ 队列复位成功"
     debug "success" "Successfully force reset queue (ignoring all locks)"
     return 0
   else
-    echo "❌ 队列重置失败"
+    echo "❌ 队列复位失败"
     debug "error" "Failed to force reset queue"
     return 1
   fi

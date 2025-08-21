@@ -71,9 +71,6 @@ if [ $# -gt 0 ]; then
     fi
 else
     log_info "未提供测试参数。以下是可用的测试参数："
-    log_info "  - test-manual-trigger：运行手动触发测试"
-    log_info "  - test-issue-trigger：运行问题触发测试"
-    log_info "  - test-concurrent-trigger：运行并发触发测试"
     log_info "  - utils-tests：运行所有工具函数测试"
     log_info "  - utils-queue-length：测试检查队列长度函数"
     log_info "  - utils-queue-content：测试检查队列内容函数"
@@ -82,9 +79,15 @@ else
     log_info "  - utils-workflow-status：测试检查工作流状态函数"
     log_info "  - utils-workflow-logs：测试读取工作流日志函数"
     log_info "  - utils-latest-workflow-run：测试获取最近的工作流运行ID函数"
+    log_info "  - test-queue-reset：运行队列复位测试（清理所有锁和队列）"
+    log_info "  - test-manual-trigger：运行手动触发测试"
+    log_info "  - test-issue-trigger：运行问题触发测试"
+    log_info "  - test-concurrent-trigger：运行并发触发测试"
     log_info "  - all：运行所有测试"
+    log_info "使用示例：./run-tests.sh test-queue-reset"
     log_info "使用示例：./run-tests.sh test-manual-trigger"
-    log_info "可以通过 --log-level 参数设置日志级别，例如：./run-tests.sh --log-level debug test-manual-trigger"
+    log_info "可以通过 --log-level 参数设置日志级别，例如：./run-tests.sh --log-level debug test-queue-reset"
     log_info "对于特定测试，可以传递额外参数，例如：./run-tests.sh test-check-workflow-status failure"
+    log_info "建议先运行 test-queue-reset 清理队列状态，再运行其他测试"
     exit 1
 fi

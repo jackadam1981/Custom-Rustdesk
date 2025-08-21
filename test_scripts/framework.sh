@@ -144,8 +144,8 @@ function setup_test_environment() {
             export GITHUB_TOKEN
         else
             log_error "无法从gh auth token获取GITHUB_TOKEN，请确保已使用gh auth login进行身份验证"
-        return 1
-    fi
+            return 1
+        fi
     fi
     
     log_info "环境变量:"
@@ -238,6 +238,17 @@ function run_specific_test() {
             source test_scripts/manual-trigger.sh
             run_manual_trigger_tests "$@"
             return $?
+            ;;
+        "test-queue-reset")
+            log_info "🔄 运行队列复位测试..."
+            source test_scripts/utils-tests.sh
+            if test_utils_queue_reset; then
+                log_info "✅ 队列复位测试成功"
+                return 0
+            else
+                log_error "❌ 队列复位测试失败"
+                return 1
+            fi
             ;;
         "test-issue-trigger")
             source test_scripts/issue-trigger.sh

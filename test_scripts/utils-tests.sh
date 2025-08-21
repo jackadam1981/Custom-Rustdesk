@@ -174,6 +174,33 @@ function test_utils_latest_workflow_run() {
         return 0
 }
 
+# 测试队列复位功能
+function test_utils_queue_reset() {
+    log_info "测试队列复位功能..."
+    
+    # 设置环境
+    export GITHUB_RUN_ID="reset-$(date +%s)"
+    export DEBUG_ENABLED="true"
+    
+    log_info "环境设置: GITHUB_RUN_ID=$GITHUB_RUN_ID"
+    
+    # 加载队列管理器
+    source .github/workflows/scripts/queue-manager.sh
+    
+    log_info "执行队列复位..."
+    
+    # 直接执行复位
+    if queue_manager 'queue_lock' 'reset'; then
+        log_info "队列复位测试成功"
+        record_test_result "utils_queue_reset" "PASS" "队列复位功能正常"
+        return 0
+    else
+        log_error "队列复位测试失败"
+        record_test_result "utils_queue_reset" "FAIL" "队列复位功能异常"
+        return 1
+    fi
+}
+
 # 运行所有工具函数测试
 function run_utils_tests() {
     log_info "开始运行工具函数测试..."
@@ -185,6 +212,7 @@ function run_utils_tests() {
     test_utils_workflow_status || failed=1
     test_utils_workflow_logs || failed=1
     test_utils_latest_workflow_run || failed=1
+    test_utils_queue_reset || failed=1
     log_info "工具函数测试完成"
     return $failed
 }
