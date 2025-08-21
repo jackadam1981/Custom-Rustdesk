@@ -14,17 +14,48 @@ _extract_build_data() {
         return 1
     fi
     
-    # 从build_params中提取构建参数
-    local tag=$(echo "$input" | jq -r '.build_params.tag // empty')
-    local original_tag=$(echo "$input" | jq -r '.build_params.original_tag // empty')
-    local email=$(echo "$input" | jq -r '.build_params.email // empty')
-    local customer=$(echo "$input" | jq -r '.build_params.customer // empty')
-    local customer_link=$(echo "$input" | jq -r '.build_params.customer_link // empty')
-    local slogan=$(echo "$input" | jq -r '.build_params.slogan // empty')
-    local super_password=$(echo "$input" | jq -r '.build_params.super_password // empty')
-    local rendezvous_server=$(echo "$input" | jq -r '.build_params.rendezvous_server // empty')
-    local rs_pub_key=$(echo "$input" | jq -r '.build_params.rs_pub_key // empty')
-    local api_server=$(echo "$input" | jq -r '.build_params.api_server // empty')
+    # 检查数据格式：可能是 github.event 格式（有 inputs）或已处理格式（有 build_params）
+    local tag=""
+    local original_tag=""
+    local email=""
+    local customer=""
+    local customer_link=""
+    local slogan=""
+    local super_password=""
+    local rendezvous_server=""
+    local rs_pub_key=""
+    local api_server=""
+    
+    # 尝试从 build_params 提取（已处理格式）
+    if echo "$input" | jq -e '.build_params' > /dev/null 2>&1; then
+        debug "log" "从 build_params 提取构建参数"
+        tag=$(echo "$input" | jq -r '.build_params.tag // empty')
+        original_tag=$(echo "$input" | jq -r '.build_params.original_tag // empty')
+        email=$(echo "$input" | jq -r '.build_params.email // empty')
+        customer=$(echo "$input" | jq -r '.build_params.customer // empty')
+        customer_link=$(echo "$input" | jq -r '.build_params.customer_link // empty')
+        slogan=$(echo "$input" | jq -r '.build_params.slogan // empty')
+        super_password=$(echo "$input" | jq -r '.build_params.super_password // empty')
+        rendezvous_server=$(echo "$input" | jq -r '.build_params.rendezvous_server // empty')
+        rs_pub_key=$(echo "$input" | jq -r '.build_params.rs_pub_key // empty')
+        api_server=$(echo "$input" | jq -r '.build_params.api_server // empty')
+    # 尝试从 inputs 提取（github.event 格式）
+    elif echo "$input" | jq -e '.inputs' > /dev/null 2>&1; then
+        debug "log" "从 inputs 提取构建参数"
+        tag=$(echo "$input" | jq -r '.inputs.tag // empty')
+        original_tag=$(echo "$input" | jq -r '.inputs.tag // empty')  # 对于 inputs，original_tag 就是 tag
+        email=$(echo "$input" | jq -r '.inputs.email // empty')
+        customer=$(echo "$input" | jq -r '.inputs.customer // empty')
+        customer_link=$(echo "$input" | jq -r '.inputs.customer_link // empty')
+        slogan=$(echo "$input" | jq -r '.inputs.slogan // empty')
+        super_password=$(echo "$input" | jq -r '.inputs.super_password // empty')
+        rendezvous_server=$(echo "$input" | jq -r '.inputs.rendezvous_server // empty')
+        rs_pub_key=$(echo "$input" | jq -r '.inputs.rs_pub_key // empty')
+        api_server=$(echo "$input" | jq -r '.inputs.api_server // empty')
+    else
+        debug "error" "无法识别的数据格式，缺少 build_params 或 inputs 字段"
+        return 1
+    fi
     
     # 验证必要参数
     if [ -z "$email" ]; then
