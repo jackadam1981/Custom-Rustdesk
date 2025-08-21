@@ -48,9 +48,6 @@ function test_manual_trigger_build() {
         -f customer="$customer" \
         -f email="$email" \
         -f super_password="$super_password" \
-        -f customer="$customer" \
-        -f email="$email" \
-        -f super_password="$super_password" \
         -f rendezvous_server="$rendezvous_server" \
         -f api_server="$api_server" \
         -f slogan="$slogan" \
@@ -94,33 +91,14 @@ function test_manual_trigger_build() {
     fi
 }
 
-# 测试手动触发参数验证
-function test_manual_trigger_validation() {
-    log_info "测试手动触发参数验证..."
-    
-    # 测试缺少必需参数的情况
-    local invalid_output=$(gh workflow run .github/workflows/CustomBuildRustdesk.yml \
-        -f tag="" \
-        -f customer="" \
-        2>&1)
-    
-    if echo "$invalid_output" | grep -q "error\|Error\|ERROR"; then
-        log_info "参数验证正常，缺少必需参数时正确报错"
-        record_test_result "manual_trigger_validation" "PASS" "参数验证正常"
-        return 0
-    else
-        log_warn "参数验证可能存在问题"
-        record_test_result "manual_trigger_validation" "PASS" "手动触发构建成功"
-        return 0
-    fi
-}
-
 # 运行所有手动触发测试
 function run_manual_trigger_tests() {
     log_info "开始运行手动触发测试..."
     local failed=0
     
-    test_manual_trigger_validation || failed=1
+    # 移除参数验证测试，因为后续工作脚本已有参数验证
+    # test_manual_trigger_validation || failed=1
+    
     test_manual_trigger_build || failed=1
     
     log_info "手动触发测试完成"
