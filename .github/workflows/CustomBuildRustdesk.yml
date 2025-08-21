@@ -106,12 +106,7 @@ jobs:
             echo "DEBUG: workflow_dispatch params = $params"
             eval "$params"
             
-            # 应用默认值
-            final_params=$(trigger_manager "apply-defaults" "$EVENT_DATA")
-            echo "DEBUG: final_params = $final_params"
-            eval "$final_params"
-            
-            echo "DEBUG: After apply-defaults, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
+            echo "DEBUG: After extract, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
             
             # 处理tag时间戳
             final_tag=$(trigger_manager "process-tag" "$EVENT_DATA")
@@ -135,12 +130,7 @@ jobs:
             echo "DEBUG: issue params = $params"
             eval "$params"
             
-            # 应用默认值
-            final_params=$(trigger_manager "apply-defaults" "$EVENT_DATA")
-            echo "DEBUG: final_params = $final_params"
-            eval "$final_params"
-            
-            echo "DEBUG: After apply-defaults, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
+            echo "DEBUG: After extract, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
             
             # 处理tag时间戳
             final_tag=$(trigger_manager "process-tag" "$EVENT_DATA")
