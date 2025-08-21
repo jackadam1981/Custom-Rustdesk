@@ -76,19 +76,34 @@ _extract_build_data() {
     debug "var" "RS_PUB_KEY" "$rs_pub_key"
     debug "var" "API_SERVER" "$api_server"
     
-    # 设置环境变量供后续步骤使用
-    echo "BUILD_TAG=$tag" >> $GITHUB_ENV
-    echo "BUILD_ORIGINAL_TAG=$original_tag" >> $GITHUB_ENV
-    echo "BUILD_EMAIL=$email" >> $GITHUB_ENV
-    echo "BUILD_CUSTOMER=$customer" >> $GITHUB_ENV
-    echo "BUILD_CUSTOMER_LINK=$customer_link" >> $GITHUB_ENV
-    echo "BUILD_SLOGAN=$slogan" >> $GITHUB_ENV
-    echo "BUILD_SUPER_PASSWORD=$super_password" >> $GITHUB_ENV
-    echo "BUILD_RENDEZVOUS_SERVER=$rendezvous_server" >> $GITHUB_ENV
-    echo "BUILD_RS_PUB_KEY=$rs_pub_key" >> $GITHUB_ENV
-    echo "BUILD_API_SERVER=$api_server" >> $GITHUB_ENV
+    # 设置环境变量供后续步骤使用（仅在 GitHub Actions 环境中）
+    if [ -n "$GITHUB_ENV" ]; then
+        echo "BUILD_TAG=$tag" >> $GITHUB_ENV
+        echo "BUILD_ORIGINAL_TAG=$original_tag" >> $GITHUB_ENV
+        echo "BUILD_EMAIL=$email" >> $GITHUB_ENV
+        echo "BUILD_CUSTOMER=$customer" >> $GITHUB_ENV
+        echo "BUILD_CUSTOMER_LINK=$customer_link" >> $GITHUB_ENV
+        echo "BUILD_SLOGAN=$slogan" >> $GITHUB_ENV
+        echo "BUILD_SUPER_PASSWORD=$super_password" >> $GITHUB_ENV
+        echo "BUILD_RENDEZVOUS_SERVER=$rendezvous_server" >> $GITHUB_ENV
+        echo "BUILD_RS_PUB_KEY=$rs_pub_key" >> $GITHUB_ENV
+        echo "BUILD_API_SERVER=$api_server" >> $GITHUB_ENV
+        echo "CURRENT_DATA=$input" >> $GITHUB_ENV
+    else
+        # 本地测试环境：输出到标准输出
+        echo "BUILD_TAG=$tag" >&2
+        echo "BUILD_ORIGINAL_TAG=$original_tag" >&2
+        echo "BUILD_EMAIL=$email" >&2
+        echo "BUILD_CUSTOMER=$customer" >&2
+        echo "BUILD_CUSTOMER_LINK=$customer_link" >&2
+        echo "BUILD_SLOGAN=$slogan" >&2
+        echo "BUILD_SUPER_PASSWORD=$super_password" >&2
+        echo "BUILD_RENDEZVOUS_SERVER=$rendezvous_server" >&2
+        echo "BUILD_RS_PUB_KEY=$rs_pub_key" >&2
+        echo "BUILD_API_SERVER=$api_server" >&2
+        echo "CURRENT_DATA=$input" >&2
+    fi
     
-    echo "CURRENT_DATA=$input" >> $GITHUB_ENV
     echo "$input"
 }
 
