@@ -82,7 +82,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_id: ${{ steps.trigger.outputs.build_id }}
-      trigger_data: ${{ steps.trigger.outputs.trigger_data }}
       validation_passed: ${{ steps.trigger.outputs.validation_passed }}
     steps:
       - name: Checkout code
@@ -100,8 +99,8 @@ jobs:
           echo "DEBUG: github.event.issue.number = ${{ github.event.issue.number }}"
           
           # 添加更详细的调试信息
-          echo "DEBUG: github.event 类型: $(echo '${{ github.event }}' | jq -r 'type // "unknown"')"
-          echo "DEBUG: github.event 内容: ${{ github.event }}"
+          echo "DEBUG: github.event 类型: object"
+          echo "DEBUG: github.event 内容: Object"
           
           # 根据触发类型提取参数
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -128,10 +127,10 @@ jobs:
             validation_exit_code=$?
             echo "DEBUG: validation_result = $validation_result, exit_code = $validation_exit_code"
             
-            # 输出到GitHub Actions
-            echo "DEBUG: 准备调用 output-to-github，final_data = $final_data"
-            trigger_manager "output-to-github" "$final_data"
-            echo "DEBUG: output-to-github completed"
+            # 只输出build_id，不输出trigger_data
+            build_id=$(echo "$final_data" | jq -r '.build_id // empty')
+            echo "build_id=$build_id" >> $GITHUB_OUTPUT
+            echo "DEBUG: build_id output completed"
           else
             echo "DEBUG: 进入 issue 分支"
             # Issue触发的情况
@@ -156,10 +155,10 @@ jobs:
             validation_exit_code=$?
             echo "DEBUG: validation_result = $validation_result, exit_code = $validation_exit_code"
             
-            # 输出到GitHub Actions
-            echo "DEBUG: 准备调用 output-to-github，final_data = $final_data"
-            trigger_manager "output-to-github" "$final_data"
-            echo "DEBUG: output-to-github completed"
+            # 只输出build_id，不输出trigger_data
+            build_id=$(echo "$final_data" | jq -r '.build_id // empty')
+            echo "build_id=$build_id" >> $GITHUB_OUTPUT
+            echo "DEBUG: build_id output completed"
           fi
           
           # 设置验证结果
@@ -184,38 +183,36 @@ jobs:
       - name: Review and validate
         id: review
         shell: bash
-        env:
-          TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
         run: |
           source .github/workflows/scripts/review.sh
 
-          # 重新获取 github.event
+          # 直接使用 github.event
           EVENT_DATA='${{ toJSON(github.event) }}'
           
           # 验证参数
-          validation_result=$(review_manager "validate" "$EVENT_DATA" "$TRIGGER_DATA" || true)
+          validation_result=$(review_manager "validate" "$EVENT_DATA" "" || true)
           validation_exit_code=$?
           
           if [ $validation_exit_code -ne 0 ]; then
             # 参数验证失败，处理拒绝
-            review_manager "handle-rejection" "$EVENT_DATA" "$TRIGGER_DATA" "$validation_result" || true
+            review_manager "handle-rejection" "$EVENT_DATA" "" "$validation_result" || true
             echo "review_passed=false" >> $GITHUB_OUTPUT
             echo "review_reason=参数验证失败" >> $GITHUB_OUTPUT
             exit 0
           fi
           
           # 检查是否需要审核
-          need_review=$(review_manager "need-review" "$EVENT_DATA" "$TRIGGER_DATA" || true)
+          need_review=$(review_manager "need-review" "$EVENT_DATA" "" || true)
           
           # 如果是issue触发，清理issue内容
           if [ "${{ github.event_name }}" = "issues" ]; then
             source .github/workflows/scripts/trigger.sh
             
-            # 从TRIGGER_DATA中提取参数用于清理
-            final_tag_param=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
-            original_tag_param=$(echo "$TRIGGER_DATA" | jq -r '.build_params.original_tag // empty')
-            customer_param=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
-            slogan_param=$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')
+            # 从EVENT_DATA中提取参数用于清理
+            final_tag_param=$(echo "$EVENT_DATA" | jq -r '.build_params.tag // empty')
+            original_tag_param=$(echo "$EVENT_DATA" | jq -r '.build_params.original_tag // empty')
+            customer_param=$(echo "$EVENT_DATA" | jq -r '.build_params.customer // empty')
+            slogan_param=$(echo "$EVENT_DATA" | jq -r '.build_params.slogan // empty')
             
             cleaned_body=$(trigger_manager "clean-issue" "$final_tag_param" "$original_tag_param" "$customer_param" "$slogan_param")
             issue_number="${{ github.event.issue.number }}"
@@ -226,13 +223,13 @@ jobs:
             # 需要审核，在issue中回复需要审核的信息
             if [ "${{ github.event_name }}" = "issues" ]; then
               source .github/workflows/scripts/issue-templates.sh
-              review_comment=$(generate_review_required_template "${{ github.run_id }}" "${{ github.event.issue.number }}" "$TRIGGER_DATA")
+              review_comment=$(generate_review_required_template "${{ github.run_id }}" "${{ github.event.issue.number }}" "$EVENT_DATA")
               source .github/workflows/scripts/issue-manager.sh
               add_issue_comment "${{ github.event.issue.number }}" "$review_comment" || true
             fi
             
             # 处理审核流程
-            review_result=$(review_manager "handle-review" "$EVENT_DATA" "$TRIGGER_DATA" || true)
+            review_result=$(review_manager "handle-review" "$EVENT_DATA" "" || true)
             review_exit_code=$?
             
             if [ $review_exit_code -eq 0 ]; then
@@ -252,7 +249,7 @@ jobs:
           fi
           
           # 输出数据（传递审核结果）
-          review_manager "output-data" "$EVENT_DATA" "$TRIGGER_DATA" "$([ "$need_review" = "true" ] && [ $review_exit_code -eq 1 ] && echo "true" || echo "false")" "$([ "$need_review" = "true" ] && [ $review_exit_code -eq 2 ] && echo "true" || echo "false")" || true
+          review_manager "output-data" "$EVENT_DATA" "" "$([ "$need_review" = "true" ] && [ $review_exit_code -eq 1 ] && echo "true" || echo "false")" "$([ "$need_review" = "true" ] && [ $review_exit_code -eq 2 ] && echo "true" || echo "false")" || true
 
   # 02-加入队列
   join-queue:
@@ -269,17 +266,49 @@ jobs:
       - name: Join build queue
         id: join-queue
         env:
-          TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
           DEBUG_ENABLED: true
         run: |
           source .github/workflows/scripts/queue-manager.sh
 
+          # 直接使用 github.event
+          EVENT_DATA='${{ toJSON(github.event) }}'
+          
           # 加入队列
           echo "Joining build queue..."
-          echo "DEBUG: TRIGGER_DATA = $TRIGGER_DATA"
+          echo "DEBUG: EVENT_DATA = $EVENT_DATA"
           echo "DEBUG: GITHUB_RUN_ID = $GITHUB_RUN_ID"
           
-          join_result=$(queue_manager 'queue_lock' 'join' "$TRIGGER_DATA")
+          # 在需要时间戳的地方及时生成
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # 手动触发：生成带时间戳的标签
+            local tag="${{ github.event.inputs.tag }}"
+            local timestamp=$(date '+%Y%m%d-%H%M%S')
+            local final_tag="${tag}-${timestamp}"
+            
+            # 构建完整的触发数据
+            local trigger_data=$(jq -c -n \
+              --arg build_id "$GITHUB_RUN_ID" \
+              --arg trigger_type "workflow_dispatch" \
+              --arg issue_number "null" \
+              --arg tag "$final_tag" \
+              --arg original_tag "$tag" \
+              --arg email "${{ github.event.inputs.email }}" \
+              --arg customer "${{ github.event.inputs.customer }}" \
+              --arg customer_link "${{ github.event.inputs.customer_link }}" \
+              --arg super_password "${{ github.event.inputs.super_password }}" \
+              --arg slogan "${{ github.event.inputs.slogan }}" \
+              --arg rendezvous_server "${{ github.event.inputs.rendezvous_server }}" \
+              --arg rs_pub_key "${{ github.event.inputs.rs_pub_key }}" \
+              --arg api_server "${{ github.event.inputs.api_server }}" \
+              '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, rs_pub_key: $rs_pub_key, api_server: $api_server}}')
+          else
+            # Issue触发：使用原始数据
+            local trigger_data="$EVENT_DATA"
+          fi
+          
+          echo "DEBUG: Generated trigger_data = $trigger_data"
+          
+          join_result=$(queue_manager 'queue_lock' 'join' "$trigger_data")
           join_exit_code=$?
           
           # 检查加入结果
