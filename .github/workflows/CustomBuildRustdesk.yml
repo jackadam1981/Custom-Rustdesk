@@ -281,12 +281,12 @@ jobs:
           # 在需要时间戳的地方及时生成
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             # 手动触发：生成带时间戳的标签
-            local tag="${{ github.event.inputs.tag }}"
-            local timestamp=$(date '+%Y%m%d-%H%M%S')
-            local final_tag="${tag}-${timestamp}"
+            tag="${{ github.event.inputs.tag }}"
+            timestamp=$(date '+%Y%m%d-%H%M%S')
+            final_tag="${tag}-${timestamp}"
             
             # 构建完整的触发数据
-            local trigger_data=$(jq -c -n \
+            trigger_data=$(jq -c -n \
               --arg build_id "$GITHUB_RUN_ID" \
               --arg trigger_type "workflow_dispatch" \
               --arg issue_number "null" \
@@ -303,7 +303,7 @@ jobs:
               '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, rs_pub_key: $rs_pub_key, api_server: $api_server}}')
           else
             # Issue触发：使用原始数据
-            local trigger_data="$EVENT_DATA"
+            trigger_data="$EVENT_DATA"
           fi
           
           echo "DEBUG: Generated trigger_data = $trigger_data"
