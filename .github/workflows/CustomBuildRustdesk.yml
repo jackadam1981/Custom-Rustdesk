@@ -338,14 +338,20 @@ jobs:
         
       - name: Wait for build lock
         id: wait-build-lock
-        env:
-          DEBUG_ENABLED: true
         run: |
           source .github/workflows/scripts/queue-manager.sh
-
+          
           # 获取构建锁
           echo "Acquiring build lock..."
           echo "DEBUG: GITHUB_RUN_ID = $GITHUB_RUN_ID"
+          
+          # 在等待构建锁之前，先尝试清理队列中的超期任务
+          echo "🧹 在等待构建锁之前，先清理队列中的超期任务..."
+          if cleanup_queue; then
+            echo "✅ 队列清理完成"
+          else
+            echo "⚠️ 队列清理失败，继续等待构建锁"
+          fi
           
           if queue_manager 'build_lock' 'acquire'; then
             echo "✅ Successfully acquired build lock"

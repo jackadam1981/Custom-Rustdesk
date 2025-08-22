@@ -459,6 +459,7 @@ _cleanup_queue() {
   fi
   
   _load_queue_data
+  # 保持6小时超时时间，这是合理的业务超时
   local cutoff_time=$(date -d "6 hours ago" '+%Y-%m-%d %H:%M:%S')
   
   # 获取队列中的run_ids
@@ -466,45 +467,83 @@ _cleanup_queue() {
   
   # 检查每个run_id的状态
   local cleaned_queue="[]"
+  local cleaned_count=0
+  local total_count=0
+  
   if [ -n "$queue_run_ids" ]; then
     for run_id in $queue_run_ids; do
+      total_count=$((total_count + 1))
       local should_keep=true
+      local cleanup_reason=""
       
       # 检查时间（超过6小时的任务）
       local join_time=$(echo "$QUEUE_DATA" | jq -r --arg rid "$run_id" '.queue[] | select(.run_id == $rid) | .join_time')
       if [ "$join_time" != "null" ] && [ "$join_time" \< "$cutoff_time" ]; then
-        debug "log" "Removing old task: $run_id (join_time: $join_time)"
+        cleanup_reason="超时任务 (join_time: $join_time, cutoff: $cutoff_time)"
         should_keep=false
+        cleaned_count=$((cleaned_count + 1))
       fi
       
       # 检查GitHub Actions状态（如果run_id看起来像真实的run ID）
       if [[ "$run_id" =~ ^[0-9]+$ ]] && [ "$should_keep" = true ]; then
-        local run_status=$(gh run view "$run_id" --json status,conclusion 2>/dev/null | jq -r '.status // empty')
+        local run_status=""
+        local run_conclusion=""
+        
+        # 尝试获取工作流状态，添加错误处理
+        local run_info=$(gh run view "$run_id" --json status,conclusion 2>/dev/null)
+        if [ $? -eq 0 ] && [ -n "$run_info" ]; then
+          run_status=$(echo "$run_info" | jq -r '.status // empty')
+          run_conclusion=$(echo "$run_info" | jq -r '.conclusion // empty')
+          debug "log" "Run $run_id status: $run_status, conclusion: $run_conclusion"
+        else
+          debug "log" "Failed to get status for run $run_id, treating as invalid"
+          run_status="unknown"
+        fi
+        
+        # 更全面的状态检查
         if [ "$run_status" = "completed" ]; then
-          debug "log" "Removing completed task: $run_id"
+          cleanup_reason="已完成任务 (status: $run_status, conclusion: $run_conclusion)"
           should_keep=false
+          cleaned_count=$((cleaned_count + 1))
         elif [ "$run_status" = "failure" ]; then
-          debug "log" "Removing failed task: $run_id"
+          cleanup_reason="失败任务 (status: $run_status, conclusion: $run_conclusion)"
           should_keep=false
+          cleaned_count=$((cleaned_count + 1))
         elif [ "$run_status" = "cancelled" ]; then
-          debug "log" "Removing cancelled task: $run_id"
+          cleanup_reason="已取消任务 (status: $run_status, conclusion: $run_conclusion)"
           should_keep=false
+          cleaned_count=$((cleaned_count + 1))
         elif [ "$run_status" = "timed_out" ]; then
-          debug "log" "Removing timed out task: $run_id"
+          cleanup_reason="超时任务 (status: $run_status, conclusion: $run_conclusion)"
           should_keep=false
+          cleaned_count=$((cleaned_count + 1))
         elif [ "$run_status" = "skipped" ]; then
-          debug "log" "Removing skipped task: $run_id"
+          cleanup_reason="已跳过任务 (status: $run_status, conclusion: $run_conclusion)"
           should_keep=false
-        elif [ -z "$run_status" ]; then
-          debug "log" "Removing non-existent task: $run_id"
+          cleaned_count=$((cleaned_count + 1))
+        elif [ "$run_status" = "unknown" ] || [ -z "$run_status" ]; then
+          cleanup_reason="状态未知/无效任务 (status: $run_status)"
           should_keep=false
+          cleaned_count=$((cleaned_count + 1))
+        elif [ "$run_status" = "in_progress" ] || [ "$run_status" = "queued" ] || [ "$run_status" = "waiting" ]; then
+          debug "log" "保留活跃任务: $run_id (status: $run_status)"
+        else
+          cleanup_reason="未知状态任务 (status: $run_status)，为安全起见移除"
+          should_keep=false
+          cleaned_count=$((cleaned_count + 1))
         fi
       fi
       
       # 检查无效格式的run_id
       if [ -z "$run_id" ] || [ "$run_id" = "null" ] || [ "$run_id" = "undefined" ]; then
-        debug "log" "Removing task with invalid run_id: $run_id"
+        cleanup_reason="无效run_id格式: $run_id"
         should_keep=false
+        cleaned_count=$((cleaned_count + 1))
+      fi
+      
+      # 记录清理原因
+      if [ "$should_keep" = false ] && [ -n "$cleanup_reason" ]; then
+        debug "log" "移除任务 $run_id: $cleanup_reason"
       fi
       
       # 保留应该保留的任务
@@ -515,6 +554,8 @@ _cleanup_queue() {
     done
   fi
   
+  debug "log" "队列清理统计: $cleaned_count/$total_count 个任务被移除"
+  
   local cleaned_data=$(echo "$QUEUE_DATA" | jq --argjson cleaned_queue "$cleaned_queue" '
     .queue = $cleaned_queue |
     .version = (.version // 0) + 1
@@ -522,16 +563,16 @@ _cleanup_queue() {
 
   if [ "$cleaned_data" != "$QUEUE_DATA" ]; then
     if _update_queue_data "$cleaned_data"; then
-      debug "success" "Queue cleaned up"
+      debug "success" "队列清理完成: $cleaned_count 个任务被移除"
       _release_lock "issue" "$build_id"
       return 0
     else
-      debug "error" "Failed to cleanup queue"
+      debug "error" "队列清理失败"
       _release_lock "issue" "$build_id"
       return 1
     fi
   else
-    debug "log" "No cleanup needed"
+    debug "log" "无需清理"
     _release_lock "issue" "$build_id"
     return 0
   fi
