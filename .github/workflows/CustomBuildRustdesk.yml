@@ -416,8 +416,8 @@ jobs:
           fi
           
           echo "✅ 构建数据处理成功，开始输出构建数据..."
-          # 输出构建数据
-          build_manager "output-data" "$processed_data"
+          # 输出构建数据并捕获输出变量
+          output_result=$(build_manager "output-data" "$processed_data")
           output_exit_code=$?
           echo "🔍 output-data 退出码: $output_exit_code"
           
@@ -427,6 +427,34 @@ jobs:
             echo "download_url=" >> $GITHUB_OUTPUT
             echo "error_message=Failed to output build data" >> $GITHUB_OUTPUT
             exit 1
+          fi
+          
+          # 从输出结果中提取变量并设置到 GitHub Actions 输出
+          if [ -n "$output_result" ]; then
+            # 提取 build_success
+            local build_success=$(echo "$output_result" | jq -r '.built // false' 2>/dev/null || echo "false")
+            echo "build_success=$build_success" >> $GITHUB_OUTPUT
+            
+            # 提取 download_url
+            local download_url=$(echo "$output_result" | jq -r '.download_url // empty' 2>/dev/null || echo "")
+            echo "download_url=$download_url" >> $GITHUB_OUTPUT
+            
+            # 提取 error_message
+            local error_message=""
+            if [ "$build_success" != "true" ]; then
+              error_message="构建过程失败"
+            fi
+            echo "error_message=$error_message" >> $GITHUB_OUTPUT
+            
+            echo "🔍 已设置 GitHub Actions 输出变量:"
+            echo "  - build_success: $build_success"
+            echo "  - download_url: $download_url"
+            echo "  - error_message: $error_message"
+          else
+            echo "⚠️ 输出结果为空，设置默认值"
+            echo "build_success=false" >> $GITHUB_OUTPUT
+            echo "download_url=" >> $GITHUB_OUTPUT
+            echo "error_message=输出结果为空" >> $GITHUB_OUTPUT
           fi
           
           echo "✅ 构建过程执行完成！"
