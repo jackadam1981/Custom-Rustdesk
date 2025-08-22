@@ -104,7 +104,34 @@ _extract_build_data() {
         echo "CURRENT_DATA=$input" >&2
     fi
     
-    echo "$input"
+    # 构建包含 build_params 的输出数据
+    local output_data=$(echo "$input" | jq -c \
+        --arg tag "$tag" \
+        --arg original_tag "$original_tag" \
+        --arg email "$email" \
+        --arg customer "$customer" \
+        --arg customer_link "$customer_link" \
+        --arg slogan "$slogan" \
+        --arg super_password "$super_password" \
+        --arg rendezvous_server "$rendezvous_server" \
+        --arg rs_pub_key "$rs_pub_key" \
+        --arg api_server "$api_server" \
+        '. + {
+            build_params: {
+                tag: $tag,
+                original_tag: $original_tag,
+                email: $email,
+                customer: $customer,
+                customer_link: $customer_link,
+                slogan: $slogan,
+                super_password: $super_password,
+                rendezvous_server: $rendezvous_server,
+                rs_pub_key: $rs_pub_key,
+                api_server: $api_server
+            }
+        }')
+    
+    echo "$output_data"
 }
 
 # 暂停构建（用于队列测试）

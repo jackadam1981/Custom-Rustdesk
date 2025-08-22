@@ -873,3 +873,54 @@ queue_manager() {
     ;;
   esac
 }
+
+# 公共接口函数（为工作流提供正确的函数名）
+# 这些函数是 _cleanup_queue 和 _release_build_lock 的公共接口
+
+# 清理队列的公共接口
+cleanup_queue() {
+    debug "log" "Public interface: cleanup_queue() called"
+    _cleanup_queue
+    return $?
+}
+
+# 释放所有锁的公共接口
+release_all_locks() {
+    local build_id="${GITHUB_RUN_ID:-}"
+    debug "log" "Public interface: release_all_locks() called for $build_id"
+    
+    # 释放构建锁
+    local build_lock_result=0
+    if _release_build_lock; then
+        debug "success" "Build lock released successfully"
+        build_lock_result=0
+    else
+        debug "warning" "Failed to release build lock"
+        build_lock_result=1
+    fi
+    
+    # 释放问题锁（如果当前持有）
+    local issue_lock_result=0
+    local current_issue_holder=$(echo "$QUEUE_DATA" | jq -r '.issue_locked_by // null')
+    if [ "$current_issue_holder" = "$build_id" ]; then
+        if _release_lock "issue" "$build_id"; then
+            debug "success" "Issue lock released successfully"
+            issue_lock_result=0
+        else
+            debug "warning" "Failed to release issue lock"
+            issue_lock_result=1
+        fi
+    else
+        debug "log" "Issue lock not held by current build, skipping release"
+        issue_lock_result=0
+    fi
+    
+    # 返回总体结果
+    if [ $build_lock_result -eq 0 ] && [ $issue_lock_result -eq 0 ]; then
+        debug "success" "All locks released successfully"
+        return 0
+    else
+        debug "warning" "Some locks failed to release"
+        return 1
+    fi
+}
