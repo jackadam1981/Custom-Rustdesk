@@ -390,16 +390,16 @@ jobs:
           echo "🔍 EVENT_DATA 前100字符: ${EVENT_DATA:0:100}..."
           
           # 从 GitHub event 中直接提取构建参数
-          local tag=$(echo "$EVENT_DATA" | jq -r '.inputs.tag // empty')
-          local customer=$(echo "$EVENT_DATA" | jq -r '.inputs.customer // empty')
-          local customer_link=$(echo "$EVENT_DATA" | jq -r '.inputs.customer_link // empty')
-          local slogan=$(echo "$EVENT_DATA" | jq -r '.inputs.slogan // empty')
-          local email=$(echo "$EVENT_DATA" | jq -r '.inputs.email // empty')
-          local super_password=$(echo "$EVENT_DATA" | jq -r '.inputs.super_password // empty')
-          local rendezvous_server=$(echo "$EVENT_DATA" | jq -r '.inputs.rendezvous_server // empty')
-          local rs_pub_key=$(echo "$EVENT_DATA" | jq -r '.inputs.rs_pub_key // empty')
-          local api_server=$(echo "$EVENT_DATA" | jq -r '.inputs.api_server // empty')
-          local enable_debug=$(echo "$EVENT_DATA" | jq -r '.inputs.enable_debug // empty')
+          tag=$(echo "$EVENT_DATA" | jq -r '.inputs.tag // empty')
+          customer=$(echo "$EVENT_DATA" | jq -r '.inputs.customer // empty')
+          customer_link=$(echo "$EVENT_DATA" | jq -r '.inputs.customer_link // empty')
+          slogan=$(echo "$EVENT_DATA" | jq -r '.inputs.slogan // empty')
+          email=$(echo "$EVENT_DATA" | jq -r '.inputs.email // empty')
+          super_password=$(echo "$EVENT_DATA" | jq -r '.inputs.super_password // empty')
+          rendezvous_server=$(echo "$EVENT_DATA" | jq -r '.inputs.rendezvous_server // empty')
+          rs_pub_key=$(echo "$EVENT_DATA" | jq -r '.inputs.rs_pub_key // empty')
+          api_server=$(echo "$EVENT_DATA" | jq -r '.inputs.api_server // empty')
+          enable_debug=$(echo "$EVENT_DATA" | jq -r '.inputs.enable_debug // empty')
           
           echo "🔍 提取的构建参数:"
           echo "  - tag: $tag"
@@ -414,9 +414,9 @@ jobs:
           echo "  - enable_debug: $enable_debug"
           
           # 设置构建状态（这里可以根据实际需要调整逻辑）
-          local build_success="true"
-          local download_url=""
-          local error_message=""
+          build_success="true"
+          download_url=""
+          error_message=""
           
           # 设置 GitHub Actions 输出变量
           echo "build_success=$build_success" >> $GITHUB_OUTPUT
