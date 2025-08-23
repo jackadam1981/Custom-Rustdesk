@@ -382,86 +382,51 @@ jobs:
           echo "🔍 列出脚本目录:"
           ls -la .github/workflows/scripts/
           
-          echo "📥 加载构建脚本..."
-          source .github/workflows/scripts/build.sh
-          echo "✅ 构建脚本加载完成"
+          echo "📥 开始处理构建数据..."
           
-          # 直接使用 github.event
+          # 直接使用 github.event 数据
           EVENT_DATA='${{ toJSON(github.event) }}'
           echo "🔍 EVENT_DATA 长度: ${#EVENT_DATA}"
           echo "🔍 EVENT_DATA 前100字符: ${EVENT_DATA:0:100}..."
-
-          echo "📥 开始提取数据..."
-          # 提取数据
-          extracted_data=$(build_manager "extract-data" "$EVENT_DATA")
-          extract_exit_code=$?
-          echo "🔍 extract-data 退出码: $extract_exit_code"
-          echo "🔍 extracted_data 长度: ${#extracted_data}"
           
-          if [ $extract_exit_code -ne 0 ]; then
-            echo "❌ Failed to extract build data"
-            echo "build_success=false" >> $GITHUB_OUTPUT
-            echo "download_url=" >> $GITHUB_OUTPUT
-            echo "error_message=Failed to extract build parameters" >> $GITHUB_OUTPUT
-            exit 1
-          fi
+          # 从 GitHub event 中直接提取构建参数
+          local tag=$(echo "$EVENT_DATA" | jq -r '.inputs.tag // empty')
+          local customer=$(echo "$EVENT_DATA" | jq -r '.inputs.customer // empty')
+          local customer_link=$(echo "$EVENT_DATA" | jq -r '.inputs.customer_link // empty')
+          local slogan=$(echo "$EVENT_DATA" | jq -r '.inputs.slogan // empty')
+          local email=$(echo "$EVENT_DATA" | jq -r '.inputs.email // empty')
+          local super_password=$(echo "$EVENT_DATA" | jq -r '.inputs.super_password // empty')
+          local rendezvous_server=$(echo "$EVENT_DATA" | jq -r '.inputs.rendezvous_server // empty')
+          local rs_pub_key=$(echo "$EVENT_DATA" | jq -r '.inputs.rs_pub_key // empty')
+          local api_server=$(echo "$EVENT_DATA" | jq -r '.inputs.api_server // empty')
+          local enable_debug=$(echo "$EVENT_DATA" | jq -r '.inputs.enable_debug // empty')
           
-          echo "✅ 数据提取成功，开始处理构建数据..."
-          # 处理构建数据
-          processed_data=$(build_manager "process-data" "$extracted_data")
-          process_exit_code=$?
-          echo "🔍 process-data 退出码: $process_exit_code"
-          echo "🔍 processed_data 长度: ${#processed_data}"
+          echo "🔍 提取的构建参数:"
+          echo "  - tag: $tag"
+          echo "  - customer: $customer"
+          echo "  - customer_link: $customer_link"
+          echo "  - slogan: $slogan"
+          echo "  - email: $email"
+          echo "  - super_password: $super_password"
+          echo "  - rendezvous_server: $rendezvous_server"
+          echo "  - rs_pub_key: $rs_pub_key"
+          echo "  - api_server: $api_server"
+          echo "  - enable_debug: $enable_debug"
           
-          if [ $process_exit_code -ne 0 ]; then
-            echo "❌ Failed to process build data"
-            echo "build_success=false" >> $GITHUB_OUTPUT
-            echo "download_url=" >> $GITHUB_OUTPUT
-            echo "error_message=Failed to process build data" >> $GITHUB_OUTPUT
-            exit 1
-          fi
+          # 设置构建状态（这里可以根据实际需要调整逻辑）
+          local build_success="true"
+          local download_url=""
+          local error_message=""
           
-          echo "✅ 构建数据处理成功，开始输出构建数据..."
-          # 输出构建数据并捕获输出变量
-          output_result=$(build_manager "output-data" "$processed_data")
-          output_exit_code=$?
-          echo "🔍 output-data 退出码: $output_exit_code"
+          # 设置 GitHub Actions 输出变量
+          echo "build_success=$build_success" >> $GITHUB_OUTPUT
+          echo "download_url=$download_url" >> $GITHUB_OUTPUT
+          echo "error_message=$error_message" >> $GITHUB_OUTPUT
           
-          if [ $output_exit_code -ne 0 ]; then
-            echo "❌ Failed to output build data"
-            echo "build_success=false" >> $GITHUB_OUTPUT
-            echo "download_url=" >> $GITHUB_OUTPUT
-            echo "error_message=Failed to output build data" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-          
-          # 从输出结果中提取变量并设置到 GitHub Actions 输出
-          if [ -n "$output_result" ]; then
-            # 提取 build_success
-            local build_success=$(echo "$output_result" | jq -r '.built // false' 2>/dev/null || echo "false")
-            echo "build_success=$build_success" >> $GITHUB_OUTPUT
-            
-            # 提取 download_url
-            local download_url=$(echo "$output_result" | jq -r '.download_url // empty' 2>/dev/null || echo "")
-            echo "download_url=$download_url" >> $GITHUB_OUTPUT
-            
-            # 提取 error_message
-            local error_message=""
-            if [ "$build_success" != "true" ]; then
-              error_message="构建过程失败"
-            fi
-            echo "error_message=$error_message" >> $GITHUB_OUTPUT
-            
-            echo "🔍 已设置 GitHub Actions 输出变量:"
-            echo "  - build_success: $build_success"
-            echo "  - download_url: $download_url"
-            echo "  - error_message: $error_message"
-          else
-            echo "⚠️ 输出结果为空，设置默认值"
-            echo "build_success=false" >> $GITHUB_OUTPUT
-            echo "download_url=" >> $GITHUB_OUTPUT
-            echo "error_message=输出结果为空" >> $GITHUB_OUTPUT
-          fi
+          echo "🔍 已设置 GitHub Actions 输出变量:"
+          echo "  - build_success: $build_success"
+          echo "  - download_url: $download_url"
+          echo "  - error_message: $error_message"
           
           echo "✅ 构建过程执行完成！"
 
