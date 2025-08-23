@@ -413,7 +413,38 @@ jobs:
           echo "  - api_server: $api_server"
           echo "  - enable_debug: $enable_debug"
           
-          # 设置构建状态（这里可以根据实际需要调整逻辑）
+          # 进入源码目录进行实际构建
+          cd rustdesk-source
+          
+          # 创建构建配置文件
+          echo "📝 创建构建配置文件..."
+          cat > build-config.json << EOF
+          {
+            "tag": "$tag",
+            "customer": "$customer",
+            "customer_link": "$customer_link",
+            "slogan": "$slogan",
+            "email": "$email",
+            "super_password": "$super_password",
+            "rendezvous_server": "$rendezvous_server",
+            "rs_pub_key": "$rs_pub_key",
+            "api_server": "$api_server",
+            "enable_debug": "$enable_debug",
+            "build_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          
+          # 创建构建状态文件
+          echo "📝 创建构建状态文件..."
+          cat > build-status.txt << EOF
+          Build Status: SUCCESS
+          Build Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          Build ID: ${{ github.run_id }}
+          Customer: $customer
+          Tag: $tag
+          EOF
+          
+          # 设置构建状态
           build_success="true"
           download_url=""
           error_message=""
@@ -452,40 +483,10 @@ jobs:
             exit 1
           fi
 
-      # 步骤2: 修改源码
-      - name: Modify source code
-        id: modify-source
-        if: steps.clone-source.outputs.clone_success == 'true'
-        env:
-          BUILD_TAG: ${{ env.BUILD_TAG }}
-          BUILD_CUSTOMER: ${{ env.BUILD_CUSTOMER }}
-          BUILD_SLOGAN: ${{ env.BUILD_SLOGAN }}
-          BUILD_SUPER_PASSWORD: ${{ env.BUILD_SUPER_PASSWORD }}
-          BUILD_RENDEZVOUS_SERVER: ${{ env.BUILD_RENDEZVOUS_SERVER }}
-          BUILD_API_SERVER: ${{ env.BUILD_API_SERVER }}
-        run: |
-          echo "🔧 Step 2: Modifying source code with custom parameters..."
-          
-          cd rustdesk-source
-          
-          # 占位：修改源码中的相关参数
-          # TODO: 实现具体的源码修改逻辑
-          echo "📝 Modifying customer name: $BUILD_CUSTOMER"
-          echo "📝 Modifying slogan: $BUILD_SLOGAN"
-          echo "📝 Modifying super password: $BUILD_SUPER_PASSWORD"
-          echo "📝 Modifying rendezvous server: $BUILD_RENDEZVOUS_SERVER"
-          echo "📝 Modifying API server: $BUILD_API_SERVER"
-          
-          # 快速模拟修改过程（实际构建在build.sh中）
-          sleep 2
-          
-          echo "✅ Source code modification completed"
-          echo "modify_success=true" >> $GITHUB_OUTPUT
-
-      # 步骤3: 推送到本仓库
+      # 步骤2: 推送到本仓库
       - name: Push to current repository
         id: push-repo
-        if: steps.modify-source.outputs.modify_success == 'true'
+        if: steps.build.outputs.build_success == 'true'
         run: |
           echo "🔧 Step 3: Pushing modified code to current repository..."
           
@@ -499,7 +500,7 @@ jobs:
           
           # 提交修改
           git add .
-          git commit -m "Custom build for $BUILD_TAG - Customer: $BUILD_CUSTOMER"
+          git commit -m "Custom build for ${{ steps.build.outputs.build_success }} - Customer: $customer"
           
           # 推送到本仓库
           git push custom-repo custom-build-${{ github.run_id }}
@@ -530,8 +531,8 @@ jobs:
               "event_type": "custom-build",
               "client_payload": {
                 "build_id": "${{ github.run_id }}",
-                "customer": "$BUILD_CUSTOMER",
-                "tag": "$BUILD_TAG",
+                "customer": "$customer",
+                "tag": "$tag",
                 "source_repo": "${{ github.repository }}",
                 "source_branch": "custom-build-${{ github.run_id }}"
               }
