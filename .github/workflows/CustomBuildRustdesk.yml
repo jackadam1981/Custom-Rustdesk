@@ -669,13 +669,13 @@ jobs:
           build_id="${{ needs.trigger.outputs.build_id }}"
           
           # 设置构建参数
-              EMAIL="$email"
-              TAG="$tag"
-              CUSTOMER="$customer"
+          EMAIL="$email"
+          TAG="$tag"
+          CUSTOMER="$customer"
           
           # 清理构建环境
           echo "Cleaning up build environment..."
-            cleanup_completed="true"
+          cleanup_completed="true"
           
           # 释放所有锁
           echo "Releasing all locks..."
