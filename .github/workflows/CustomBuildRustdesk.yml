@@ -492,8 +492,8 @@ jobs:
             
             # 添加所有文件
             git add .
-            
-            # 提交修改
+          
+          # 提交修改
             git commit -m "Debug mode: Custom build for customer: $customer - Tag: $tag"
             
             # 添加远程仓库
@@ -523,7 +523,7 @@ jobs:
             git config user.email "build@custom-rustdesk.com"
             
             # 添加所有文件
-            git add .
+          git add .
             
             # 提交修改
             git commit -m "Custom build for customer: $customer - Tag: $tag"
@@ -534,15 +534,15 @@ jobs:
             # 创建并推送分支
             git branch -M custom-build-${{ github.run_id }}
             git push -u origin custom-build-${{ github.run_id }} --force
-            
-            if [ $? -eq 0 ]; then
+          
+          if [ $? -eq 0 ]; then
               echo "✅ Successfully pushed to repository"
-              echo "push_success=true" >> $GITHUB_OUTPUT
-              echo "branch_name=custom-build-${{ github.run_id }}" >> $GITHUB_OUTPUT
-            else
+            echo "push_success=true" >> $GITHUB_OUTPUT
+            echo "branch_name=custom-build-${{ github.run_id }}" >> $GITHUB_OUTPUT
+          else
               echo "❌ Failed to push to repository"
-              echo "push_success=false" >> $GITHUB_OUTPUT
-              exit 1
+            echo "push_success=false" >> $GITHUB_OUTPUT
+            exit 1
             fi
           fi
 
@@ -714,34 +714,34 @@ jobs:
             echo "revert_success=true" >> $GITHUB_OUTPUT
           else
             # 删除推送的分
-            curl -X DELETE \
-              -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/${{ github.repository }}/git/refs/heads/custom-build-${{ github.run_id }}
-            
-            if [ $? -eq 0 ]; then
-              echo "✅ Successfully deleted remote branch"
-            else
-              echo "⚠️ Failed to delete remote branch (branch may not exist)"
-            fi
-            
-            # 清理本地工作目录
-            echo "🧹 Cleaning up local workspace..."
-            
-            # 删除克隆的源码目录
-            if [ -d "rustdesk-source" ]; then
-              rm -rf rustdesk-source
-              echo "✅ Successfully cleaned up local source code directory"
-            else
-              echo "ℹ️ Local source code directory not found"
-            fi
-            
-            # 清理其他可能的临时文件
-            find . -name "*.tmp" -delete 2>/dev/null || true
-            find . -name "*.temp" -delete 2>/dev/null || true
-            
-            echo "✅ Successfully reverted repository and cleaned up workspace"
-            echo "revert_success=true" >> $GITHUB_OUTPUT
+          curl -X DELETE \
+            -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/git/refs/heads/custom-build-${{ github.run_id }}
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Successfully deleted remote branch"
+          else
+            echo "⚠️ Failed to delete remote branch (branch may not exist)"
+          fi
+          
+          # 清理本地工作目录
+          echo "🧹 Cleaning up local workspace..."
+          
+          # 删除克隆的源码目录
+          if [ -d "rustdesk-source" ]; then
+            rm -rf rustdesk-source
+            echo "✅ Successfully cleaned up local source code directory"
+          else
+            echo "ℹ️ Local source code directory not found"
+          fi
+          
+          # 清理其他可能的临时文件
+          find . -name "*.tmp" -delete 2>/dev/null || true
+          find . -name "*.temp" -delete 2>/dev/null || true
+          
+          echo "✅ Successfully reverted repository and cleaned up workspace"
+          echo "revert_success=true" >> $GITHUB_OUTPUT
           fi
 
       # 步骤6: 最终清理（无论成功还是失败）
@@ -763,21 +763,21 @@ jobs:
             
             echo "✅ Debug模式简化清理完成"
           else
-            # 确保清理本地源码目录
-            if [ -d "rustdesk-source" ]; then
-              rm -rf rustdesk-source
-              echo "✅ Cleaned up rustdesk-source directory"
-            fi
-            
-            # 清理其他临时文件
-            find . -name "*.tmp" -delete 2>/dev/null || true
-            find . -name "*.temp" -delete 2>/dev/null || true
-            find . -name "*.log" -delete 2>/dev/null || true
-            
-            # 清理Git配置
-            git config --global --unset user.name 2>/dev/null || true
-            git config --global --unset user.email 2>/dev/null || true
-            
+          # 确保清理本地源码目录
+          if [ -d "rustdesk-source" ]; then
+            rm -rf rustdesk-source
+            echo "✅ Cleaned up rustdesk-source directory"
+          fi
+          
+          # 清理其他临时文件
+          find . -name "*.tmp" -delete 2>/dev/null || true
+          find . -name "*.temp" -delete 2>/dev/null || true
+          find . -name "*.log" -delete 2>/dev/null || true
+          
+          # 清理Git配置
+          git config --global --unset user.name 2>/dev/null || true
+          git config --global --unset user.email 2>/dev/null || true
+          
             echo "✅ Full cleanup completed"
           fi
           
