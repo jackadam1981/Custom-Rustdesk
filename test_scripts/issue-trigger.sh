@@ -4,7 +4,14 @@
 # 该脚本测试通过GitHub Issue触发构建的功能
 
 # 该脚本已重构，请使用 run-tests.sh 运行测试
-standalone=true
+# 当通过 run-tests.sh 调用时，TEST_RUNNER_CALLED 会被设置
+if [ -z "$TEST_RUNNER_CALLED" ]; then
+    standalone=true
+else
+    standalone=false
+    # 加载工具函数
+    source test_scripts/utils.sh
+fi
 
 # 测试通过Issue触发构建
 function test_issue_trigger_build() {
