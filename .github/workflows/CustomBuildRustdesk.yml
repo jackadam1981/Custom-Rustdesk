@@ -493,12 +493,33 @@ jobs:
           
           # 检查debug模式
           if [ "$enable_debug" = "true" ]; then
-            echo "🐛 Debug模式已启用，执行模拟推送..."
+            echo "🐛 Debug模式已启用，执行真实推送（跳过远程工作流）..."
             
-            # Debug模式：创建模拟分支信息
-            echo "push_success=true" >> $GITHUB_OUTPUT
-            echo "branch_name=custom-build-debug-${{ github.run_id }}" >> $GITHUB_OUTPUT
-            echo "✅ Debug模式模拟推送完成"
+            # Debug模式：直接在本仓库中操作，创建debug分支
+            # 确保我们在本仓库根目录
+            cd $GITHUB_WORKSPACE
+            
+            # 创建新的debug分支
+            git checkout -b custom-build-debug-${{ github.run_id }}
+            
+            # 添加修改后的源码文件
+            git add .
+            
+            # 提交修改
+            git commit -m "Debug mode: Custom build for customer: $customer - Tag: $tag"
+            
+            # 推送debug分支
+            git push -u origin custom-build-debug-${{ github.run_id }}
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ Debug模式：成功推送到debug分支"
+              echo "push_success=true" >> $GITHUB_OUTPUT
+              echo "branch_name=custom-build-debug-${{ github.run_id }}" >> $GITHUB_OUTPUT
+            else
+              echo "❌ Debug模式：推送失败"
+              echo "push_success=false" >> $GITHUB_OUTPUT
+              exit 1
+            fi
           else
             # 使用ad-m/github-push-action的逻辑
             # 这里我们手动实现推送，因为Action不支持条件执行
@@ -667,9 +688,24 @@ jobs:
           
           # 检查debug模式
           if [ "$enable_debug" = "true" ]; then
-            echo "🐛 Debug模式已启用，执行模拟回退操作..."
+            echo "🐛 Debug模式已启用，执行真实回退操作..."
             
-            # Debug模式：模拟删除分支和清理
+            # Debug模式：真实删除debug分支和清理
+            echo "🧹 Debug模式：删除debug分支..."
+            
+            # 删除推送的debug分支
+            curl -X DELETE \
+              -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/${{ github.repository }}/git/refs/heads/custom-build-debug-${{ github.run_id }}
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ Debug模式：成功删除debug分支"
+            else
+              echo "⚠️ Debug模式：删除debug分支失败（分支可能不存在）"
+            fi
+            
+            # 清理本地工作目录
             echo "🧹 Debug模式：清理本地工作目录..."
             
             # 删除克隆的源码目录
@@ -682,7 +718,7 @@ jobs:
             find . -name "*.tmp" -delete 2>/dev/null || true
             find . -name "*.temp" -delete 2>/dev/null || true
             
-            echo "✅ Debug模式：模拟回退操作完成"
+            echo "✅ Debug模式：真实回退操作完成"
             echo "revert_success=true" >> $GITHUB_OUTPUT
           else
             # 删除推送的分
