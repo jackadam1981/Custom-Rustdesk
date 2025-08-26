@@ -29,7 +29,8 @@ super_password: test123
 rendezvous_server: 192.168.1.100
 api_server: http://192.168.1.100:21114
 slogan: Issue Test Build
-customer_link: https://example.com/test"
+customer_link: https://example.com/test
+enable_debug: true"
     local issue_number=$(gh issue create --title "$issue_title" --body "$issue_body" --repo $GITHUB_REPOSITORY 2>&1 | grep -oP 'issues/\K\d+')
     
     log_debug "尝试创建Issue，命令输出: $issue_number"
