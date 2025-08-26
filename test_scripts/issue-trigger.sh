@@ -29,7 +29,7 @@ function test_issue_trigger_build() {
     sleep 5
     
     # 检查是否有新的workflow运行
-    local run_id=$(gh run list --workflow=issue-build.yml --repo $GITHUB_REPOSITORY --limit 1 --json id --jq '.[0].id')
+    local run_id=$(gh run list --workflow=CustomBuildRustdesk.yml --repo $GITHUB_REPOSITORY --limit 1 --json id --jq '.[0].id')
     
     log_debug "检查workflow运行，命令输出: $run_id"
     
