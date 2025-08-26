@@ -17,10 +17,20 @@ fi
 function test_issue_trigger_build() {
     log_info "测试通过Issue触发构建..."
     
-    # 创建一个测试Issue
+    # 创建一个包含构建参数的测试Issue
     local issue_title="[BUILD] 测试构建触发 - $(date '+%Y%m%d-%H%M%S')"
-    local issue_body="这是一个用于测试构建触发的Issue。"
-    local issue_number=$(gh issue create --title "$issue_title" --body "$issue_body" --repo $GITHUB_REPOSITORY 2>&1 | grep -oP 'issue #\K\d+')
+    local issue_body="这是一个用于测试构建触发的Issue。
+
+构建参数：
+tag: test-issue-$(date '+%Y%m%d-%H%M%S')
+customer: test-customer
+email: test@example.com
+super_password: test123
+rendezvous_server: 192.168.1.100
+api_server: http://192.168.1.100:21114
+slogan: Issue Test Build
+customer_link: https://example.com/test"
+    local issue_number=$(gh issue create --title "$issue_title" --body "$issue_body" --repo $GITHUB_REPOSITORY 2>&1 | grep -oP 'issues/\K\d+')
     
     log_debug "尝试创建Issue，命令输出: $issue_number"
     
