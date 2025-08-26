@@ -4,7 +4,14 @@
 # 该脚本测试真实触发工作流的功能
 
 # 该脚本已重构，请使用 run-tests.sh 运行测试
-standalone=true
+# 当通过 run-tests.sh 调用时，TEST_RUNNER_CALLED 会被设置
+if [ -z "$TEST_RUNNER_CALLED" ]; then
+    standalone=true
+else
+    standalone=false
+    # 加载工具函数
+    source test_scripts/utils.sh
+fi
 
 # 测试真实工作流触发
 function test_real_workflow_trigger() {
