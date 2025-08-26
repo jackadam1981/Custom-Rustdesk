@@ -435,33 +435,26 @@ jobs:
         run: |
           echo "🔧 Step 1: Cloning RustDesk source code..."
           
-          # 检查debug模式
-          if [ "$enable_debug" = "true" ]; then
-            echo "🐛 Debug模式已启用，跳过源码克隆..."
-            echo "clone_success=true" >> $GITHUB_OUTPUT
-            echo "✅ Debug模式源码克隆跳过完成"
-          else
-            # 克隆远程仓库（带子模块）
-            git clone --recursive --depth 1 --branch $RUSTDESK_BRANCH https://github.com/$RUSTDESK_REPO.git rustdesk-source
+          # 无论是否debug模式，都执行正常的源码克隆
+          git clone --recursive --depth 1 --branch $RUSTDESK_BRANCH https://github.com/$RUSTDESK_REPO.git rustdesk-source
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Successfully cloned RustDesk source code with submodules"
             
-            if [ $? -eq 0 ]; then
-              echo "✅ Successfully cloned RustDesk source code with submodules"
-              
-              # 同步上游更新
-              echo "🔄 Syncing with upstream updates..."
-              cd rustdesk-source
-              
-              # 删除所有 .git 目录和 .gitignore 文件
-              find . -name ".git" -type d -exec rm -rf {} + 2>/dev/null || true
-              find . -name ".gitignore" -type f -exec rm -f {} + 2>/dev/null || true
-              
-              echo "✅ Successfully synced with upstream and cleaned git artifacts"
-              echo "clone_success=true" >> $GITHUB_OUTPUT
-            else
-              echo "❌ Failed to clone RustDesk source code"
-              echo "clone_success=false" >> $GITHUB_OUTPUT
-              exit 1
-            fi
+            # 同步上游更新
+            echo "🔄 Syncing with upstream updates..."
+            cd rustdesk-source
+            
+            # 删除所有 .git 目录和 .gitignore 文件
+            find . -name ".git" -type d -exec rm -rf {} + 2>/dev/null || true
+            find . -name ".gitignore" -type f -exec rm -f {} + 2>/dev/null || true
+            
+            echo "✅ Successfully synced with upstream and cleaned git artifacts"
+            echo "clone_success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to clone RustDesk source code"
+            echo "clone_success=false" >> $GITHUB_OUTPUT
+            exit 1
           fi
 
       # 步骤2: 修改源码
@@ -471,18 +464,12 @@ jobs:
         run: |
           echo "🔧 Step 2: Modifying source code..."
           
-          # 检查debug模式
-          if [ "$enable_debug" = "true" ]; then
-            echo "🐛 Debug模式已启用，跳过源码修改..."
-            echo "modify_success=true" >> $GITHUB_OUTPUT
-            echo "✅ Debug模式源码修改跳过完成"
-          else
-            cd rustdesk-source
-            
-            echo "📝 开始修改源码配置..."
-            echo "✅ Successfully modified source code"
-            echo "modify_success=true" >> $GITHUB_OUTPUT
-          fi
+          # 无论是否debug模式，都执行源码修改
+          cd rustdesk-source
+          
+          echo "📝 开始修改源码配置..."
+          echo "✅ Successfully modified source code"
+          echo "modify_success=true" >> $GITHUB_OUTPUT
 
       # 步骤3: 推送到本仓库
       - name: Push to repository with customize client source code
@@ -493,23 +480,28 @@ jobs:
           
           # 检查debug模式
           if [ "$enable_debug" = "true" ]; then
-            echo "🐛 Debug模式已启用，执行真实推送（跳过远程工作流）..."
+            echo "🐛 Debug模式已启用，执行真实推送..."
             
-            # Debug模式：直接在本仓库中操作，创建debug分支
-            # 确保我们在本仓库根目录
-            cd $GITHUB_WORKSPACE
+            # Debug模式：执行真实推送，但使用debug分支名
+            cd rustdesk-source
             
-            # 创建新的debug分支
-            git checkout -b custom-build-debug-${{ github.run_id }}
+            # 初始化Git仓库（因为之前删除了.git目录）
+            git init
+            git config user.name "Custom Build Bot"
+            git config user.email "build@custom-rustdesk.com"
             
-            # 添加修改后的源码文件
+            # 添加所有文件
             git add .
             
             # 提交修改
             git commit -m "Debug mode: Custom build for customer: $customer - Tag: $tag"
             
-            # 推送debug分支
-            git push -u origin custom-build-debug-${{ github.run_id }}
+            # 添加远程仓库
+            git remote add origin https://x-access-token:${{ secrets.BUILD_TOKEN }}@github.com/${{ github.repository }}.git
+            
+            # 创建并推送debug分支
+            git branch -M custom-build-debug-${{ github.run_id }}
+            git push -u origin custom-build-debug-${{ github.run_id }} --force
             
             if [ $? -eq 0 ]; then
               echo "✅ Debug模式：成功推送到debug分支"
