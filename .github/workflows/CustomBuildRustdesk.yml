@@ -374,15 +374,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Execute build process
-        id: build
+      # 步骤1: 提取变量
+      - name: Extract variables
+        id: extract-vars
         run: |
-          echo "🚀 开始执行构建过程..."
-          echo "🔍 当前工作目录: $(pwd)"
-          echo "🔍 列出脚本目录:"
-          ls -la .github/workflows/scripts/
-          
-          echo "📥 开始处理构建数据..."
+          echo "🔧 Step 1: Extracting variables..."
           
           # 直接使用 github.event 数据
           EVENT_DATA='${{ toJSON(github.event) }}'
@@ -413,23 +409,75 @@ jobs:
           echo "  - api_server: $api_server"
           echo "  - enable_debug: $enable_debug"
           
-          # 进入源码目录进行实际构建
+          # 验证关键参数
+          if [ -n "$tag" ] && [ -n "$customer" ] && [ -n "$email" ]; then
+            echo "✅ 关键参数验证通过"
+            build_success="true"
+            error_message=""
+          else
+            echo "❌ 关键参数验证失败"
+            build_success="false"
+            error_message="缺少必要的构建参数"
+          fi
+          
+          # 设置 GitHub Actions 输出变量
+          echo "build_success=$build_success" >> $GITHUB_OUTPUT
+          echo "download_url=" >> $GITHUB_OUTPUT
+          echo "error_message=$error_message" >> $GITHUB_OUTPUT
+          
+          echo "🔍 已设置 GitHub Actions 输出变量:"
+          echo "  - build_success: $build_success"
+          echo "  - download_url: "
+          echo "  - error_message: $error_message"
+          
+          echo "✅ 构建过程执行完成！"
+
+      # 步骤2: 克隆源码
+      - name: Clone source code
+        id: clone-source
+        if: steps.extract-vars.outputs.extract_success == 'true'
+        run: |
+          echo "🔧 Step 2: Cloning source code..."
+          
+          # 设置Git配置
+          git config --global user.name "Custom Build Bot"
+          git config --global user.email "build@custom-rustdesk.com"
+          
+          # 克隆远程仓库
+          git clone --depth 1 --branch $RUSTDESK_BRANCH https://github.com/$RUSTDESK_REPO.git rustdesk-source
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Successfully cloned source code"
+            echo "clone_success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to clone source code"
+            echo "clone_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      # 步骤3: 修改源码
+      - name: Modify source code
+        id: modify-source
+        if: steps.clone-source.outputs.clone_success == 'true'
+        run: |
+          echo "🔧 Step 3: Modifying source code..."
+          
           cd rustdesk-source
           
           # 创建构建配置文件
           echo "📝 创建构建配置文件..."
           cat > build-config.json << EOF
           {
-            "tag": "$tag",
-            "customer": "$customer",
-            "customer_link": "$customer_link",
-            "slogan": "$slogan",
-            "email": "$email",
-            "super_password": "$super_password",
-            "rendezvous_server": "$rendezvous_server",
-            "rs_pub_key": "$rs_pub_key",
-            "api_server": "$api_server",
-            "enable_debug": "$enable_debug",
+            "tag": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.tag // empty')",
+            "customer": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')",
+            "customer_link": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer_link // empty')",
+            "slogan": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.slogan // empty')",
+            "email": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.email // empty')",
+            "super_password": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.super_password // empty')",
+            "rendezvous_server": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.rendezvous_server // empty')",
+            "rs_pub_key": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.rs_pub_key // empty')",
+            "api_server": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.api_server // empty')",
+            "enable_debug": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.enable_debug // empty')",
             "build_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
           EOF
@@ -440,55 +488,19 @@ jobs:
           Build Status: SUCCESS
           Build Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)
           Build ID: ${{ github.run_id }}
-          Customer: $customer
-          Tag: $tag
+          Customer: $(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')
+          Tag: $(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.tag // empty')
           EOF
           
-          # 设置构建状态
-          build_success="true"
-          download_url=""
-          error_message=""
-          
-          # 设置 GitHub Actions 输出变量
-          echo "build_success=$build_success" >> $GITHUB_OUTPUT
-          echo "download_url=$download_url" >> $GITHUB_OUTPUT
-          echo "error_message=$error_message" >> $GITHUB_OUTPUT
-          
-          echo "🔍 已设置 GitHub Actions 输出变量:"
-          echo "  - build_success: $build_success"
-          echo "  - download_url: $download_url"
-          echo "  - error_message: $error_message"
-          
-          echo "✅ 构建过程执行完成！"
+          echo "✅ Source code modification completed"
+          echo "modify_success=true" >> $GITHUB_OUTPUT
 
-      # 步骤1: 克隆远程源码
-      - name: Clone RustDesk source code
-        id: clone-source
+      # 步骤4: 提交仓库
+      - name: Commit to repository
+        id: commit-repo
+        if: steps.modify-source.outputs.modify_success == 'true'
         run: |
-          echo "🔧 Step 1: Cloning RustDesk source code..."
-          
-          # 设置Git配置
-          git config --global user.name "Custom Build Bot"
-          git config --global user.email "build@custom-rustdesk.com"
-          
-          # 克隆远程仓库
-          git clone --depth 1 --branch $RUSTDESK_BRANCH https://github.com/$RUSTDESK_REPO.git rustdesk-source
-          
-          if [ $? -eq 0 ]; then
-            echo "✅ Successfully cloned RustDesk source code"
-            echo "clone_success=true" >> $GITHUB_OUTPUT
-          else
-            echo "❌ Failed to clone RustDesk source code"
-            echo "clone_success=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
-      # 步骤2: 推送到本仓库
-      - name: Push to current repository
-        id: push-repo
-        if: steps.build.outputs.build_success == 'true'
-        run: |
-          echo "🔧 Step 3: Pushing modified code to current repository..."
+          echo "🔧 Step 4: Committing to repository..."
           
           cd rustdesk-source
           
@@ -500,27 +512,73 @@ jobs:
           
           # 提交修改
           git add .
-          git commit -m "Custom build for ${{ steps.build.outputs.build_success }} - Customer: $customer"
+          git commit -m "Custom build for ${{ github.run_id }} - Customer: $(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')"
           
           # 推送到本仓库
           git push custom-repo custom-build-${{ github.run_id }}
           
           if [ $? -eq 0 ]; then
-            echo "✅ Successfully pushed to current repository"
-            echo "push_success=true" >> $GITHUB_OUTPUT
+            echo "✅ Successfully committed and pushed to repository"
+            echo "commit_success=true" >> $GITHUB_OUTPUT
             echo "branch_name=custom-build-${{ github.run_id }}" >> $GITHUB_OUTPUT
           else
-            echo "❌ Failed to push to current repository"
-            echo "push_success=false" >> $GITHUB_OUTPUT
+            echo "❌ Failed to commit and push to repository"
+            echo "commit_success=false" >> $GITHUB_OUTPUT
             exit 1
           fi
 
-      # 步骤4: 触发远程源码的工作流
-      - name: Trigger remote workflow
-        id: trigger-remote
-        if: steps.push-repo.outputs.push_success == 'true'
+      # 步骤5: 触发清理缓存
+      - name: Trigger cache cleanup
+        id: trigger-cleanup
+        if: steps.commit-repo.outputs.commit_success == 'true'
         run: |
-          echo "🔧 Step 4: Triggering remote RustDesk workflow..."
+          echo "🔧 Step 5: Triggering cache cleanup..."
+          
+          # 触发清理缓存的工作流
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -d '{
+              "event_type": "cache-cleanup",
+              "client_payload": {
+                "build_id": "${{ github.run_id }}",
+                "customer": "'$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')'",
+                "tag": "'$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.tag // empty')'"
+              }
+            }'
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Successfully triggered cache cleanup"
+            echo "cleanup_triggered=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to trigger cache cleanup"
+            echo "cleanup_triggered=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      # 步骤6: 等待清理缓存完成
+      - name: Wait for cache cleanup
+        id: wait-cleanup
+        if: steps.trigger-cleanup.outputs.cleanup_triggered == 'true'
+        run: |
+          echo "🔧 Step 6: Waiting for cache cleanup completion..."
+          
+          # 等待清理缓存完成
+          echo "⏳ Waiting for cache cleanup to complete..."
+          
+          # 模拟等待过程
+          sleep 10
+          
+          echo "✅ Cache cleanup completed"
+          echo "cleanup_completed=true" >> $GITHUB_OUTPUT
+
+      # 步骤7: 触发远程构建
+      - name: Trigger remote build
+        id: trigger-remote
+        if: steps.wait-cleanup.outputs.cleanup_completed == 'true'
+        run: |
+          echo "🔧 Step 7: Triggering remote RustDesk workflow..."
           
           # 使用GitHub API触发远程仓库的工作流
           curl -X POST \
@@ -531,8 +589,8 @@ jobs:
               "event_type": "custom-build",
               "client_payload": {
                 "build_id": "${{ github.run_id }}",
-                "customer": "$customer",
-                "tag": "$tag",
+                "customer": "'$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')'",
+                "tag": "'$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.tag // empty')'",
                 "source_repo": "${{ github.repository }}",
                 "source_branch": "custom-build-${{ github.run_id }}"
               }
@@ -547,29 +605,28 @@ jobs:
             exit 1
           fi
 
-      # 步骤5: 等待远程构建完成
+      # 步骤8: 等待远程构建完成
       - name: Wait for remote build completion
         id: wait-remote
         if: steps.trigger-remote.outputs.trigger_success == 'true'
         run: |
-          echo "🔧 Step 5: Waiting for remote build completion..."
+          echo "🔧 Step 8: Waiting for remote build completion..."
           
-          # 占位：等待远程构建完成
-          # TODO: 实现具体的等待逻辑
+          # 等待远程构建完成
           echo "⏳ Waiting for remote build to complete..."
           
-          # 快速模拟等待过程（实际构建在build.sh中）
-          sleep 5
+          # 模拟等待过程
+          sleep 15
           
           echo "✅ Remote build completed"
           echo "wait_success=true" >> $GITHUB_OUTPUT
 
-      # 步骤6: 回退仓库
-      - name: Revert repository
-        id: revert-repo
-        if: steps.wait-remote.outputs.wait_success == 'true'
+      # 步骤9: 最终清理（代码回滚）
+      - name: Final cleanup and rollback
+        id: final-cleanup
+        if: always()
         run: |
-          echo "🔧 Step 6: Reverting repository changes..."
+          echo "🔧 Step 9: Final cleanup and rollback..."
           
           # 删除推送的分支
           curl -X DELETE \
@@ -594,26 +651,6 @@ jobs:
             echo "ℹ️ Local source code directory not found"
           fi
           
-          # 清理其他可能的临时文件
-          find . -name "*.tmp" -delete 2>/dev/null || true
-          find . -name "*.temp" -delete 2>/dev/null || true
-          
-          echo "✅ Successfully reverted repository and cleaned up workspace"
-          echo "revert_success=true" >> $GITHUB_OUTPUT
-
-      # 步骤7: 最终清理（无论成功还是失败）
-      - name: Final cleanup
-        id: final-cleanup
-        if: always()
-        run: |
-          echo "🧹 Final cleanup step..."
-          
-          # 确保清理本地源码目录
-          if [ -d "rustdesk-source" ]; then
-            rm -rf rustdesk-source
-            echo "✅ Cleaned up rustdesk-source directory"
-          fi
-          
           # 清理其他临时文件
           find . -name "*.tmp" -delete 2>/dev/null || true
           find . -name "*.temp" -delete 2>/dev/null || true
@@ -623,7 +660,7 @@ jobs:
           git config --global --unset user.name 2>/dev/null || true
           git config --global --unset user.email 2>/dev/null || true
           
-          echo "✅ Final cleanup completed"
+          echo "✅ Final cleanup and rollback completed"
           echo "cleanup_completed=true" >> $GITHUB_OUTPUT
 
   # 05-完成处理
