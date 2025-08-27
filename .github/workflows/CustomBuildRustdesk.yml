@@ -367,9 +367,9 @@ jobs:
     if: needs.trigger.outputs.validation_passed == 'true' && needs.review.outputs.review_passed == 'true' && needs.join-queue.outputs.join_success == 'true' && needs.wait-build-lock.outputs.build_lock_acquired == 'true'
     runs-on: ubuntu-latest
     outputs:
-      build_success: ${{ steps.build.outputs.build_success }}
-      download_url: ${{ steps.build.outputs.download_url }}
-      error_message: ${{ steps.build.outputs.error_message }}
+      build_success: ${{ steps.extract-vars.outputs.build_success }}
+      download_url: ${{ steps.extract-vars.outputs.download_url }}
+      error_message: ${{ steps.extract-vars.outputs.error_message }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
