@@ -154,10 +154,10 @@ function utils_workflow_logs() {
 
 # 获取最新的工作流运行ID
 function utils_latest_workflow_run() {
-    local workflow_name="${1:-CustomBuildRustdesk.yml}"
+    local workflow_name="$1"
     
     local run_id=""
-    run_id=$(gh run list --workflow="$workflow_name" --repo $GITHUB_REPOSITORY --limit 1 --json databaseId --jq '.[0].databaseId' | tr -d '[:space:]')
+    run_id=$(gh run list --workflow=CustomBuildRustdesk.yml --repo $GITHUB_REPOSITORY --limit 1 --json databaseId --jq '.[0].databaseId' | tr -d '[:space:]')
     
     if [ -z "$run_id" ]; then
         return 1

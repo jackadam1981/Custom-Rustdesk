@@ -4,34 +4,16 @@
 # 该脚本测试通过GitHub Issue触发构建的功能
 
 # 该脚本已重构，请使用 run-tests.sh 运行测试
-# 当通过 run-tests.sh 调用时，TEST_RUNNER_CALLED 会被设置
-if [ -z "$TEST_RUNNER_CALLED" ]; then
-    standalone=true
-else
-    standalone=false
-    # 加载工具函数
-    source test_scripts/utils.sh
-fi
+standalone=true
 
 # 测试通过Issue触发构建
 function test_issue_trigger_build() {
     log_info "测试通过Issue触发构建..."
     
-    # 创建一个包含构建参数的测试Issue
+    # 创建一个测试Issue
     local issue_title="[BUILD] 测试构建触发 - $(date '+%Y%m%d-%H%M%S')"
-    local issue_body="这是一个用于测试构建触发的Issue。
-
-构建参数：
-tag: test-issue-$(date '+%Y%m%d-%H%M%S')
-customer: test-customer
-email: test@example.com
-super_password: test123
-rendezvous_server: 192.168.1.100
-api_server: http://192.168.1.100:21114
-slogan: Issue Test Build
-customer_link: https://example.com/test
-enable_debug: true"
-    local issue_number=$(gh issue create --title "$issue_title" --body "$issue_body" --repo $GITHUB_REPOSITORY 2>&1 | grep -oP 'issues/\K\d+')
+    local issue_body="这是一个用于测试构建触发的Issue。"
+    local issue_number=$(gh issue create --title "$issue_title" --body "$issue_body" --repo $GITHUB_REPOSITORY 2>&1 | grep -oP 'issue #\K\d+')
     
     log_debug "尝试创建Issue，命令输出: $issue_number"
     
@@ -47,7 +29,7 @@ enable_debug: true"
     sleep 5
     
     # 检查是否有新的workflow运行
-    local run_id=$(gh run list --workflow=CustomBuildRustdesk.yml --repo $GITHUB_REPOSITORY --limit 1 --json databaseId --jq '.[0].databaseId')
+    local run_id=$(gh run list --workflow=issue-build.yml --repo $GITHUB_REPOSITORY --limit 1 --json id --jq '.[0].id')
     
     log_debug "检查workflow运行，命令输出: $run_id"
     

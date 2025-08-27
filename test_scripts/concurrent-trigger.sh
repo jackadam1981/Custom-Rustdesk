@@ -4,21 +4,14 @@
 # 该脚本测试真实触发工作流的功能
 
 # 该脚本已重构，请使用 run-tests.sh 运行测试
-# 当通过 run-tests.sh 调用时，TEST_RUNNER_CALLED 会被设置
-if [ -z "$TEST_RUNNER_CALLED" ]; then
-    standalone=true
-else
-    standalone=false
-    # 加载工具函数
-    source test_scripts/utils.sh
-fi
+standalone=true
 
 # 测试真实工作流触发
 function test_real_workflow_trigger() {
     log_info "测试真实工作流触发..."
     
     # 使用gh命令触发真实工作流
-    local run_id=$(gh workflow run CustomBuildRustdesk.yml --repo $GITHUB_REPOSITORY -f tag="concurrent-test-$(date +%Y%m%d-%H%M%S)" -f customer="concurrent-test" -f email="test@example.com" -f enable_debug="true" 2>&1 | grep -oP 'run ID \K\d+')
+    local run_id=$(gh workflow run manual-build.yml --repo $GITHUB_REPOSITORY -f build_type=release 2>&1 | grep -oP 'run ID \K\d+')
     log_debug "尝试触发真实工作流，命令输出: $run_id"
     
     if [ -z "$run_id" ]; then
