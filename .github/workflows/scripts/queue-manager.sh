@@ -469,6 +469,37 @@ _cleanup_queue() {
   local cleaned_queue="[]"
   local cleaned_count=0
   local total_count=0
+  local should_clear_build_lock=false
+  local build_lock_holder=""
+  
+  # 检查构建锁状态
+  local current_build_lock=$(echo "$QUEUE_DATA" | jq -r '.build_locked_by // null')
+  if [ "$current_build_lock" != "null" ] && [ -n "$current_build_lock" ]; then
+    build_lock_holder="$current_build_lock"
+    debug "log" "检查构建锁持有者: $build_lock_holder"
+    
+    # 检查构建锁持有者的状态
+    if [[ "$build_lock_holder" =~ ^[0-9]+$ ]]; then
+      local lock_holder_info=$(gh run view "$build_lock_holder" --json status,conclusion 2>/dev/null)
+      if [ $? -eq 0 ] && [ -n "$lock_holder_info" ]; then
+        local lock_holder_status=$(echo "$lock_holder_info" | jq -r '.status // empty')
+        local lock_holder_conclusion=$(echo "$lock_holder_info" | jq -r '.conclusion // empty')
+        debug "log" "构建锁持有者 $build_lock_holder 状态: $lock_holder_status, 结论: $lock_holder_conclusion"
+        
+        # 如果构建锁持有者已完成（无论成功还是失败），都应该清理锁
+        if [ "$lock_holder_status" = "completed" ]; then
+          debug "log" "构建锁持有者已完成，需要清理构建锁"
+          should_clear_build_lock=true
+        fi
+      else
+        debug "log" "无法获取构建锁持有者状态，假设需要清理"
+        should_clear_build_lock=true
+      fi
+    else
+      debug "log" "构建锁持有者格式无效，需要清理"
+      should_clear_build_lock=true
+    fi
+  fi
   
   if [ -n "$queue_run_ids" ]; then
     for run_id in $queue_run_ids; do
@@ -556,10 +587,20 @@ _cleanup_queue() {
   
   debug "log" "队列清理统计: $cleaned_count/$total_count 个任务被移除"
   
+  # 准备清理后的队列数据
   local cleaned_data=$(echo "$QUEUE_DATA" | jq --argjson cleaned_queue "$cleaned_queue" '
     .queue = $cleaned_queue |
     .version = (.version // 0) + 1
   ')
+  
+  # 如果需要清理构建锁，也一并清理
+  if [ "$should_clear_build_lock" = true ]; then
+    debug "log" "清理失效的构建锁 (持有者: $build_lock_holder)"
+    cleaned_data=$(echo "$cleaned_data" | jq '
+      .build_locked_by = null |
+      .build_lock_version = (.build_lock_version // 1) + 1
+    ')
+  fi
 
   if [ "$cleaned_data" != "$QUEUE_DATA" ]; then
     if _update_queue_data "$cleaned_data"; then
