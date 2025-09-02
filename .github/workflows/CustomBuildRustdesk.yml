@@ -379,12 +379,12 @@ jobs:
         id: extract-vars
         run: |
           echo "🔧 Step 1: Extracting variables..."
-          
+
           # 直接使用 github.event 数据
           EVENT_DATA='${{ toJSON(github.event) }}'
           echo "🔍 EVENT_DATA 长度: ${#EVENT_DATA}"
           echo "🔍 EVENT_DATA 前100字符: ${EVENT_DATA:0:100}..."
-          
+
           # 从 GitHub event 中直接提取构建参数
           tag=$(echo "$EVENT_DATA" | jq -r '.inputs.tag // empty')
           customer=$(echo "$EVENT_DATA" | jq -r '.inputs.customer // empty')
@@ -396,7 +396,7 @@ jobs:
           rs_pub_key=$(echo "$EVENT_DATA" | jq -r '.inputs.rs_pub_key // empty')
           api_server=$(echo "$EVENT_DATA" | jq -r '.inputs.api_server // empty')
           enable_debug=$(echo "$EVENT_DATA" | jq -r '.inputs.enable_debug // empty')
-          
+
           echo "🔍 提取的构建参数:"
           echo "  - tag: $tag"
           echo "  - customer: $customer"
@@ -408,7 +408,7 @@ jobs:
           echo "  - rs_pub_key: $rs_pub_key"
           echo "  - api_server: $api_server"
           echo "  - enable_debug: $enable_debug"
-          
+
           # 验证关键参数
           if [ -n "$tag" ] && [ -n "$customer" ] && [ -n "$email" ]; then
             echo "✅ 关键参数验证通过"
@@ -419,17 +419,19 @@ jobs:
             build_success="false"
             error_message="缺少必要的构建参数"
           fi
-          
+
           # 设置 GitHub Actions 输出变量
           echo "build_success=$build_success" >> $GITHUB_OUTPUT
+          echo "extract_success=$build_success" >> $GITHUB_OUTPUT
           echo "download_url=" >> $GITHUB_OUTPUT
           echo "error_message=$error_message" >> $GITHUB_OUTPUT
-          
+
           echo "🔍 已设置 GitHub Actions 输出变量:"
           echo "  - build_success: $build_success"
+          echo "  - extract_success: $build_success"
           echo "  - download_url: "
           echo "  - error_message: $error_message"
-          
+
           echo "✅ 构建过程执行完成！"
 
       # 步骤2: 克隆源码
