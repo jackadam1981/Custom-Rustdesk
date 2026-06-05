@@ -108,7 +108,6 @@ jobs:
             echo "DEBUG: 进入 workflow_dispatch 分支"
             # 提取参数并设置环境变量
             params=$(trigger_manager "extract-workflow-dispatch" "$EVENT_DATA")
-            echo "DEBUG: workflow_dispatch params = $params"
             eval "$params"
             
             echo "DEBUG: After extract, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
@@ -119,7 +118,6 @@ jobs:
             
             # 生成最终JSON数据
             final_data=$(trigger_manager "generate-data" "$EVENT_DATA" "$final_tag")
-            echo "DEBUG: final_data = $final_data"
             echo "DEBUG: final_data 长度: ${#final_data}"
             echo "DEBUG: final_data 是否为空: $([ -z "$final_data" ] && echo "是" || echo "否")"
             
@@ -135,7 +133,6 @@ jobs:
             echo "DEBUG: 进入 issue 分支"
             # Issue触发的情况
             params=$(trigger_manager "extract-issue" "$EVENT_DATA")
-            echo "DEBUG: issue params = $params"
             eval "$params"
             
             echo "DEBUG: After extract, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
@@ -146,7 +143,6 @@ jobs:
             
             # 生成最终JSON数据
             final_data=$(trigger_manager "generate-data" "$EVENT_DATA" "$final_tag")
-            echo "DEBUG: final_data = $final_data"
             echo "DEBUG: final_data 长度: ${#final_data}"
             echo "DEBUG: final_data 是否为空: $([ -z "$final_data" ] && echo "是" || echo "否")"
             
@@ -160,6 +156,9 @@ jobs:
             echo "DEBUG: build_id output completed"
           fi
 
+          mkdir -p "$RUNNER_TEMP/trigger-data"
+          printf '%s' "$final_data" > "$RUNNER_TEMP/trigger-data/trigger-data.json"
+
           echo "trigger_data=$final_data" >> $GITHUB_OUTPUT
           
           # 设置验证结果
@@ -168,6 +167,14 @@ jobs:
           else
             echo "validation_passed=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Upload trigger data
+        if: steps.trigger.outputs.validation_passed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trigger-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/trigger-data/trigger-data.json
+          retention-days: 1
 
   # 01-审核验证 - 处理需要审核的情况
   review:
@@ -342,8 +349,6 @@ jobs:
     needs: [trigger, review, join-queue, wait-build-lock]
     if: needs.trigger.outputs.validation_passed == 'true' && needs.review.outputs.review_passed == 'true' && needs.join-queue.outputs.join_success == 'true' && needs.wait-build-lock.outputs.build_lock_acquired == 'true'
     runs-on: ubuntu-latest
-    env:
-      TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
     outputs:
       build_success: ${{ steps.extract-vars.outputs.build_success }}
       download_url: ${{ steps.extract-vars.outputs.download_url }}
@@ -351,6 +356,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download trigger data
+        uses: actions/download-artifact@v4
+        with:
+          name: trigger-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/trigger-data
         
       # 步骤1: 提取变量
       - name: Extract variables
@@ -359,8 +370,8 @@ jobs:
           echo "🔧 Step 1: Extracting variables..."
 
           # 使用 trigger job 标准化后的参数，兼容 workflow_dispatch 和 Issue 触发
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           echo "🔍 TRIGGER_DATA 长度: ${#TRIGGER_DATA}"
-          echo "🔍 TRIGGER_DATA 前100字符: ${TRIGGER_DATA:0:100}..."
 
           # 从标准化 trigger_data 中提取构建参数
           tag=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
@@ -379,9 +390,9 @@ jobs:
           echo "  - customer_link: $customer_link"
           echo "  - slogan: $slogan"
           echo "  - email: $email"
-          echo "  - super_password: $super_password"
           echo "  - rendezvous_server: $rendezvous_server"
-          echo "  - rs_pub_key: $rs_pub_key"
+          echo "  - super_password: [masked]"
+          echo "  - rs_pub_key: [masked]"
           echo "  - api_server: $api_server"
 
           # 验证关键参数
@@ -440,6 +451,7 @@ jobs:
           echo "🔧 Step 3: Modifying source code..."
           source .github/workflows/scripts/source-patcher.sh
 
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           cd rustdesk-source
           export BUILD_TAG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')"
           export BUILD_CUSTOMER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')"
@@ -489,6 +501,7 @@ jobs:
         run: |
           echo "🔧 Step 4: Committing to repository..."
           
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           cd rustdesk-source
           
           # 添加远程仓库
@@ -523,9 +536,11 @@ jobs:
           echo "🔧 Step 5: Triggering cache cleanup..."
           
           # 触发清理缓存的工作流
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
           tag=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
-          curl -X POST \
+          response_file=$(mktemp)
+          http_code=$(curl -sS -o "$response_file" -w "%{http_code}" -X POST \
             -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
@@ -537,12 +552,14 @@ jobs:
                 "tag": "'$tag'"
               }
             }'
+          )
           
-          if [ $? -eq 0 ]; then
+          if [ "$http_code" = "204" ]; then
             echo "✅ Successfully triggered cache cleanup"
             echo "cleanup_triggered=true" >> $GITHUB_OUTPUT
           else
-            echo "❌ Failed to trigger cache cleanup"
+            echo "❌ Failed to trigger cache cleanup (HTTP $http_code)"
+            cat "$response_file"
             echo "cleanup_triggered=false" >> $GITHUB_OUTPUT
             exit 1
           fi
@@ -571,9 +588,11 @@ jobs:
           echo "🔧 Step 7: Triggering remote RustDesk workflow..."
           
           # 使用GitHub API触发远程仓库的工作流
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
           tag=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
-          curl -X POST \
+          response_file=$(mktemp)
+          http_code=$(curl -sS -o "$response_file" -w "%{http_code}" -X POST \
             -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$RUSTDESK_REPO/dispatches \
@@ -587,12 +606,14 @@ jobs:
                 "source_branch": "custom-build-${{ github.run_id }}"
               }
             }'
+          )
           
-          if [ $? -eq 0 ]; then
+          if [ "$http_code" = "204" ]; then
             echo "✅ Successfully triggered remote workflow"
             echo "trigger_success=true" >> $GITHUB_OUTPUT
           else
-            echo "❌ Failed to trigger remote workflow"
+            echo "❌ Failed to trigger remote workflow (HTTP $http_code)"
+            cat "$response_file"
             echo "trigger_success=false" >> $GITHUB_OUTPUT
             exit 1
           fi
@@ -668,14 +689,20 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download trigger data
+        if: needs.trigger.outputs.validation_passed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: trigger-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/trigger-data
         
       - name: Complete cleanup and notification
         id: finish
-        env:
-          TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
         run: |
           source .github/workflows/scripts/finish.sh
           source .github/workflows/scripts/queue-manager.sh
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           
           # 重新获取 github.event
           EVENT_DATA='${{ toJSON(github.event) }}'

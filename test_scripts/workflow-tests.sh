@@ -205,18 +205,41 @@ EOF
 }
 
 function test_build_job_uses_trigger_data_for_parameters() {
-    if grep -Fq 'TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}' "$WORKFLOW_FILE" &&
+    if grep -q 'name: trigger-data-${{ github.run_id }}' "$WORKFLOW_FILE" &&
+       grep -q 'cat "$RUNNER_TEMP/trigger-data/trigger-data.json"' "$WORKFLOW_FILE" &&
        ! awk '
            /# 步骤1: 提取变量/ { in_build_extract=1 }
            /# 步骤2: 克隆源码/ { in_build_extract=0 }
            in_build_extract && /toJSON\(github.event\)/ { found=1 }
            END { exit(found ? 0 : 1) }
        ' "$WORKFLOW_FILE"; then
-        record_test_result "build_job_uses_trigger_data_for_parameters" "PASS" "build 阶段使用标准化 trigger_data 参数"
+        record_test_result "build_job_uses_trigger_data_for_parameters" "PASS" "build 阶段通过 artifact 使用标准化 trigger_data 参数"
         return 0
     fi
 
-    record_test_result "build_job_uses_trigger_data_for_parameters" "FAIL" "build 阶段应使用 needs.trigger.outputs.trigger_data，避免 Issue 触发丢参数"
+    record_test_result "build_job_uses_trigger_data_for_parameters" "FAIL" "build 阶段应使用标准化 trigger_data，避免 Issue 触发丢参数"
+    return 1
+}
+
+function test_build_job_does_not_export_trigger_data_env() {
+    if ! grep -Fq 'TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}' "$WORKFLOW_FILE" &&
+       ! grep -q 'TRIGGER_DATA 前100字符' "$WORKFLOW_FILE"; then
+        record_test_result "build_job_does_not_export_trigger_data_env" "PASS" "build/finish 阶段不再把完整 trigger_data 放入 job/step env 或日志预览"
+        return 0
+    fi
+
+    record_test_result "build_job_does_not_export_trigger_data_env" "FAIL" "完整 trigger_data 不应作为 job/step env 展开或打印预览"
+    return 1
+}
+
+function test_repository_dispatch_checks_http_status() {
+    if [ "$(grep -c 'http_code=$(curl -sS -o "$response_file" -w "%{http_code}" -X POST' "$WORKFLOW_FILE")" -ge 2 ] &&
+       [ "$(grep -c '\[ "$http_code" = "204" \]' "$WORKFLOW_FILE")" -ge 2 ]; then
+        record_test_result "repository_dispatch_checks_http_status" "PASS" "repository_dispatch 按 GitHub HTTP 204 判断成功"
+        return 0
+    fi
+
+    record_test_result "repository_dispatch_checks_http_status" "FAIL" "repository_dispatch 不能只看 curl 进程退出码，必须检查 HTTP 204"
     return 1
 }
 
@@ -236,6 +259,8 @@ function run_workflow_tests() {
     test_source_patcher_covers_server_key_and_brand || failed=1
     test_source_patcher_applies_to_fixture_tree || failed=1
     test_build_job_uses_trigger_data_for_parameters || failed=1
+    test_build_job_does_not_export_trigger_data_env || failed=1
+    test_repository_dispatch_checks_http_status || failed=1
 
     log_info "workflow 结构测试完成"
     return $failed
