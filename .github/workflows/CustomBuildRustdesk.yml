@@ -334,6 +334,7 @@ jobs:
           else
             echo "❌ Failed to acquire build lock"
             echo "build_lock_acquired=false" >> $GITHUB_OUTPUT
+            exit 1
           fi
 
   # 04-执行构建

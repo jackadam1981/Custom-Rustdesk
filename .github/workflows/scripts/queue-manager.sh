@@ -15,7 +15,7 @@ ISSUE_LOCK_TIMEOUT=300       # 5分钟issue锁超时
 BUILD_LOCK_HOLD_TIMEOUT=5400 # 90分钟构建锁持有超时
 
 # 环境检测和配置
-if [ "${TEST_MODE:-}" = "true" ] || [ "${ENVIRONMENT:-}" = "test" ] || [ "${CI:-}" = "true" ]; then
+if [ "${TEST_MODE:-}" = "true" ] || [ "${ENVIRONMENT:-}" = "test" ]; then
     # 测试环境：极速模式，最小等待时间
     LOCK_RETRY_INTERVAL=0.05     # 0.05秒重试间隔（进一步减少）
     LOCK_MAX_ATTEMPTS=1          # 测试环境：最多1次尝试（立即失败）

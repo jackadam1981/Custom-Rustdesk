@@ -62,6 +62,30 @@ function test_finish_queue_cleanup_is_best_effort() {
     return 1
 }
 
+function test_actions_ci_does_not_enable_test_mode() {
+    if grep -q 'CI:-' .github/workflows/scripts/queue-manager.sh; then
+        record_test_result "actions_ci_does_not_enable_test_mode" "FAIL" "GitHub Actions 默认 CI=true，不能用 CI 判断队列测试模式"
+        return 1
+    fi
+
+    record_test_result "actions_ci_does_not_enable_test_mode" "PASS" "队列测试模式不会被 GitHub Actions 默认 CI=true 误触发"
+    return 0
+}
+
+function test_build_lock_failure_exits_job() {
+    if awk '
+        /Failed to acquire build lock/ { saw_failure=1 }
+        saw_failure && /exit 1/ { found=1 }
+        END { exit(found ? 0 : 1) }
+    ' .github/workflows/CustomBuildRustdesk.yml; then
+        record_test_result "build_lock_failure_exits_job" "PASS" "构建锁获取失败会让 wait-build-lock job 失败"
+        return 0
+    fi
+
+    record_test_result "build_lock_failure_exits_job" "FAIL" "构建锁获取失败不能静默成功并跳过 build"
+    return 1
+}
+
 function run_workflow_tests() {
     log_info "开始运行 workflow 结构测试..."
     local failed=0
@@ -70,6 +94,8 @@ function run_workflow_tests() {
     test_release_all_locks_leaves_queue || failed=1
     test_release_all_locks_skips_unowned_build_lock || failed=1
     test_finish_queue_cleanup_is_best_effort || failed=1
+    test_actions_ci_does_not_enable_test_mode || failed=1
+    test_build_lock_failure_exits_job || failed=1
 
     log_info "workflow 结构测试完成"
     return $failed
