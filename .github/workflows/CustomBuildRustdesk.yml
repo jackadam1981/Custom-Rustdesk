@@ -66,7 +66,9 @@ env:
   RUSTDESK_BRANCH: 'master'
   REMOTE_WORKFLOW_NAME: 'Build'
   VCPKG_COMMIT_ID: '120deac3062162151622ca4860575a33844ba10b'
+  CARGO_EXPAND_VERSION: '1.0.95'
   CARGO_NDK_VERSION: '3.1.2'
+  FLUTTER_RUST_BRIDGE_VERSION: '1.80.1'
   ANDROID_FLUTTER_VERSION: '3.24.5'
   NDK_VERSION: 'r28c'
   # 默认值配置
@@ -917,6 +919,19 @@ jobs:
         with:
           workspaces: rustdesk-source
           key: android-${{ matrix.android.name }}
+
+      - name: Generate Flutter Rust bridge
+        shell: bash
+        working-directory: rustdesk-source
+        run: |
+          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          pushd flutter
+          sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml
+          flutter pub get
+          popd
+          flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
 
       - name: Build RustDesk Android library
         shell: bash
