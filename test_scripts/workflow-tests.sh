@@ -262,12 +262,33 @@ function test_workflow_builds_real_client_artifact() {
        grep -q 'binary_path="rustdesk-source/target/${{ matrix.client.target }}/release/${{ matrix.client.binary }}"' "$WORKFLOW_FILE" &&
        grep -q 'name: rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q 'finish:' "$WORKFLOW_FILE" &&
-       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, compile-client]' "$WORKFLOW_FILE"; then
+       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, compile-client, compile-android]' "$WORKFLOW_FILE"; then
         record_test_result "workflow_builds_real_client_artifact" "PASS" "workflow 会编译 Linux/Windows 真实客户端产物并上传 artifact"
         return 0
     fi
 
     record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 应递归拉 submodule 并编译 Linux/Windows 真实客户端 artifact"
+    return 1
+}
+
+function test_workflow_builds_android_apk_artifact() {
+    if grep -q '^  compile-android:' "$WORKFLOW_FILE" &&
+       grep -q 'target: aarch64-linux-android' "$WORKFLOW_FILE" &&
+       grep -q 'abi: arm64-v8a' "$WORKFLOW_FILE" &&
+       grep -q 'flutter-target-platform: android-arm64' "$WORKFLOW_FILE" &&
+       grep -q 'uses: subosito/flutter-action@v2' "$WORKFLOW_FILE" &&
+       grep -q 'uses: nttld/setup-ndk@v1' "$WORKFLOW_FILE" &&
+       grep -q 'cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked' "$WORKFLOW_FILE" &&
+       grep -q './flutter/ndk_arm64.sh' "$WORKFLOW_FILE" &&
+       grep -q 'liblibrustdesk.so' "$WORKFLOW_FILE" &&
+       grep -q 'flutter build apk --release --target-platform "${{ matrix.android.flutter-target-platform }}" --split-per-abi' "$WORKFLOW_FILE" &&
+       grep -q 'name: rustdesk-client-android-${{ matrix.android.name }}-${{ github.run_id }}' "$WORKFLOW_FILE" &&
+       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, compile-client, compile-android]' "$WORKFLOW_FILE"; then
+        record_test_result "workflow_builds_android_apk_artifact" "PASS" "workflow 会编译 Android APK 真实客户端产物并上传 artifact"
+        return 0
+    fi
+
+    record_test_result "workflow_builds_android_apk_artifact" "FAIL" "workflow 应编译 Android arm64 APK artifact，并让 finish 等待 Android job"
     return 1
 }
 
@@ -290,6 +311,7 @@ function run_workflow_tests() {
     test_build_job_does_not_export_trigger_data_env || failed=1
     test_build_uploads_patched_source_artifact || failed=1
     test_workflow_builds_real_client_artifact || failed=1
+    test_workflow_builds_android_apk_artifact || failed=1
 
     log_info "workflow 结构测试完成"
     return $failed
