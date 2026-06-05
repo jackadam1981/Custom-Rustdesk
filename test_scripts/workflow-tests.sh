@@ -282,6 +282,7 @@ function test_workflow_builds_android_apk_artifact() {
        grep -q 'cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked' "$WORKFLOW_FILE" &&
        grep -q 'flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h' "$WORKFLOW_FILE" &&
        grep -q 'cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h' "$WORKFLOW_FILE" &&
+       ! grep -q 'extended_text: 14.0.0/extended_text: 13.0.0' "$WORKFLOW_FILE" &&
        grep -q 'cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked' "$WORKFLOW_FILE" &&
        grep -q './flutter/ndk_arm64.sh' "$WORKFLOW_FILE" &&
        grep -q 'liblibrustdesk.so' "$WORKFLOW_FILE" &&
