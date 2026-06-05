@@ -53,7 +53,7 @@ on:
 permissions:
   issues: write
   contents: write
-  actions: read
+  actions: write
 
 # 统一环境变量配置
 env:
@@ -740,5 +740,20 @@ jobs:
           echo "notification_sent=$notification_sent" >> $GITHUB_OUTPUT
           echo "cleanup_completed=$cleanup_completed" >> $GITHUB_OUTPUT
           echo "lock_released=$lock_released" >> $GITHUB_OUTPUT
+
+      - name: Delete trigger data artifact
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.BUILD_TOKEN }}
+        run: |
+          artifact_id=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+            --jq '.artifacts[] | select(.name == "trigger-data-${{ github.run_id }}") | .id' | head -n 1)
+
+          if [ -n "$artifact_id" ]; then
+            gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$artifact_id"
+            echo "✅ Deleted trigger data artifact"
+          else
+            echo "ℹ️ Trigger data artifact not found"
+          fi
           
  

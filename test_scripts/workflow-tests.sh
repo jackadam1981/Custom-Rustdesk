@@ -235,6 +235,9 @@ function test_build_uploads_patched_source_artifact() {
     if grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q 'path: rustdesk-source' "$WORKFLOW_FILE" &&
        grep -q 'steps.record-artifact.outputs.download_url' "$WORKFLOW_FILE" &&
+       grep -q 'actions: write' "$WORKFLOW_FILE" &&
+       grep -q 'Delete trigger data artifact' "$WORKFLOW_FILE" &&
+       grep -q 'trigger-data-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        ! grep -q 'https://api.github.com/repos/$RUSTDESK_REPO/dispatches' "$WORKFLOW_FILE"; then
         record_test_result "build_uploads_patched_source_artifact" "PASS" "build 阶段上传已定制源码 artifact，不再触发无权限的官方仓库 dispatch"
         return 0
