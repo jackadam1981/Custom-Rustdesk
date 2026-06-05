@@ -99,6 +99,17 @@ function test_queue_issue_lock_uses_ref_guard() {
     return 1
 }
 
+function test_manual_queue_limit_is_five() {
+    if grep -q '^MANUAL_TRIGGER_LIMIT=5' .github/workflows/scripts/queue-manager.sh &&
+       grep -q '手动触发：.*\$workflow_count/5' .github/workflows/scripts/issue-templates.sh; then
+        record_test_result "manual_queue_limit_is_five" "PASS" "手动触发队列上限为 5"
+        return 0
+    fi
+
+    record_test_result "manual_queue_limit_is_five" "FAIL" "手动触发队列上限应为 5，并与 Issue 面板显示一致"
+    return 1
+}
+
 function run_workflow_tests() {
     log_info "开始运行 workflow 结构测试..."
     local failed=0
@@ -110,6 +121,7 @@ function run_workflow_tests() {
     test_actions_ci_does_not_enable_test_mode || failed=1
     test_build_lock_failure_exits_job || failed=1
     test_queue_issue_lock_uses_ref_guard || failed=1
+    test_manual_queue_limit_is_five || failed=1
 
     log_info "workflow 结构测试完成"
     return $failed

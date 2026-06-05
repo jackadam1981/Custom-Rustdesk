@@ -10,7 +10,7 @@ source .github/workflows/scripts/issue-manager.sh
 QUEUE_ISSUE_NUMBER="1"
 QUEUE_LIMIT=5                # 总队列限制：5个
 ISSUE_TRIGGER_LIMIT=3        # Issue触发限制：3个
-MANUAL_TRIGGER_LIMIT=2       # 手动触发限制：2个
+MANUAL_TRIGGER_LIMIT=5       # 手动触发限制：5个
 ISSUE_LOCK_TIMEOUT=300       # 5分钟issue锁超时
 BUILD_LOCK_HOLD_TIMEOUT=5400 # 90分钟构建锁持有超时
 REF_LOCK_PREFIX="queue-locks"
