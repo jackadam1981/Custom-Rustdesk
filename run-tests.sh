@@ -33,13 +33,17 @@ init_test_framework
 
 # 检查是否提供了特定测试名称参数
 if [ $# -gt 0 ]; then
-    # 设置测试环境
-    if ! setup_test_environment; then
-        log_error "测试环境设置失败，退出测试"
-        exit 1
-    fi
     test_name="$1"
-    shift 1  # 移除测试名称参数，以便后续参数可以传递给测试函数
+    shift 1
+
+    # 设置测试环境
+    if [ "$test_name" != "review-tests" ] && [ "$test_name" != "workflow-tests" ]; then
+        if ! setup_test_environment; then
+            log_error "测试环境设置失败，退出测试"
+            exit 1
+        fi
+    fi
+
     if [ "$test_name" == "all" ]; then
         log_info "运行所有测试..."
         # 运行工具函数测试
@@ -62,12 +66,14 @@ if [ $# -gt 0 ]; then
     else
         if run_specific_test "$test_name" "$@"; then
             log_info "测试 $test_name 完成"
+            test_exit_code=0
         else
             log_error "测试 $test_name 失败"
+            test_exit_code=1
         fi
         show_test_results
         cleanup_test_framework
-        exit $?
+        exit $test_exit_code
     fi
 else
     log_info "未提供测试参数。以下是可用的测试参数："
@@ -79,6 +85,8 @@ else
     log_info "  - utils-workflow-status：测试检查工作流状态函数"
     log_info "  - utils-workflow-logs：测试读取工作流日志函数"
     log_info "  - utils-latest-workflow-run：测试获取最近的工作流运行ID函数"
+    log_info "  - review-tests：运行本地审核逻辑测试"
+    log_info "  - workflow-tests：运行本地 workflow 结构测试"
     log_info "  - test-queue-reset：运行队列复位测试（清理所有锁和队列）"
     log_info "  - test-manual-trigger：运行手动触发测试"
     log_info "  - test-issue-trigger：运行问题触发测试"

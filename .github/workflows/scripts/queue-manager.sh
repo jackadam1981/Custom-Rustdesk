@@ -10,12 +10,13 @@ source .github/workflows/scripts/issue-manager.sh
 QUEUE_ISSUE_NUMBER="1"
 QUEUE_LIMIT=5                # 总队列限制：5个
 ISSUE_TRIGGER_LIMIT=3        # Issue触发限制：3个
-MANUAL_TRIGGER_LIMIT=2       # 手动触发限制：2个
+MANUAL_TRIGGER_LIMIT=5       # 手动触发限制：5个
 ISSUE_LOCK_TIMEOUT=300       # 5分钟issue锁超时
 BUILD_LOCK_HOLD_TIMEOUT=5400 # 90分钟构建锁持有超时
+REF_LOCK_PREFIX="queue-locks"
 
 # 环境检测和配置
-if [ "${TEST_MODE:-}" = "true" ] || [ "${ENVIRONMENT:-}" = "test" ] || [ "${CI:-}" = "true" ]; then
+if [ "${TEST_MODE:-}" = "true" ] || [ "${ENVIRONMENT:-}" = "test" ]; then
     # 测试环境：极速模式，最小等待时间
     LOCK_RETRY_INTERVAL=0.05     # 0.05秒重试间隔（进一步减少）
     LOCK_MAX_ATTEMPTS=1          # 测试环境：最多1次尝试（立即失败）
@@ -49,6 +50,95 @@ QUEUE_DATA=""
 TRIGGER_DATA=""
 API_CACHE_TIMESTAMP=0
 API_CACHE_DATA=""
+declare -A HELD_REF_LOCKS
+
+_ref_lock_enabled() {
+  [ "${TEST_MODE:-}" != "true" ] && [ "${ENVIRONMENT:-}" != "test" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_SHA:-}" ]
+}
+
+_delete_ref_lock() {
+  local ref_name="$1"
+
+  if [ -z "$ref_name" ]; then
+    return 0
+  fi
+
+  local encoded_ref
+  encoded_ref=$(echo "$ref_name" | sed 's#^refs/##')
+  gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/${encoded_ref}" >/dev/null 2>&1 || true
+}
+
+_cleanup_stale_ref_locks() {
+  local lock_type="$1"
+  local timeout="$2"
+  local now
+  now=$(date +%s)
+
+  gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/heads/${REF_LOCK_PREFIX}/${lock_type}" --paginate --jq '.[].ref' 2>/dev/null |
+    while IFS= read -r ref_name; do
+      local leaf ts
+      leaf="${ref_name##*/}"
+      ts="${leaf%%-*}"
+      if echo "$ts" | grep -Eq '^[0-9]+$' && [ $((now - ts)) -gt "$timeout" ]; then
+        debug "warning" "Deleting stale ${lock_type} ref lock: $ref_name"
+        _delete_ref_lock "$ref_name"
+      fi
+    done
+}
+
+_acquire_ref_lock() {
+  local lock_type="$1"
+  local build_id="$2"
+  local timeout="$3"
+  local start_time
+  local lock_ref
+
+  start_time=$(date +%s)
+  lock_ref="refs/heads/${REF_LOCK_PREFIX}/${lock_type}/${start_time}-${build_id}"
+
+  debug "log" "Creating ${lock_type} ref lock: $lock_ref"
+  if ! gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+      -f ref="$lock_ref" \
+      -f sha="$GITHUB_SHA" >/dev/null; then
+    debug "error" "Failed to create ${lock_type} ref lock"
+    return 1
+  fi
+
+  HELD_REF_LOCKS["$lock_type"]="$lock_ref"
+
+  while [ $(($(date +%s) - start_time)) -lt "$timeout" ]; do
+    _cleanup_stale_ref_locks "$lock_type" "$timeout"
+
+    local first_ref
+    first_ref=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/heads/${REF_LOCK_PREFIX}/${lock_type}" --paginate --jq '.[].ref' 2>/dev/null | sort | head -n 1)
+
+    if [ "$first_ref" = "$lock_ref" ]; then
+      debug "success" "Acquired ${lock_type} ref lock: $lock_ref"
+      return 0
+    fi
+
+    debug "log" "${lock_type} ref lock waiting behind $first_ref"
+    sleep "$LOCK_BUSY_WAIT"
+  done
+
+  debug "error" "Timed out waiting for ${lock_type} ref lock"
+  _delete_ref_lock "$lock_ref"
+  unset "HELD_REF_LOCKS[$lock_type]"
+  return 1
+}
+
+_release_ref_lock() {
+  local lock_type="$1"
+  local lock_ref="${HELD_REF_LOCKS[$lock_type]:-}"
+
+  if [ -z "$lock_ref" ]; then
+    return 0
+  fi
+
+  debug "log" "Deleting ${lock_type} ref lock: $lock_ref"
+  _delete_ref_lock "$lock_ref"
+  unset "HELD_REF_LOCKS[$lock_type]"
+}
 
 # 加载队列数据（带缓存）
 _load_queue_data() {
@@ -128,6 +218,28 @@ _acquire_lock() {
   local timeout="${3:-$ISSUE_LOCK_TIMEOUT}"
 
   debug "log" "Acquiring $lock_type lock for $build_id"
+
+  if [ "$lock_type" = "issue" ] && _ref_lock_enabled; then
+    if ! _acquire_ref_lock "$lock_type" "$build_id" "$timeout"; then
+      return 1
+    fi
+
+    _load_queue_data
+    local updated_data
+    updated_data=$(echo "$QUEUE_DATA" | jq --arg build_id "$build_id" "
+      .${lock_type}_locked_by = \$build_id |
+      .${lock_type}_lock_version = (.${lock_type}_lock_version // 1 | tonumber) + 1
+    ")
+
+    if _update_queue_data "$updated_data"; then
+      debug "success" "Successfully acquired $lock_type lock with ref guard"
+      API_CACHE_DATA=""
+      return 0
+    fi
+
+    _release_ref_lock "$lock_type"
+    return 1
+  fi
 
   # 根据锁类型选择配置参数
   local retry_interval
@@ -214,6 +326,30 @@ _release_lock() {
   local timeout="${3:-$ISSUE_LOCK_TIMEOUT}"
 
   debug "log" "Releasing $lock_type lock for $build_id"
+
+  if [ "$lock_type" = "issue" ] && _ref_lock_enabled; then
+    _load_queue_data
+    local locked_by
+    locked_by=$(echo "$QUEUE_DATA" | jq -r ".${lock_type}_locked_by // null")
+
+    if [ "$locked_by" = "$build_id" ]; then
+      local updated_data
+      updated_data=$(echo "$QUEUE_DATA" | jq "
+        .${lock_type}_locked_by = null |
+        .${lock_type}_lock_version = (.${lock_type}_lock_version // 1 | tonumber) + 1
+      ")
+      if ! _update_queue_data "$updated_data"; then
+        _release_ref_lock "$lock_type"
+        return 1
+      fi
+      debug "success" "Successfully released $lock_type lock with ref guard"
+    else
+      debug "log" "Not holding $lock_type lock in issue body, no body release needed"
+    fi
+
+    _release_ref_lock "$lock_type"
+    return 0
+  fi
 
   local start_time=$(date +%s)
   local attempt=0
@@ -970,15 +1106,38 @@ cleanup_queue() {
 release_all_locks() {
     local build_id="${GITHUB_RUN_ID:-}"
     debug "log" "Public interface: release_all_locks() called for $build_id"
+    _load_queue_data
     
     # 释放构建锁
     local build_lock_result=0
-    if _release_build_lock; then
-        debug "success" "Build lock released successfully"
-        build_lock_result=0
+    local current_build_holder=$(echo "$QUEUE_DATA" | jq -r '.build_locked_by // null')
+    if [ "$current_build_holder" = "$build_id" ]; then
+        if _release_build_lock; then
+            debug "success" "Build lock released successfully"
+            build_lock_result=0
+        else
+            debug "warning" "Failed to release build lock"
+            build_lock_result=1
+        fi
     else
-        debug "warning" "Failed to release build lock"
-        build_lock_result=1
+        debug "log" "Skipping build lock release; current holder is $current_build_holder"
+        build_lock_result=0
+    fi
+
+    # 当前任务完成后必须离开队列，否则成功构建会残留并占用队列容量。
+    local queue_leave_result=0
+    local queue_membership=$(echo "$QUEUE_DATA" | jq --arg run_id "$build_id" '.queue | map(select(.run_id == $run_id)) | length')
+    if [ "$queue_membership" -gt 0 ]; then
+        if _leave_queue; then
+            debug "success" "Queue item removed successfully"
+            queue_leave_result=0
+        else
+            debug "warning" "Failed to remove queue item"
+            queue_leave_result=1
+        fi
+    else
+        debug "log" "Skipping queue leave; current run is not queued"
+        queue_leave_result=0
     fi
     
     # 释放问题锁（如果当前持有）
@@ -998,7 +1157,7 @@ release_all_locks() {
     fi
     
     # 返回总体结果
-    if [ $build_lock_result -eq 0 ] && [ $issue_lock_result -eq 0 ]; then
+    if [ $build_lock_result -eq 0 ] && [ $queue_leave_result -eq 0 ] && [ $issue_lock_result -eq 0 ]; then
         debug "success" "All locks released successfully"
         return 0
     else

@@ -72,7 +72,7 @@ jobs:
             DELETED=0
             FAILED=0
             
-            echo "$RUNS_DATA" | jq -c '.' | while read -r run; do
+            while read -r run; do
               RUN_ID=$(echo "$run" | jq -r '.id')
               RUN_NAME=$(echo "$run" | jq -r '.name')
               
@@ -87,11 +87,11 @@ jobs:
               fi
               
               sleep 1
-            done
+            done < <(echo "$RUNS_DATA" | jq -c '.')
             
             echo "删除完成：成功 $DELETED 个，失败 $FAILED 个"
           fi
           
           # 显示剩余runs数量
           REMAINING=$(gh api repos/${{ github.repository }}/actions/runs --jq '.total_count')
-          echo "剩余workflow runs总数：$REMAINING" 
+          echo "剩余workflow runs总数：$REMAINING"

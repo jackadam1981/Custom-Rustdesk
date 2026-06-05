@@ -52,8 +52,8 @@ on:
 
 permissions:
   issues: write
-  contents: read
-  actions: read
+  contents: write
+  actions: write
 
 # 统一环境变量配置
 env:
@@ -65,6 +65,12 @@ env:
   RUSTDESK_REPO: 'rustdesk/rustdesk'
   RUSTDESK_BRANCH: 'master'
   REMOTE_WORKFLOW_NAME: 'Build'
+  VCPKG_COMMIT_ID: '120deac3062162151622ca4860575a33844ba10b'
+  CARGO_EXPAND_VERSION: '1.0.95'
+  CARGO_NDK_VERSION: '3.1.2'
+  FLUTTER_RUST_BRIDGE_VERSION: '1.80.1'
+  ANDROID_FLUTTER_VERSION: '3.24.5'
+  NDK_VERSION: 'r28c'
   # 默认值配置
   DEFAULT_TAG: ${{ secrets.DEFAULT_TAG }}
   DEFAULT_EMAIL: ${{ secrets.DEFAULT_EMAIL }}
@@ -83,6 +89,7 @@ jobs:
     outputs:
       build_id: ${{ steps.trigger.outputs.build_id }}
       validation_passed: ${{ steps.trigger.outputs.validation_passed }}
+      trigger_data: ${{ steps.trigger.outputs.trigger_data }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -93,8 +100,7 @@ jobs:
           source .github/workflows/scripts/trigger.sh
           
           # 使用环境变量传递事件数据
-          export EVENT_DATA='${{ toJSON(github.event) }}'
-          echo "DEBUG: EVENT_DATA = $EVENT_DATA"
+          export EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"
           echo "DEBUG: github.event_name = ${{ github.event_name }}"
           echo "DEBUG: github.event.issue.number = ${{ github.event.issue.number }}"
           
@@ -107,7 +113,6 @@ jobs:
             echo "DEBUG: 进入 workflow_dispatch 分支"
             # 提取参数并设置环境变量
             params=$(trigger_manager "extract-workflow-dispatch" "$EVENT_DATA")
-            echo "DEBUG: workflow_dispatch params = $params"
             eval "$params"
             
             echo "DEBUG: After extract, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
@@ -118,7 +123,6 @@ jobs:
             
             # 生成最终JSON数据
             final_data=$(trigger_manager "generate-data" "$EVENT_DATA" "$final_tag")
-            echo "DEBUG: final_data = $final_data"
             echo "DEBUG: final_data 长度: ${#final_data}"
             echo "DEBUG: final_data 是否为空: $([ -z "$final_data" ] && echo "是" || echo "否")"
             
@@ -127,7 +131,6 @@ jobs:
             validation_exit_code=$?
             echo "DEBUG: validation_result = $validation_result, exit_code = $validation_exit_code"
             
-            # 只输出build_id，不输出trigger_data
             build_id=$(echo "$final_data" | jq -r '.build_id // empty')
             echo "build_id=$build_id" >> $GITHUB_OUTPUT
             echo "DEBUG: build_id output completed"
@@ -135,7 +138,6 @@ jobs:
             echo "DEBUG: 进入 issue 分支"
             # Issue触发的情况
             params=$(trigger_manager "extract-issue" "$EVENT_DATA")
-            echo "DEBUG: issue params = $params"
             eval "$params"
             
             echo "DEBUG: After extract, TAG=$TAG, EMAIL=$EMAIL, CUSTOMER=$CUSTOMER"
@@ -146,7 +148,6 @@ jobs:
             
             # 生成最终JSON数据
             final_data=$(trigger_manager "generate-data" "$EVENT_DATA" "$final_tag")
-            echo "DEBUG: final_data = $final_data"
             echo "DEBUG: final_data 长度: ${#final_data}"
             echo "DEBUG: final_data 是否为空: $([ -z "$final_data" ] && echo "是" || echo "否")"
             
@@ -155,11 +156,15 @@ jobs:
             validation_exit_code=$?
             echo "DEBUG: validation_result = $validation_result, exit_code = $validation_exit_code"
             
-            # 只输出build_id，不输出trigger_data
             build_id=$(echo "$final_data" | jq -r '.build_id // empty')
             echo "build_id=$build_id" >> $GITHUB_OUTPUT
             echo "DEBUG: build_id output completed"
           fi
+
+          mkdir -p "$RUNNER_TEMP/trigger-data"
+          printf '%s' "$final_data" > "$RUNNER_TEMP/trigger-data/trigger-data.json"
+
+          echo "trigger_data=$final_data" >> $GITHUB_OUTPUT
           
           # 设置验证结果
           if [ $validation_exit_code -eq 0 ]; then
@@ -167,6 +172,14 @@ jobs:
           else
             echo "validation_passed=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Upload trigger data
+        if: steps.trigger.outputs.validation_passed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trigger-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/trigger-data/trigger-data.json
+          retention-days: 1
 
   # 01-审核验证 - 处理需要审核的情况
   review:
@@ -179,6 +192,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download trigger data
+        uses: actions/download-artifact@v4
+        with:
+          name: trigger-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/trigger-data
         
       - name: Review and validate
         id: review
@@ -186,33 +205,35 @@ jobs:
         run: |
           source .github/workflows/scripts/review.sh
 
-          # 直接使用 github.event
-          EVENT_DATA='${{ toJSON(github.event) }}'
+          EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           
           # 验证参数
-          validation_result=$(review_manager "validate" "$EVENT_DATA" "" || true)
+          set +e
+          validation_result=$(review_manager "validate" "$EVENT_DATA" "$TRIGGER_DATA")
           validation_exit_code=$?
+          set -e
           
           if [ $validation_exit_code -ne 0 ]; then
             # 参数验证失败，处理拒绝
-            review_manager "handle-rejection" "$EVENT_DATA" "" "$validation_result" || true
+            review_manager "handle-rejection" "$EVENT_DATA" "$TRIGGER_DATA" "$validation_result" || true
             echo "review_passed=false" >> $GITHUB_OUTPUT
             echo "review_reason=参数验证失败" >> $GITHUB_OUTPUT
             exit 0
           fi
           
           # 检查是否需要审核
-          need_review=$(review_manager "need-review" "$EVENT_DATA" "" || true)
+          need_review=$(review_manager "need-review" "$EVENT_DATA" "$TRIGGER_DATA")
           
           # 如果是issue触发，清理issue内容
           if [ "${{ github.event_name }}" = "issues" ]; then
             source .github/workflows/scripts/trigger.sh
             
-            # 从EVENT_DATA中提取参数用于清理
-            final_tag_param=$(echo "$EVENT_DATA" | jq -r '.build_params.tag // empty')
-            original_tag_param=$(echo "$EVENT_DATA" | jq -r '.build_params.original_tag // empty')
-            customer_param=$(echo "$EVENT_DATA" | jq -r '.build_params.customer // empty')
-            slogan_param=$(echo "$EVENT_DATA" | jq -r '.build_params.slogan // empty')
+            # 从TRIGGER_DATA中提取参数用于清理
+            final_tag_param=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
+            original_tag_param=$(echo "$TRIGGER_DATA" | jq -r '.build_params.original_tag // empty')
+            customer_param=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
+            slogan_param=$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')
             
             cleaned_body=$(trigger_manager "clean-issue" "$final_tag_param" "$original_tag_param" "$customer_param" "$slogan_param")
             issue_number="${{ github.event.issue.number }}"
@@ -223,14 +244,16 @@ jobs:
             # 需要审核，在issue中回复需要审核的信息
             if [ "${{ github.event_name }}" = "issues" ]; then
               source .github/workflows/scripts/issue-templates.sh
-              review_comment=$(generate_review_required_template "${{ github.run_id }}" "${{ github.event.issue.number }}" "$EVENT_DATA")
+              review_comment=$(generate_review_required_template "${{ github.run_id }}" "${{ github.event.issue.number }}" "$TRIGGER_DATA")
               source .github/workflows/scripts/issue-manager.sh
               add_issue_comment "${{ github.event.issue.number }}" "$review_comment" || true
             fi
             
             # 处理审核流程
-            review_result=$(review_manager "handle-review" "$EVENT_DATA" "" || true)
+            set +e
+            review_result=$(review_manager "handle-review" "$EVENT_DATA" "$TRIGGER_DATA")
             review_exit_code=$?
+            set -e
             
             if [ $review_exit_code -eq 0 ]; then
               echo "review_passed=true" >> $GITHUB_OUTPUT
@@ -244,12 +267,13 @@ jobs:
             fi
           else
             # 不需要审核，直接通过
+            review_exit_code=0
             echo "review_passed=true" >> $GITHUB_OUTPUT
             echo "review_reason=" >> $GITHUB_OUTPUT
           fi
           
           # 输出数据（传递审核结果）
-          review_manager "output-data" "$EVENT_DATA" "" "$([ "$need_review" = "true" ] && [ $review_exit_code -eq 1 ] && echo "true" || echo "false")" "$([ "$need_review" = "true" ] && [ $review_exit_code -eq 2 ] && echo "true" || echo "false")" || true
+          review_manager "output-data" "$EVENT_DATA" "$TRIGGER_DATA" "$([ "$need_review" = "true" ] && [ $review_exit_code -eq 1 ] && echo "true" || echo "false")" "$([ "$need_review" = "true" ] && [ $review_exit_code -eq 2 ] && echo "true" || echo "false")" || true
 
   # 02-加入队列
   join-queue:
@@ -262,51 +286,23 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download trigger data
+        uses: actions/download-artifact@v4
+        with:
+          name: trigger-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/trigger-data
         
       - name: Join build queue
         id: join-queue
-        env:
-          DEBUG_ENABLED: true
         run: |
           source .github/workflows/scripts/queue-manager.sh
 
-          # 直接使用 github.event
-          EVENT_DATA='${{ toJSON(github.event) }}'
+          trigger_data="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           
           # 加入队列
           echo "Joining build queue..."
-          echo "DEBUG: EVENT_DATA = $EVENT_DATA"
           echo "DEBUG: GITHUB_RUN_ID = $GITHUB_RUN_ID"
-          
-          # 在需要时间戳的地方及时生成
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # 手动触发：生成带时间戳的标签
-            tag="${{ github.event.inputs.tag }}"
-            timestamp=$(date '+%Y%m%d-%H%M%S')
-            final_tag="${tag}-${timestamp}"
-            
-            # 构建完整的触发数据
-            trigger_data=$(jq -c -n \
-              --arg build_id "$GITHUB_RUN_ID" \
-              --arg trigger_type "workflow_dispatch" \
-              --arg issue_number "null" \
-              --arg tag "$final_tag" \
-              --arg original_tag "$tag" \
-              --arg email "${{ github.event.inputs.email }}" \
-              --arg customer "${{ github.event.inputs.customer }}" \
-              --arg customer_link "${{ github.event.inputs.customer_link }}" \
-              --arg super_password "${{ github.event.inputs.super_password }}" \
-              --arg slogan "${{ github.event.inputs.slogan }}" \
-              --arg rendezvous_server "${{ github.event.inputs.rendezvous_server }}" \
-              --arg rs_pub_key "${{ github.event.inputs.rs_pub_key }}" \
-              --arg api_server "${{ github.event.inputs.api_server }}" \
-              '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, rs_pub_key: $rs_pub_key, api_server: $api_server}}')
-          else
-            # Issue触发：使用原始数据
-            trigger_data="$EVENT_DATA"
-          fi
-          
-          echo "DEBUG: Generated trigger_data = $trigger_data"
           
           join_result=$(queue_manager 'queue_lock' 'join' "$trigger_data")
           join_exit_code=$?
@@ -359,6 +355,7 @@ jobs:
           else
             echo "❌ Failed to acquire build lock"
             echo "build_lock_acquired=false" >> $GITHUB_OUTPUT
+            exit 1
           fi
 
   # 04-执行构建
@@ -368,11 +365,17 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_success: ${{ steps.extract-vars.outputs.build_success }}
-      download_url: ${{ steps.extract-vars.outputs.download_url }}
+      download_url: ${{ steps.record-artifact.outputs.download_url || steps.extract-vars.outputs.download_url }}
       error_message: ${{ steps.extract-vars.outputs.error_message }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download trigger data
+        uses: actions/download-artifact@v4
+        with:
+          name: trigger-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/trigger-data
         
       # 步骤1: 提取变量
       - name: Extract variables
@@ -380,22 +383,20 @@ jobs:
         run: |
           echo "🔧 Step 1: Extracting variables..."
 
-          # 直接使用 github.event 数据
-          EVENT_DATA='${{ toJSON(github.event) }}'
-          echo "🔍 EVENT_DATA 长度: ${#EVENT_DATA}"
-          echo "🔍 EVENT_DATA 前100字符: ${EVENT_DATA:0:100}..."
+          # 使用 trigger job 标准化后的参数，兼容 workflow_dispatch 和 Issue 触发
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
+          echo "🔍 TRIGGER_DATA 长度: ${#TRIGGER_DATA}"
 
-          # 从 GitHub event 中直接提取构建参数
-          tag=$(echo "$EVENT_DATA" | jq -r '.inputs.tag // empty')
-          customer=$(echo "$EVENT_DATA" | jq -r '.inputs.customer // empty')
-          customer_link=$(echo "$EVENT_DATA" | jq -r '.inputs.customer_link // empty')
-          slogan=$(echo "$EVENT_DATA" | jq -r '.inputs.slogan // empty')
-          email=$(echo "$EVENT_DATA" | jq -r '.inputs.email // empty')
-          super_password=$(echo "$EVENT_DATA" | jq -r '.inputs.super_password // empty')
-          rendezvous_server=$(echo "$EVENT_DATA" | jq -r '.inputs.rendezvous_server // empty')
-          rs_pub_key=$(echo "$EVENT_DATA" | jq -r '.inputs.rs_pub_key // empty')
-          api_server=$(echo "$EVENT_DATA" | jq -r '.inputs.api_server // empty')
-          enable_debug=$(echo "$EVENT_DATA" | jq -r '.inputs.enable_debug // empty')
+          # 从标准化 trigger_data 中提取构建参数
+          tag=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
+          customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
+          customer_link=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer_link // empty')
+          slogan=$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')
+          email=$(echo "$TRIGGER_DATA" | jq -r '.build_params.email // empty')
+          super_password=$(echo "$TRIGGER_DATA" | jq -r '.build_params.super_password // empty')
+          rendezvous_server=$(echo "$TRIGGER_DATA" | jq -r '.build_params.rendezvous_server // empty')
+          rs_pub_key=$(echo "$TRIGGER_DATA" | jq -r '.build_params.rs_pub_key // empty')
+          api_server=$(echo "$TRIGGER_DATA" | jq -r '.build_params.api_server // empty')
 
           echo "🔍 提取的构建参数:"
           echo "  - tag: $tag"
@@ -403,11 +404,10 @@ jobs:
           echo "  - customer_link: $customer_link"
           echo "  - slogan: $slogan"
           echo "  - email: $email"
-          echo "  - super_password: $super_password"
           echo "  - rendezvous_server: $rendezvous_server"
-          echo "  - rs_pub_key: $rs_pub_key"
+          echo "  - super_password: [masked]"
+          echo "  - rs_pub_key: [masked]"
           echo "  - api_server: $api_server"
-          echo "  - enable_debug: $enable_debug"
 
           # 验证关键参数
           if [ -n "$tag" ] && [ -n "$customer" ] && [ -n "$email" ]; then
@@ -446,7 +446,7 @@ jobs:
           git config --global user.email "build@custom-rustdesk.com"
           
           # 克隆远程仓库
-          git clone --depth 1 --branch $RUSTDESK_BRANCH https://github.com/$RUSTDESK_REPO.git rustdesk-source
+          git clone --depth 1 --branch $RUSTDESK_BRANCH --recurse-submodules --shallow-submodules https://github.com/$RUSTDESK_REPO.git rustdesk-source
           
           if [ $? -eq 0 ]; then
             echo "✅ Successfully cloned source code"
@@ -463,26 +463,37 @@ jobs:
         if: steps.clone-source.outputs.clone_success == 'true'
         run: |
           echo "🔧 Step 3: Modifying source code..."
-          
+          source .github/workflows/scripts/source-patcher.sh
+
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           cd rustdesk-source
+          export BUILD_TAG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')"
+          export BUILD_CUSTOMER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')"
+          export BUILD_CUSTOMER_LINK="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer_link // empty')"
+          export BUILD_SLOGAN="$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')"
+          export BUILD_RENDEZVOUS_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rendezvous_server // empty')"
+          export BUILD_RS_PUB_KEY="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rs_pub_key // empty')"
+          export BUILD_API_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.api_server // empty')"
           
           # 创建构建配置文件
           echo "📝 创建构建配置文件..."
           cat > build-config.json << EOF
           {
-            "tag": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.tag // empty')",
-            "customer": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')",
-            "customer_link": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer_link // empty')",
-            "slogan": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.slogan // empty')",
-            "email": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.email // empty')",
-            "super_password": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.super_password // empty')",
-            "rendezvous_server": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.rendezvous_server // empty')",
-            "rs_pub_key": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.rs_pub_key // empty')",
-            "api_server": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.api_server // empty')",
-            "enable_debug": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.enable_debug // empty')",
+            "tag": "$BUILD_TAG",
+            "customer": "$BUILD_CUSTOMER",
+            "customer_link": "$BUILD_CUSTOMER_LINK",
+            "slogan": "$BUILD_SLOGAN",
+            "email": "$(echo "$TRIGGER_DATA" | jq -r '.build_params.email // empty')",
+            "super_password": "$(echo "$TRIGGER_DATA" | jq -r '.build_params.super_password // empty')",
+            "rendezvous_server": "$BUILD_RENDEZVOUS_SERVER",
+            "rs_pub_key": "$BUILD_RS_PUB_KEY",
+            "api_server": "$BUILD_API_SERVER",
             "build_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
           EOF
+
+          echo "🧩 应用自定义源码补丁..."
+          apply_custom_source_patches
           
           # 创建构建状态文件
           echo "📝 创建构建状态文件..."
@@ -490,8 +501,8 @@ jobs:
           Build Status: SUCCESS
           Build Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)
           Build ID: ${{ github.run_id }}
-          Customer: $(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')
-          Tag: $(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.tag // empty')
+          Customer: $BUILD_CUSTOMER
+          Tag: $BUILD_TAG
           EOF
           
           echo "✅ Source code modification completed"
@@ -504,17 +515,19 @@ jobs:
         run: |
           echo "🔧 Step 4: Committing to repository..."
           
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           cd rustdesk-source
           
           # 添加远程仓库
           git remote add custom-repo https://x-access-token:${{ secrets.BUILD_TOKEN }}@github.com/${{ github.repository }}.git
           
-          # 创建新分支
-          git checkout -b custom-build-${{ github.run_id }}
+          # 创建无父提交快照分支，避免把 rustdesk/rustdesk 的上游历史推到本仓库
+          git checkout --orphan custom-build-${{ github.run_id }}
           
           # 提交修改
-          git add .
-          git commit -m "Custom build for ${{ github.run_id }} - Customer: $(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')"
+          customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
+          git add -A
+          git commit -m "Custom build for ${{ github.run_id }} - Customer: $customer"
           
           # 推送到本仓库
           git push custom-repo custom-build-${{ github.run_id }}
@@ -537,7 +550,11 @@ jobs:
           echo "🔧 Step 5: Triggering cache cleanup..."
           
           # 触发清理缓存的工作流
-          curl -X POST \
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
+          customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
+          tag=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
+          response_file=$(mktemp)
+          http_code=$(curl -sS -o "$response_file" -w "%{http_code}" -X POST \
             -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/dispatches \
@@ -545,16 +562,18 @@ jobs:
               "event_type": "cache-cleanup",
               "client_payload": {
                 "build_id": "${{ github.run_id }}",
-                "customer": "'$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')'",
-                "tag": "'$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.tag // empty')'"
+                "customer": "'$customer'",
+                "tag": "'$tag'"
               }
             }'
+          )
           
-          if [ $? -eq 0 ]; then
+          if [ "$http_code" = "204" ]; then
             echo "✅ Successfully triggered cache cleanup"
             echo "cleanup_triggered=true" >> $GITHUB_OUTPUT
           else
-            echo "❌ Failed to trigger cache cleanup"
+            echo "❌ Failed to trigger cache cleanup (HTTP $http_code)"
+            cat "$response_file"
             echo "cleanup_triggered=false" >> $GITHUB_OUTPUT
             exit 1
           fi
@@ -575,53 +594,26 @@ jobs:
           echo "✅ Cache cleanup completed"
           echo "cleanup_completed=true" >> $GITHUB_OUTPUT
 
-      # 步骤7: 触发远程构建
-      - name: Trigger remote build
-        id: trigger-remote
+      # 步骤7: 上传已定制源码快照
+      - name: Upload patched source snapshot
+        id: upload-patched-source
+        if: steps.wait-cleanup.outputs.cleanup_completed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: patched-source-${{ github.run_id }}
+          path: rustdesk-source
+          include-hidden-files: true
+          retention-days: 7
+
+      # 步骤8: 记录源码快照下载入口
+      - name: Record patched source artifact
+        id: record-artifact
         if: steps.wait-cleanup.outputs.cleanup_completed == 'true'
         run: |
-          echo "🔧 Step 7: Triggering remote RustDesk workflow..."
-          
-          # 使用GitHub API触发远程仓库的工作流
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/$RUSTDESK_REPO/dispatches \
-            -d '{
-              "event_type": "custom-build",
-              "client_payload": {
-                "build_id": "${{ github.run_id }}",
-                "customer": "'$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')'",
-                "tag": "'$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.tag // empty')'",
-                "source_repo": "${{ github.repository }}",
-                "source_branch": "custom-build-${{ github.run_id }}"
-              }
-            }'
-          
-          if [ $? -eq 0 ]; then
-            echo "✅ Successfully triggered remote workflow"
-            echo "trigger_success=true" >> $GITHUB_OUTPUT
-          else
-            echo "❌ Failed to trigger remote workflow"
-            echo "trigger_success=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
-      # 步骤8: 等待远程构建完成
-      - name: Wait for remote build completion
-        id: wait-remote
-        if: steps.trigger-remote.outputs.trigger_success == 'true'
-        run: |
-          echo "🔧 Step 8: Waiting for remote build completion..."
-          
-          # 等待远程构建完成
-          echo "⏳ Waiting for remote build to complete..."
-          
-          # 模拟等待过程
-          sleep 15
-          
-          echo "✅ Remote build completed"
-          echo "wait_success=true" >> $GITHUB_OUTPUT
+          echo "🔧 Step 8: Recording patched source artifact..."
+          echo "artifact_name=patched-source-${{ github.run_id }}" >> $GITHUB_OUTPUT
+          echo "download_url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_OUTPUT
+          echo "✅ Patched source artifact is available from this workflow run"
 
       # 步骤9: 最终清理（代码回滚）
       - name: Final cleanup and rollback
@@ -665,9 +657,332 @@ jobs:
           echo "✅ Final cleanup and rollback completed"
           echo "cleanup_completed=true" >> $GITHUB_OUTPUT
 
-  # 05-完成处理
+  # 05-编译真实客户端产物
+  compile-client:
+    needs: [build]
+    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true'
+    runs-on: ${{ matrix.client.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        client:
+          - name: linux-x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            binary: rustdesk
+            vcpkg-directory: /opt/artifacts/vcpkg
+            vcpkg-triplet: x64-linux
+          - name: windows-x64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+            binary: rustdesk.exe
+            vcpkg-directory: C:\vcpkg
+            vcpkg-triplet: x64-windows-static
+    steps:
+      - name: Download patched source
+        uses: actions/download-artifact@v4
+        with:
+          name: patched-source-${{ github.run_id }}
+          path: rustdesk-source
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            curl \
+            gcc \
+            g++ \
+            git \
+            libasound2-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer1.0-dev \
+            libgtk-3-dev \
+            libpam0g-dev \
+            libpulse-dev \
+            libunwind-dev \
+            libva-dev \
+            libvdpau-dev \
+            libxcb-randr0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxdo-dev \
+            libxfixes-dev \
+            nasm \
+            wget
+
+      - name: Install Windows build dependencies
+        if: runner.os == 'Windows'
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "15.0.6"
+
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ matrix.client.vcpkg-directory }}
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install Linux vcpkg dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        working-directory: rustdesk-source
+        run: |
+          "$VCPKG_ROOT/vcpkg" install \
+            --triplet "${{ matrix.client.vcpkg-triplet }}" \
+            --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Install Windows vcpkg dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: rustdesk-source
+        run: |
+          & "$env:VCPKG_ROOT\vcpkg.exe" install `
+            --triplet "${{ matrix.client.vcpkg-triplet }}" `
+            --x-install-root="$env:VCPKG_ROOT\installed"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.client.target }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rustdesk-source
+          key: ${{ matrix.client.name }}
+
+      - name: Build RustDesk client
+        shell: bash
+        working-directory: rustdesk-source
+        run: |
+          cargo build --release --locked --target "${{ matrix.client.target }}"
+
+      - name: Package client artifact
+        shell: bash
+        run: |
+          mkdir -p client-artifacts
+          binary_path="rustdesk-source/target/${{ matrix.client.target }}/release/${{ matrix.client.binary }}"
+          test -f "$binary_path"
+          chmod +x "$binary_path"
+          cp "$binary_path" "client-artifacts/${{ matrix.client.binary }}"
+          cp rustdesk-source/custom-build-config.json client-artifacts/
+          tar -C client-artifacts -czf "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" .
+          sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.sha256"
+
+      - name: Upload client artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}
+          path: |
+            rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz
+            rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.sha256
+          retention-days: 14
+
+  # 06-编译 Android APK 真实客户端产物
+  compile-android:
+    needs: [build]
+    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true'
+    runs-on: ${{ matrix.android.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        android:
+          - name: arm64
+            os: ubuntu-22.04
+            target: aarch64-linux-android
+            abi: arm64-v8a
+            flutter-target-platform: android-arm64
+            apk-output-name: app-arm64-v8a-release.apk
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
+      - name: Download patched source
+        uses: actions/download-artifact@v4
+        with:
+          name: patched-source-${{ github.run_id }}
+          path: rustdesk-source
+
+      - name: Install Android build dependencies
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            curl \
+            gcc-multilib \
+            git \
+            g++ \
+            g++-multilib \
+            libayatana-appindicator3-dev \
+            libasound2-dev \
+            libc6-dev \
+            libclang-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer1.0-dev \
+            libgtk-3-dev \
+            libpam0g-dev \
+            libpulse-dev \
+            libunwind-dev \
+            libva-dev \
+            libxcb-randr0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxdo-dev \
+            libxfixes-dev \
+            llvm-dev \
+            nasm \
+            ninja-build \
+            openjdk-17-jdk-headless \
+            pkg-config \
+            tree \
+            wget
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.ANDROID_FLUTTER_VERSION }}
+
+      - name: Patch Flutter
+        shell: bash
+        run: |
+          patch_file="$GITHUB_WORKSPACE/rustdesk-source/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          if [ "${{ env.ANDROID_FLUTTER_VERSION }}" = "3.24.5" ] && [ -f "$patch_file" ]; then
+            cd "$(dirname "$(dirname "$(which flutter)")")"
+            git apply "$patch_file"
+          fi
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install Android vcpkg dependencies
+        shell: bash
+        working-directory: rustdesk-source
+        run: |
+          chmod +x ./flutter/build_android_deps.sh ./flutter/ndk_arm64.sh
+          if ! ./flutter/build_android_deps.sh "${{ matrix.android.abi }}"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r log_file; do
+              echo "$log_file:"
+              echo "======"
+              cat "$log_file"
+              echo "======"
+              echo ""
+            done
+            exit 1
+          fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.android.target }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rustdesk-source
+          key: android-${{ matrix.android.name }}
+
+      - name: Generate Flutter Rust bridge
+        shell: bash
+        working-directory: rustdesk-source
+        run: |
+          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          pushd flutter
+          flutter pub get
+          popd
+          flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
+
+      - name: Build RustDesk Android library
+        shell: bash
+        working-directory: rustdesk-source
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          chmod +x ./flutter/ndk_arm64.sh
+          cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked
+          ./flutter/ndk_arm64.sh
+          mkdir -p ./flutter/android/app/src/main/jniLibs/${{ matrix.android.abi }}
+          cp ./target/${{ matrix.android.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/${{ matrix.android.abi }}/librustdesk.so
+
+      - name: Build RustDesk Android APK
+        shell: bash
+        working-directory: rustdesk-source
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+        run: |
+          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
+          sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
+          sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
+          cp "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" ./flutter/android/app/src/main/jniLibs/${{ matrix.android.abi }}/
+          pushd flutter
+          flutter build apk --release --target-platform "${{ matrix.android.flutter-target-platform }}" --split-per-abi
+          popd
+
+      - name: Package Android artifact
+        shell: bash
+        run: |
+          apk_path="rustdesk-source/flutter/build/app/outputs/flutter-apk/${{ matrix.android.apk-output-name }}"
+          test -f "$apk_path"
+          artifact_name="rustdesk-client-android-${{ matrix.android.name }}-${{ github.run_id }}"
+          cp "$apk_path" "${artifact_name}.apk"
+          cp rustdesk-source/custom-build-config.json .
+          sha256sum "${artifact_name}.apk" > "${artifact_name}.sha256"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-client-android-${{ matrix.android.name }}-${{ github.run_id }}
+          path: |
+            rustdesk-client-android-${{ matrix.android.name }}-${{ github.run_id }}.apk
+            rustdesk-client-android-${{ matrix.android.name }}-${{ github.run_id }}.sha256
+            custom-build-config.json
+          retention-days: 14
+
+  # 07-完成处理
   finish:
-    needs: [trigger, review, join-queue, wait-build-lock, build]
+    needs: [trigger, review, join-queue, wait-build-lock, build, compile-client, compile-android]
     if: always() && needs.trigger.result != 'skipped'
     runs-on: ubuntu-latest
     outputs:
@@ -678,20 +993,26 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download trigger data
+        if: needs.trigger.outputs.validation_passed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: trigger-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/trigger-data
         
       - name: Complete cleanup and notification
         id: finish
-        env:
-          TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
         run: |
           source .github/workflows/scripts/finish.sh
           source .github/workflows/scripts/queue-manager.sh
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           
           # 重新获取 github.event
-          EVENT_DATA='${{ toJSON(github.event) }}'
+          EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"
 
           # 确定构建状态
-          if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ]; then
+          if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ] && [ "${{ needs.compile-client.result }}" = "success" ] && [ "${{ needs['compile-android'].result }}" = "success" ]; then
             build_status="success"
             download_url="${{ needs.build.outputs.download_url || '' }}"
             error_message="${{ needs.build.outputs.error_message || '' }}"
@@ -728,7 +1049,7 @@ jobs:
           
           # 清理队列
           echo "Cleaning up queue..."
-          cleanup_queue
+          cleanup_queue || echo "⚠️ Queue cleanup skipped or failed"
           echo "✅ Queue cleanup completed"
           
           # 生成完成通知
@@ -749,5 +1070,20 @@ jobs:
           echo "notification_sent=$notification_sent" >> $GITHUB_OUTPUT
           echo "cleanup_completed=$cleanup_completed" >> $GITHUB_OUTPUT
           echo "lock_released=$lock_released" >> $GITHUB_OUTPUT
+
+      - name: Delete trigger data artifact
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.BUILD_TOKEN }}
+        run: |
+          artifact_id=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+            --jq '.artifacts[] | select(.name == "trigger-data-${{ github.run_id }}") | .id' | head -n 1)
+
+          if [ -n "$artifact_id" ]; then
+            gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$artifact_id"
+            echo "✅ Deleted trigger data artifact"
+          else
+            echo "ℹ️ Trigger data artifact not found"
+          fi
           
  
