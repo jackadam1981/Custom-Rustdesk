@@ -10,6 +10,7 @@ else
 fi
 
 WORKFLOW_FILE=".github/workflows/CustomBuildRustdesk.yml"
+DELETE_RUNS_WORKFLOW_FILE=".github/workflows/99-delete_workflow_runs.yml"
 
 function test_build_branch_uses_orphan_snapshot() {
     if grep -q 'git checkout --orphan custom-build-${{ github.run_id }}' "$WORKFLOW_FILE" &&
@@ -297,6 +298,23 @@ function test_workflow_builds_android_apk_artifact() {
     return 1
 }
 
+function test_delete_runs_counter_not_in_pipeline_subshell() {
+    if awk '
+        /DELETED=0/ { in_delete=1 }
+        in_delete && /\|[[:space:]]*while[[:space:]]+read/ { bad=1 }
+        in_delete && /while[[:space:]]+read/ { saw_loop=1 }
+        in_delete && /done[[:space:]]*< <\(/ { saw_process_substitution=1 }
+        in_delete && /删除完成：成功/ { saw_summary=1 }
+        END { exit((!bad && saw_loop && saw_process_substitution && saw_summary) ? 0 : 1) }
+    ' "$DELETE_RUNS_WORKFLOW_FILE"; then
+        record_test_result "delete_runs_counter_not_in_pipeline_subshell" "PASS" "删除 runs 的成功/失败计数不会丢在管道子 shell 中"
+        return 0
+    fi
+
+    record_test_result "delete_runs_counter_not_in_pipeline_subshell" "FAIL" "删除 runs 的 while 循环不能挂在管道后，否则 DELETED/FAILED 计数不会回写"
+    return 1
+}
+
 function run_workflow_tests() {
     log_info "开始运行 workflow 结构测试..."
     local failed=0
@@ -317,6 +335,7 @@ function run_workflow_tests() {
     test_build_uploads_patched_source_artifact || failed=1
     test_workflow_builds_real_client_artifact || failed=1
     test_workflow_builds_android_apk_artifact || failed=1
+    test_delete_runs_counter_not_in_pipeline_subshell || failed=1
 
     log_info "workflow 结构测试完成"
     return $failed
