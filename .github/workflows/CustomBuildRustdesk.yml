@@ -665,6 +665,14 @@ jobs:
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             binary: rustdesk
+            vcpkg-directory: /opt/artifacts/vcpkg
+            vcpkg-triplet: x64-linux
+          - name: windows-x64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+            binary: rustdesk.exe
+            vcpkg-directory: C:\vcpkg
+            vcpkg-triplet: x64-windows-static
     steps:
       - name: Download patched source
         uses: actions/download-artifact@v4
@@ -701,6 +709,12 @@ jobs:
             nasm \
             wget
 
+      - name: Install Windows build dependencies
+        if: runner.os == 'Windows'
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "15.0.6"
+
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v7
         with:
@@ -711,14 +725,26 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgDirectory: ${{ matrix.client.vcpkg-directory }}
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
-      - name: Install vcpkg dependencies
+      - name: Install Linux vcpkg dependencies
+        if: runner.os == 'Linux'
         shell: bash
         working-directory: rustdesk-source
         run: |
-          "$VCPKG_ROOT/vcpkg" install --x-install-root="$VCPKG_ROOT/installed"
+          "$VCPKG_ROOT/vcpkg" install \
+            --triplet "${{ matrix.client.vcpkg-triplet }}" \
+            --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Install Windows vcpkg dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: rustdesk-source
+        run: |
+          & "$env:VCPKG_ROOT\vcpkg.exe" install `
+            --triplet "${{ matrix.client.vcpkg-triplet }}" `
+            --x-install-root="$env:VCPKG_ROOT\installed"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

@@ -251,18 +251,23 @@ function test_workflow_builds_real_client_artifact() {
     if grep -q '^  compile-client:' "$WORKFLOW_FILE" &&
        grep -q 'strategy:' "$WORKFLOW_FILE" &&
        grep -q 'target: x86_64-unknown-linux-gnu' "$WORKFLOW_FILE" &&
+       grep -q 'target: x86_64-pc-windows-msvc' "$WORKFLOW_FILE" &&
+       grep -q 'name: windows-x64' "$WORKFLOW_FILE" &&
+       grep -q 'os: windows-2022' "$WORKFLOW_FILE" &&
+       grep -q 'vcpkg-triplet: x64-windows-static' "$WORKFLOW_FILE" &&
        grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q -- '--recurse-submodules' "$WORKFLOW_FILE" &&
        grep -q 'include-hidden-files: true' "$WORKFLOW_FILE" &&
        grep -q 'cargo build --release --locked --target "${{ matrix.client.target }}"' "$WORKFLOW_FILE" &&
+       grep -q 'binary_path="rustdesk-source/target/${{ matrix.client.target }}/release/${{ matrix.client.binary }}"' "$WORKFLOW_FILE" &&
        grep -q 'name: rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q 'finish:' "$WORKFLOW_FILE" &&
        grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, compile-client]' "$WORKFLOW_FILE"; then
-        record_test_result "workflow_builds_real_client_artifact" "PASS" "workflow 会编译真实客户端产物并上传 artifact"
+        record_test_result "workflow_builds_real_client_artifact" "PASS" "workflow 会编译 Linux/Windows 真实客户端产物并上传 artifact"
         return 0
     fi
 
-    record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 不应只上传源码，应递归拉 submodule 并编译真实客户端 artifact"
+    record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 应递归拉 submodule 并编译 Linux/Windows 真实客户端 artifact"
     return 1
 }
 
