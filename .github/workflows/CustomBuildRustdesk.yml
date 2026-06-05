@@ -342,6 +342,8 @@ jobs:
     needs: [trigger, review, join-queue, wait-build-lock]
     if: needs.trigger.outputs.validation_passed == 'true' && needs.review.outputs.review_passed == 'true' && needs.join-queue.outputs.join_success == 'true' && needs.wait-build-lock.outputs.build_lock_acquired == 'true'
     runs-on: ubuntu-latest
+    env:
+      TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}
     outputs:
       build_success: ${{ steps.extract-vars.outputs.build_success }}
       download_url: ${{ steps.extract-vars.outputs.download_url }}
@@ -356,22 +358,20 @@ jobs:
         run: |
           echo "🔧 Step 1: Extracting variables..."
 
-          # 直接使用 github.event 数据
-          EVENT_DATA='${{ toJSON(github.event) }}'
-          echo "🔍 EVENT_DATA 长度: ${#EVENT_DATA}"
-          echo "🔍 EVENT_DATA 前100字符: ${EVENT_DATA:0:100}..."
+          # 使用 trigger job 标准化后的参数，兼容 workflow_dispatch 和 Issue 触发
+          echo "🔍 TRIGGER_DATA 长度: ${#TRIGGER_DATA}"
+          echo "🔍 TRIGGER_DATA 前100字符: ${TRIGGER_DATA:0:100}..."
 
-          # 从 GitHub event 中直接提取构建参数
-          tag=$(echo "$EVENT_DATA" | jq -r '.inputs.tag // empty')
-          customer=$(echo "$EVENT_DATA" | jq -r '.inputs.customer // empty')
-          customer_link=$(echo "$EVENT_DATA" | jq -r '.inputs.customer_link // empty')
-          slogan=$(echo "$EVENT_DATA" | jq -r '.inputs.slogan // empty')
-          email=$(echo "$EVENT_DATA" | jq -r '.inputs.email // empty')
-          super_password=$(echo "$EVENT_DATA" | jq -r '.inputs.super_password // empty')
-          rendezvous_server=$(echo "$EVENT_DATA" | jq -r '.inputs.rendezvous_server // empty')
-          rs_pub_key=$(echo "$EVENT_DATA" | jq -r '.inputs.rs_pub_key // empty')
-          api_server=$(echo "$EVENT_DATA" | jq -r '.inputs.api_server // empty')
-          enable_debug=$(echo "$EVENT_DATA" | jq -r '.inputs.enable_debug // empty')
+          # 从标准化 trigger_data 中提取构建参数
+          tag=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
+          customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
+          customer_link=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer_link // empty')
+          slogan=$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')
+          email=$(echo "$TRIGGER_DATA" | jq -r '.build_params.email // empty')
+          super_password=$(echo "$TRIGGER_DATA" | jq -r '.build_params.super_password // empty')
+          rendezvous_server=$(echo "$TRIGGER_DATA" | jq -r '.build_params.rendezvous_server // empty')
+          rs_pub_key=$(echo "$TRIGGER_DATA" | jq -r '.build_params.rs_pub_key // empty')
+          api_server=$(echo "$TRIGGER_DATA" | jq -r '.build_params.api_server // empty')
 
           echo "🔍 提取的构建参数:"
           echo "  - tag: $tag"
@@ -383,7 +383,6 @@ jobs:
           echo "  - rendezvous_server: $rendezvous_server"
           echo "  - rs_pub_key: $rs_pub_key"
           echo "  - api_server: $api_server"
-          echo "  - enable_debug: $enable_debug"
 
           # 验证关键参数
           if [ -n "$tag" ] && [ -n "$customer" ] && [ -n "$email" ]; then
@@ -439,26 +438,36 @@ jobs:
         if: steps.clone-source.outputs.clone_success == 'true'
         run: |
           echo "🔧 Step 3: Modifying source code..."
-          
+          source .github/workflows/scripts/source-patcher.sh
+
           cd rustdesk-source
+          export BUILD_TAG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')"
+          export BUILD_CUSTOMER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')"
+          export BUILD_CUSTOMER_LINK="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer_link // empty')"
+          export BUILD_SLOGAN="$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')"
+          export BUILD_RENDEZVOUS_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rendezvous_server // empty')"
+          export BUILD_RS_PUB_KEY="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rs_pub_key // empty')"
+          export BUILD_API_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.api_server // empty')"
           
           # 创建构建配置文件
           echo "📝 创建构建配置文件..."
           cat > build-config.json << EOF
           {
-            "tag": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.tag // empty')",
-            "customer": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')",
-            "customer_link": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer_link // empty')",
-            "slogan": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.slogan // empty')",
-            "email": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.email // empty')",
-            "super_password": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.super_password // empty')",
-            "rendezvous_server": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.rendezvous_server // empty')",
-            "rs_pub_key": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.rs_pub_key // empty')",
-            "api_server": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.api_server // empty')",
-            "enable_debug": "$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.enable_debug // empty')",
+            "tag": "$BUILD_TAG",
+            "customer": "$BUILD_CUSTOMER",
+            "customer_link": "$BUILD_CUSTOMER_LINK",
+            "slogan": "$BUILD_SLOGAN",
+            "email": "$(echo "$TRIGGER_DATA" | jq -r '.build_params.email // empty')",
+            "super_password": "$(echo "$TRIGGER_DATA" | jq -r '.build_params.super_password // empty')",
+            "rendezvous_server": "$BUILD_RENDEZVOUS_SERVER",
+            "rs_pub_key": "$BUILD_RS_PUB_KEY",
+            "api_server": "$BUILD_API_SERVER",
             "build_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
           EOF
+
+          echo "🧩 应用自定义源码补丁..."
+          apply_custom_source_patches
           
           # 创建构建状态文件
           echo "📝 创建构建状态文件..."
@@ -466,8 +475,8 @@ jobs:
           Build Status: SUCCESS
           Build Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)
           Build ID: ${{ github.run_id }}
-          Customer: $(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')
-          Tag: $(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.tag // empty')
+          Customer: $BUILD_CUSTOMER
+          Tag: $BUILD_TAG
           EOF
           
           echo "✅ Source code modification completed"
@@ -489,8 +498,9 @@ jobs:
           git checkout --orphan custom-build-${{ github.run_id }}
           
           # 提交修改
+          customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
           git add -A
-          git commit -m "Custom build for ${{ github.run_id }} - Customer: $(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')"
+          git commit -m "Custom build for ${{ github.run_id }} - Customer: $customer"
           
           # 推送到本仓库
           git push custom-repo custom-build-${{ github.run_id }}
@@ -513,6 +523,8 @@ jobs:
           echo "🔧 Step 5: Triggering cache cleanup..."
           
           # 触发清理缓存的工作流
+          customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
+          tag=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
           curl -X POST \
             -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
@@ -521,8 +533,8 @@ jobs:
               "event_type": "cache-cleanup",
               "client_payload": {
                 "build_id": "${{ github.run_id }}",
-                "customer": "'$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')'",
-                "tag": "'$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.tag // empty')'"
+                "customer": "'$customer'",
+                "tag": "'$tag'"
               }
             }'
           
@@ -559,6 +571,8 @@ jobs:
           echo "🔧 Step 7: Triggering remote RustDesk workflow..."
           
           # 使用GitHub API触发远程仓库的工作流
+          customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
+          tag=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
           curl -X POST \
             -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
@@ -567,8 +581,8 @@ jobs:
               "event_type": "custom-build",
               "client_payload": {
                 "build_id": "${{ github.run_id }}",
-                "customer": "'$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')'",
-                "tag": "'$(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.tag // empty')'",
+                "customer": "'$customer'",
+                "tag": "'$tag'",
                 "source_repo": "${{ github.repository }}",
                 "source_branch": "custom-build-${{ github.run_id }}"
               }

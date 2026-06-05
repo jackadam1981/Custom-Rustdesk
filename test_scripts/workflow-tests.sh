@@ -110,6 +110,116 @@ function test_manual_queue_limit_is_five() {
     return 1
 }
 
+function test_source_patcher_is_invoked() {
+    if grep -q 'source .github/workflows/scripts/source-patcher.sh' "$WORKFLOW_FILE" &&
+       grep -q 'apply_custom_source_patches' "$WORKFLOW_FILE"; then
+        record_test_result "source_patcher_is_invoked" "PASS" "构建流程会调用源码自定义 patch 脚本"
+        return 0
+    fi
+
+    record_test_result "source_patcher_is_invoked" "FAIL" "Modify source code 阶段应调用 source-patcher.sh"
+    return 1
+}
+
+function test_source_patcher_covers_server_key_and_brand() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+
+    if [ -f "$patcher" ] &&
+       grep -q 'custom-rendezvous-server' "$patcher" &&
+       grep -q 'api-server' "$patcher" &&
+       grep -q 'BUILD_RS_PUB_KEY' "$patcher" &&
+       grep -q 'flutter/android/app/src/main/res/values/strings.xml' "$patcher" &&
+       grep -q 'flutter/ios/Runner/Info.plist' "$patcher" &&
+       grep -q 'res/rustdesk.desktop' "$patcher"; then
+        record_test_result "source_patcher_covers_server_key_and_brand" "PASS" "源码 patch 覆盖服务器、密钥和主要品牌外观"
+        return 0
+    fi
+
+    record_test_result "source_patcher_covers_server_key_and_brand" "FAIL" "源码 patch 应覆盖服务器、密钥和主要品牌外观"
+    return 1
+}
+
+function test_source_patcher_applies_to_fixture_tree() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    mkdir -p "$tmp_dir/src" \
+        "$tmp_dir/flutter/android/app/src/main/res/values" \
+        "$tmp_dir/flutter/ios/Runner" \
+        "$tmp_dir/res"
+
+    cat > "$tmp_dir/src/common.rs" <<'EOF'
+pub fn load_custom_client() {
+    println!("load");
+}
+
+fn read_custom_client_advanced_settings() {}
+EOF
+    cat > "$tmp_dir/flutter/android/app/src/main/res/values/strings.xml" <<'EOF'
+<resources>
+    <string name="app_name">RustDesk</string>
+</resources>
+EOF
+    cat > "$tmp_dir/flutter/ios/Runner/Info.plist" <<'EOF'
+<plist><dict>
+    <key>CFBundleDisplayName</key>
+    <string>RustDesk</string>
+    <key>CFBundleName</key>
+    <string>RustDesk</string>
+</dict></plist>
+EOF
+    cat > "$tmp_dir/res/rustdesk.desktop" <<'EOF'
+Name=RustDesk
+Comment=Remote desktop
+Name=Open a New Window
+EOF
+
+    if (
+        set -e
+        export BUILD_CUSTOMER="FixtureDesk"
+        export BUILD_CUSTOMER_LINK="https://fixture.example"
+        export BUILD_SLOGAN="Fixture Slogan"
+        export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21117"
+        export BUILD_RS_PUB_KEY="fixture-public-key"
+        export BUILD_API_SERVER="http://192.168.2.22:21114"
+        source "$patcher"
+        cd "$tmp_dir"
+        apply_custom_source_patches
+        grep -q 'FixtureDesk' custom-build-config.json
+        grep -q 'custom-rendezvous-server' src/common.rs
+        grep -q 'fixture-public-key' src/common.rs
+        grep -q '<string name="app_name">FixtureDesk</string>' flutter/android/app/src/main/res/values/strings.xml
+        grep -q '<string>FixtureDesk</string>' flutter/ios/Runner/Info.plist
+        grep -q 'Name=FixtureDesk' res/rustdesk.desktop
+        grep -q 'Name=Open a New Window' res/rustdesk.desktop
+    ); then
+        rm -rf "$tmp_dir"
+        record_test_result "source_patcher_applies_to_fixture_tree" "PASS" "源码 patch 脚本可修改 fixture 源码树"
+        return 0
+    fi
+
+    rm -rf "$tmp_dir"
+    record_test_result "source_patcher_applies_to_fixture_tree" "FAIL" "源码 patch 脚本未正确修改 fixture 源码树"
+    return 1
+}
+
+function test_build_job_uses_trigger_data_for_parameters() {
+    if grep -Fq 'TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}' "$WORKFLOW_FILE" &&
+       ! awk '
+           /# 步骤1: 提取变量/ { in_build_extract=1 }
+           /# 步骤2: 克隆源码/ { in_build_extract=0 }
+           in_build_extract && /toJSON\(github.event\)/ { found=1 }
+           END { exit(found ? 0 : 1) }
+       ' "$WORKFLOW_FILE"; then
+        record_test_result "build_job_uses_trigger_data_for_parameters" "PASS" "build 阶段使用标准化 trigger_data 参数"
+        return 0
+    fi
+
+    record_test_result "build_job_uses_trigger_data_for_parameters" "FAIL" "build 阶段应使用 needs.trigger.outputs.trigger_data，避免 Issue 触发丢参数"
+    return 1
+}
+
 function run_workflow_tests() {
     log_info "开始运行 workflow 结构测试..."
     local failed=0
@@ -122,6 +232,10 @@ function run_workflow_tests() {
     test_build_lock_failure_exits_job || failed=1
     test_queue_issue_lock_uses_ref_guard || failed=1
     test_manual_queue_limit_is_five || failed=1
+    test_source_patcher_is_invoked || failed=1
+    test_source_patcher_covers_server_key_and_brand || failed=1
+    test_source_patcher_applies_to_fixture_tree || failed=1
+    test_build_job_uses_trigger_data_for_parameters || failed=1
 
     log_info "workflow 结构测试完成"
     return $failed
