@@ -6,15 +6,44 @@ source .github/workflows/scripts/debug-utils.sh
 source .github/workflows/scripts/issue-templates.sh
 source .github/workflows/scripts/issue-manager.sh
 
+REVIEW_TIMEOUT_SECONDS="${REVIEW_TIMEOUT_SECONDS:-172800}" # 48小时
+
+_clean_address_host() {
+    local address="$1"
+    address="${address#*://}"
+    address="${address%%/*}"
+    address="${address%%:*}"
+    echo "$address"
+}
+
+_is_ipv4() {
+    local host="$1"
+    [[ "$host" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]
+}
+
+_is_private_ip() {
+    local address="$1"
+    local clean_address
+    clean_address=$(_clean_address_host "$address")
+
+    if ! _is_ipv4 "$clean_address"; then
+        return 1
+    fi
+
+    if [[ "$clean_address" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.) ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
 # 验证服务器地址格式
 _validate_server_address() {
     local server_address="$1"
     local server_name="$2"
     
-    local clean_address="$server_address"
-    clean_address="${clean_address#*://}"
-    clean_address="${clean_address%%:*}"
-    clean_address="${clean_address%%/*}"
+    local clean_address
+    clean_address=$(_clean_address_host "$server_address")
     
     if [ -z "$clean_address" ]; then
         echo "$server_name 地址不能为空"
@@ -45,10 +74,8 @@ _validate_server_address() {
 _needs_review() {
     local address="$1"
     
-    local clean_address="$address"
-    clean_address="${clean_address#*://}"
-    clean_address="${clean_address%%:*}"
-    clean_address="${clean_address%%/*}"
+    local clean_address
+    clean_address=$(_clean_address_host "$address")
     
     if [[ "$clean_address" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
         if [[ "$clean_address" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.) ]]; then
@@ -219,22 +246,17 @@ _need_review() {
     fi
     
     if [ "$trigger_type" = "issue" ]; then
-        if [ "$actor" = "$repo_owner" ]; then
-            echo "false"
-            return 0
-        fi
-        
         local rendezvous_server=$(echo "$trigger_data" | jq -r '.build_params.rendezvous_server // empty' || echo "")
         local api_server=$(echo "$trigger_data" | jq -r '.build_params.api_server // empty' || echo "")
         
         local needs_review=false
         
-        if [ -n "$rendezvous_server" ] && ! _is_private_ip "$rendezvous_server"; then
+        if [ -n "$rendezvous_server" ] && _needs_review "$rendezvous_server"; then
             needs_review=true
             debug "log" "Rendezvous server needs review (public): $rendezvous_server"
         fi
         
-        if [ -n "$api_server" ] && ! _is_private_ip "$api_server"; then
+        if [ -n "$api_server" ] && _needs_review "$api_server"; then
             needs_review=true
             debug "log" "API server needs review (public): $api_server"
         fi
@@ -277,7 +299,7 @@ _handle_review() {
     
     # 循环检查审核回复
     local start_time=$(date +%s)
-    local timeout=21600  # 6小时超时
+    local timeout="$REVIEW_TIMEOUT_SECONDS"
     local approved=false
     local rejected=false
     

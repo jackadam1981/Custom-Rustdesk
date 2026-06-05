@@ -265,6 +265,11 @@ function run_specific_test() {
             run_utils_tests "$@"
             return $?
             ;;
+        "review-tests")
+            source test_scripts/review-tests.sh
+            run_review_tests "$@"
+            return $?
+            ;;
         "utils-queue-length")
             source test_scripts/utils-tests.sh
             test_utils_queue_length "$@"
