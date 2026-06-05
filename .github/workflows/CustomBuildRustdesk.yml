@@ -777,6 +777,13 @@ jobs:
           chmod +x "$binary_path"
           cp "$binary_path" "client-artifacts/${{ matrix.client.binary }}"
           cp rustdesk-source/custom-build-config.json client-artifacts/
+          if [ "${{ matrix.client.os == 'windows-2022' }}" = "true" ]; then
+            curl -fsSL \
+              -o client-artifacts/sciter.dll \
+              https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll
+            mkdir -p client-artifacts/src
+            cp -R rustdesk-source/src/ui client-artifacts/src/
+          fi
           tar -C client-artifacts -czf "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" .
           sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.sha256"
 

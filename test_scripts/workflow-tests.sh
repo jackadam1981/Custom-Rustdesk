@@ -146,6 +146,7 @@ function test_source_patcher_applies_to_fixture_tree() {
     tmp_dir=$(mktemp -d)
 
     mkdir -p "$tmp_dir/src" \
+        "$tmp_dir/src/lang" \
         "$tmp_dir/flutter/android/app/src/main/res/values" \
         "$tmp_dir/flutter/ios/Runner" \
         "$tmp_dir/res"
@@ -175,6 +176,16 @@ Name=RustDesk
 Comment=Remote desktop
 Name=Open a New Window
 EOF
+    cat > "$tmp_dir/src/lang/cn.rs" <<'EOF'
+pub static T: &[(&str, &str)] = &[
+    ("powered_by_me", "由 RustDesk 提供支持"),
+];
+EOF
+    cat > "$tmp_dir/src/lang/en.rs" <<'EOF'
+pub static T: &[(&str, &str)] = &[
+    ("powered_by_me", "Powered by RustDesk"),
+];
+EOF
 
     if (
         set -e
@@ -194,6 +205,8 @@ EOF
         grep -q '<string>FixtureDesk</string>' flutter/ios/Runner/Info.plist
         grep -q 'Name=FixtureDesk' res/rustdesk.desktop
         grep -q 'Name=Open a New Window' res/rustdesk.desktop
+        grep -q '由 FixtureDesk 提供支持' src/lang/cn.rs
+        grep -q 'Powered by FixtureDesk' src/lang/en.rs
     ); then
         rm -rf "$tmp_dir"
         record_test_result "source_patcher_applies_to_fixture_tree" "PASS" "源码 patch 脚本可修改 fixture 源码树"
@@ -272,6 +285,19 @@ function test_workflow_builds_real_client_artifact() {
     return 1
 }
 
+function test_windows_artifact_includes_sciter_runtime_and_ui_resources() {
+    if grep -q 'matrix.client.os == '"'"'windows-2022'"'"'' "$WORKFLOW_FILE" &&
+       grep -q 'sciter.dll' "$WORKFLOW_FILE" &&
+       grep -q 'raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll' "$WORKFLOW_FILE" &&
+       grep -q 'cp -R rustdesk-source/src/ui client-artifacts/src/' "$WORKFLOW_FILE"; then
+        record_test_result "windows_artifact_includes_sciter_runtime_and_ui_resources" "PASS" "Windows Sciter artifact 包含运行所需 dll 和 UI 资源"
+        return 0
+    fi
+
+    record_test_result "windows_artifact_includes_sciter_runtime_and_ui_resources" "FAIL" "Windows artifact 应包含 sciter.dll 和 src/ui，否则 exe 无法直接打开完整 UI"
+    return 1
+}
+
 function test_workflow_builds_android_apk_artifact() {
     if grep -q '^  compile-android:' "$WORKFLOW_FILE" &&
        grep -q 'target: aarch64-linux-android' "$WORKFLOW_FILE" &&
@@ -334,6 +360,7 @@ function run_workflow_tests() {
     test_build_job_does_not_export_trigger_data_env || failed=1
     test_build_uploads_patched_source_artifact || failed=1
     test_workflow_builds_real_client_artifact || failed=1
+    test_windows_artifact_includes_sciter_runtime_and_ui_resources || failed=1
     test_workflow_builds_android_apk_artifact || failed=1
     test_delete_runs_counter_not_in_pipeline_subshell || failed=1
 

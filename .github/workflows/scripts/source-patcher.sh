@@ -163,6 +163,24 @@ _custom_patch_brand_files() {
         "VALUE \"FileDescription\", \"$CUSTOM_APP_NAME Remote Desktop\""
 }
 
+_custom_patch_sciter_ui_text() {
+    if [ ! -d "src/lang" ]; then
+        return 0
+    fi
+
+    if [ -f "src/lang/cn.rs" ]; then
+        _custom_replace_file "src/lang/cn.rs" \
+            '\("powered_by_me",[[:space:]]*"[^"]*"\)' \
+            "(\"powered_by_me\", \"由 $CUSTOM_APP_NAME 提供支持\")"
+    fi
+
+    if [ -f "src/lang/en.rs" ]; then
+        _custom_replace_file "src/lang/en.rs" \
+            '\("powered_by_me",[[:space:]]*"[^"]*"\)' \
+            "(\"powered_by_me\", \"Powered by $CUSTOM_APP_NAME\")"
+    fi
+}
+
 apply_custom_source_patches() {
     CUSTOM_APP_NAME="${BUILD_CUSTOMER:-${BUILD_TAG:-CustomRustDesk}}"
     CUSTOM_CUSTOMER_LINK="${BUILD_CUSTOMER_LINK:-}"
@@ -189,6 +207,7 @@ apply_custom_source_patches() {
 
     _custom_patch_common_rs
     _custom_patch_brand_files
+    _custom_patch_sciter_ui_text
 
     echo "source-patcher: custom source patches applied"
 }

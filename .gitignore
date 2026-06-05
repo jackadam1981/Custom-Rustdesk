@@ -65,6 +65,7 @@ config.local.*
 # 自定义构建文件
 rustdesk-source/
 custom-build-*/
+artifacts/
 
 # 调试文件
 debug_*.sh
@@ -78,4 +79,4 @@ site/
 # 其他
 *.pid
 *.seed
-*.pid.lock 
+*.pid.lock
