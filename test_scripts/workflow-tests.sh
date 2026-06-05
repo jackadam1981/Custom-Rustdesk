@@ -221,6 +221,7 @@ function test_build_job_does_not_export_trigger_data_env() {
        ! grep -Fq '${{ needs.trigger.outputs.trigger_data }}' "$WORKFLOW_FILE" &&
        ! grep -q 'toJSON(github.event)' "$WORKFLOW_FILE" &&
        ! grep -q 'DEBUG: trigger_data' "$WORKFLOW_FILE" &&
+       ! grep -q 'DEBUG_ENABLED: true' "$WORKFLOW_FILE" &&
        ! grep -q 'TRIGGER_DATA 前100字符' "$WORKFLOW_FILE"; then
         record_test_result "build_job_does_not_export_trigger_data_env" "PASS" "workflow 不再把完整事件或 trigger_data 注入脚本文本/日志预览"
         return 0

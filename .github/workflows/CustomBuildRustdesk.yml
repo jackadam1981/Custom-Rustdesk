@@ -289,8 +289,6 @@ jobs:
         
       - name: Join build queue
         id: join-queue
-        env:
-          DEBUG_ENABLED: true
         run: |
           source .github/workflows/scripts/queue-manager.sh
 
