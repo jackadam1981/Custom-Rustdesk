@@ -247,6 +247,23 @@ function test_build_uploads_patched_source_artifact() {
     return 1
 }
 
+function test_workflow_builds_real_client_artifact() {
+    if grep -q '^  compile-client:' "$WORKFLOW_FILE" &&
+       grep -q 'strategy:' "$WORKFLOW_FILE" &&
+       grep -q 'target: x86_64-unknown-linux-gnu' "$WORKFLOW_FILE" &&
+       grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
+       grep -q 'cargo build --release --locked --target "${{ matrix.client.target }}"' "$WORKFLOW_FILE" &&
+       grep -q 'name: rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}' "$WORKFLOW_FILE" &&
+       grep -q 'finish:' "$WORKFLOW_FILE" &&
+       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, compile-client]' "$WORKFLOW_FILE"; then
+        record_test_result "workflow_builds_real_client_artifact" "PASS" "workflow 会编译真实客户端产物并上传 artifact"
+        return 0
+    fi
+
+    record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 不应只上传源码，应有 compile-client matrix 编译真实客户端 artifact"
+    return 1
+}
+
 function run_workflow_tests() {
     log_info "开始运行 workflow 结构测试..."
     local failed=0
@@ -265,6 +282,7 @@ function run_workflow_tests() {
     test_build_job_uses_trigger_data_for_parameters || failed=1
     test_build_job_does_not_export_trigger_data_env || failed=1
     test_build_uploads_patched_source_artifact || failed=1
+    test_workflow_builds_real_client_artifact || failed=1
 
     log_info "workflow 结构测试完成"
     return $failed

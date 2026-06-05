@@ -65,6 +65,7 @@ env:
   RUSTDESK_REPO: 'rustdesk/rustdesk'
   RUSTDESK_BRANCH: 'master'
   REMOTE_WORKFLOW_NAME: 'Build'
+  VCPKG_COMMIT_ID: '120deac3062162151622ca4860575a33844ba10b'
   # 默认值配置
   DEFAULT_TAG: ${{ secrets.DEFAULT_TAG }}
   DEFAULT_EMAIL: ${{ secrets.DEFAULT_EMAIL }}
@@ -596,6 +597,7 @@ jobs:
         with:
           name: patched-source-${{ github.run_id }}
           path: rustdesk-source
+          include-hidden-files: true
           retention-days: 7
 
       # 步骤8: 记录源码快照下载入口
@@ -650,9 +652,115 @@ jobs:
           echo "✅ Final cleanup and rollback completed"
           echo "cleanup_completed=true" >> $GITHUB_OUTPUT
 
+  # 05-编译真实客户端产物
+  compile-client:
+    needs: [build]
+    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true'
+    runs-on: ${{ matrix.client.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        client:
+          - name: linux-x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            binary: rustdesk
+    steps:
+      - name: Download patched source
+        uses: actions/download-artifact@v4
+        with:
+          name: patched-source-${{ github.run_id }}
+          path: rustdesk-source
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            curl \
+            gcc \
+            g++ \
+            git \
+            libasound2-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer1.0-dev \
+            libgtk-3-dev \
+            libpam0g-dev \
+            libpulse-dev \
+            libunwind-dev \
+            libva-dev \
+            libvdpau-dev \
+            libxcb-randr0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxdo-dev \
+            libxfixes-dev \
+            nasm \
+            wget
+
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        working-directory: rustdesk-source
+        run: |
+          "$VCPKG_ROOT/vcpkg" install --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.client.target }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rustdesk-source
+          key: ${{ matrix.client.name }}
+
+      - name: Build RustDesk client
+        shell: bash
+        working-directory: rustdesk-source
+        run: |
+          cargo build --release --locked --target "${{ matrix.client.target }}"
+
+      - name: Package client artifact
+        shell: bash
+        run: |
+          mkdir -p client-artifacts
+          binary_path="rustdesk-source/target/${{ matrix.client.target }}/release/${{ matrix.client.binary }}"
+          test -f "$binary_path"
+          chmod +x "$binary_path"
+          cp "$binary_path" "client-artifacts/${{ matrix.client.binary }}"
+          cp rustdesk-source/custom-build-config.json client-artifacts/
+          tar -C client-artifacts -czf "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" .
+          sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.sha256"
+
+      - name: Upload client artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}
+          path: |
+            rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz
+            rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.sha256
+          retention-days: 14
+
   # 05-完成处理
   finish:
-    needs: [trigger, review, join-queue, wait-build-lock, build]
+    needs: [trigger, review, join-queue, wait-build-lock, build, compile-client]
     if: always() && needs.trigger.result != 'skipped'
     runs-on: ubuntu-latest
     outputs:
@@ -682,7 +790,7 @@ jobs:
           EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"
 
           # 确定构建状态
-          if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ]; then
+          if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ] && [ "${{ needs.compile-client.result }}" = "success" ]; then
             build_status="success"
             download_url="${{ needs.build.outputs.download_url || '' }}"
             error_message="${{ needs.build.outputs.error_message || '' }}"
