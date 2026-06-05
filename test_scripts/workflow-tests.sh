@@ -278,6 +278,7 @@ function test_workflow_builds_android_apk_artifact() {
        grep -q 'flutter-target-platform: android-arm64' "$WORKFLOW_FILE" &&
        grep -q 'uses: subosito/flutter-action@v2' "$WORKFLOW_FILE" &&
        grep -q 'uses: nttld/setup-ndk@v1' "$WORKFLOW_FILE" &&
+       grep -q 'chmod +x ./flutter/build_android_deps.sh ./flutter/ndk_arm64.sh' "$WORKFLOW_FILE" &&
        grep -q 'cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked' "$WORKFLOW_FILE" &&
        grep -q './flutter/ndk_arm64.sh' "$WORKFLOW_FILE" &&
        grep -q 'liblibrustdesk.so' "$WORKFLOW_FILE" &&

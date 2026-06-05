@@ -895,6 +895,7 @@ jobs:
         shell: bash
         working-directory: rustdesk-source
         run: |
+          chmod +x ./flutter/build_android_deps.sh ./flutter/ndk_arm64.sh
           if ! ./flutter/build_android_deps.sh "${{ matrix.android.abi }}"; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r log_file; do
               echo "$log_file:"
@@ -924,6 +925,7 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
+          chmod +x ./flutter/ndk_arm64.sh
           cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked
           ./flutter/ndk_arm64.sh
           mkdir -p ./flutter/android/app/src/main/jniLibs/${{ matrix.android.abi }}
