@@ -252,6 +252,8 @@ function test_workflow_builds_real_client_artifact() {
        grep -q 'strategy:' "$WORKFLOW_FILE" &&
        grep -q 'target: x86_64-unknown-linux-gnu' "$WORKFLOW_FILE" &&
        grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
+       grep -q -- '--recurse-submodules' "$WORKFLOW_FILE" &&
+       grep -q 'include-hidden-files: true' "$WORKFLOW_FILE" &&
        grep -q 'cargo build --release --locked --target "${{ matrix.client.target }}"' "$WORKFLOW_FILE" &&
        grep -q 'name: rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q 'finish:' "$WORKFLOW_FILE" &&
@@ -260,7 +262,7 @@ function test_workflow_builds_real_client_artifact() {
         return 0
     fi
 
-    record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 不应只上传源码，应有 compile-client matrix 编译真实客户端 artifact"
+    record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 不应只上传源码，应递归拉 submodule 并编译真实客户端 artifact"
     return 1
 }
 

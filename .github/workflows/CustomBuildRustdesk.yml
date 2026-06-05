@@ -441,7 +441,7 @@ jobs:
           git config --global user.email "build@custom-rustdesk.com"
           
           # 克隆远程仓库
-          git clone --depth 1 --branch $RUSTDESK_BRANCH https://github.com/$RUSTDESK_REPO.git rustdesk-source
+          git clone --depth 1 --branch $RUSTDESK_BRANCH --recurse-submodules --shallow-submodules https://github.com/$RUSTDESK_REPO.git rustdesk-source
           
           if [ $? -eq 0 ]; then
             echo "✅ Successfully cloned source code"
