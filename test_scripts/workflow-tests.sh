@@ -207,12 +207,7 @@ EOF
 function test_build_job_uses_trigger_data_for_parameters() {
     if grep -q 'name: trigger-data-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q 'cat "$RUNNER_TEMP/trigger-data/trigger-data.json"' "$WORKFLOW_FILE" &&
-       ! awk '
-           /# 步骤1: 提取变量/ { in_build_extract=1 }
-           /# 步骤2: 克隆源码/ { in_build_extract=0 }
-           in_build_extract && /toJSON\(github.event\)/ { found=1 }
-           END { exit(found ? 0 : 1) }
-       ' "$WORKFLOW_FILE"; then
+       grep -q 'cat "$GITHUB_EVENT_PATH"' "$WORKFLOW_FILE"; then
         record_test_result "build_job_uses_trigger_data_for_parameters" "PASS" "build 阶段通过 artifact 使用标准化 trigger_data 参数"
         return 0
     fi
@@ -223,12 +218,15 @@ function test_build_job_uses_trigger_data_for_parameters() {
 
 function test_build_job_does_not_export_trigger_data_env() {
     if ! grep -Fq 'TRIGGER_DATA: ${{ needs.trigger.outputs.trigger_data }}' "$WORKFLOW_FILE" &&
+       ! grep -Fq '${{ needs.trigger.outputs.trigger_data }}' "$WORKFLOW_FILE" &&
+       ! grep -q 'toJSON(github.event)' "$WORKFLOW_FILE" &&
+       ! grep -q 'DEBUG: trigger_data' "$WORKFLOW_FILE" &&
        ! grep -q 'TRIGGER_DATA 前100字符' "$WORKFLOW_FILE"; then
-        record_test_result "build_job_does_not_export_trigger_data_env" "PASS" "build/finish 阶段不再把完整 trigger_data 放入 job/step env 或日志预览"
+        record_test_result "build_job_does_not_export_trigger_data_env" "PASS" "workflow 不再把完整事件或 trigger_data 注入脚本文本/日志预览"
         return 0
     fi
 
-    record_test_result "build_job_does_not_export_trigger_data_env" "FAIL" "完整 trigger_data 不应作为 job/step env 展开或打印预览"
+    record_test_result "build_job_does_not_export_trigger_data_env" "FAIL" "完整事件和 trigger_data 不应通过表达式注入脚本文本或打印预览"
     return 1
 }
 

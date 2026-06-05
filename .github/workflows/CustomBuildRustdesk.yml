@@ -94,8 +94,7 @@ jobs:
           source .github/workflows/scripts/trigger.sh
           
           # 使用环境变量传递事件数据
-          export EVENT_DATA='${{ toJSON(github.event) }}'
-          echo "DEBUG: EVENT_DATA = $EVENT_DATA"
+          export EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"
           echo "DEBUG: github.event_name = ${{ github.event_name }}"
           echo "DEBUG: github.event.issue.number = ${{ github.event.issue.number }}"
           
@@ -187,6 +186,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download trigger data
+        uses: actions/download-artifact@v4
+        with:
+          name: trigger-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/trigger-data
         
       - name: Review and validate
         id: review
@@ -194,8 +199,8 @@ jobs:
         run: |
           source .github/workflows/scripts/review.sh
 
-          EVENT_DATA='${{ toJSON(github.event) }}'
-          TRIGGER_DATA='${{ needs.trigger.outputs.trigger_data }}'
+          EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           
           # 验证参数
           set +e
@@ -275,6 +280,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download trigger data
+        uses: actions/download-artifact@v4
+        with:
+          name: trigger-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/trigger-data
         
       - name: Join build queue
         id: join-queue
@@ -283,11 +294,10 @@ jobs:
         run: |
           source .github/workflows/scripts/queue-manager.sh
 
-          trigger_data='${{ needs.trigger.outputs.trigger_data }}'
+          trigger_data="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           
           # 加入队列
           echo "Joining build queue..."
-          echo "DEBUG: trigger_data = $trigger_data"
           echo "DEBUG: GITHUB_RUN_ID = $GITHUB_RUN_ID"
           
           join_result=$(queue_manager 'queue_lock' 'join' "$trigger_data")
@@ -705,7 +715,7 @@ jobs:
           TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           
           # 重新获取 github.event
-          EVENT_DATA='${{ toJSON(github.event) }}'
+          EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"
 
           # 确定构建状态
           if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ]; then
