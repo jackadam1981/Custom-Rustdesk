@@ -484,11 +484,11 @@ jobs:
           # 添加远程仓库
           git remote add custom-repo https://x-access-token:${{ secrets.BUILD_TOKEN }}@github.com/${{ github.repository }}.git
           
-          # 创建新分支
-          git checkout -b custom-build-${{ github.run_id }}
+          # 创建无父提交快照分支，避免把 rustdesk/rustdesk 的上游历史推到本仓库
+          git checkout --orphan custom-build-${{ github.run_id }}
           
           # 提交修改
-          git add .
+          git add -A
           git commit -m "Custom build for ${{ github.run_id }} - Customer: $(echo '${{ toJSON(github.event) }}' | jq -r '.inputs.customer // empty')"
           
           # 推送到本仓库

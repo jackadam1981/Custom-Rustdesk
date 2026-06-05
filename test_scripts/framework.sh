@@ -270,6 +270,11 @@ function run_specific_test() {
             run_review_tests "$@"
             return $?
             ;;
+        "workflow-tests")
+            source test_scripts/workflow-tests.sh
+            run_workflow_tests "$@"
+            return $?
+            ;;
         "utils-queue-length")
             source test_scripts/utils-tests.sh
             test_utils_queue_length "$@"
