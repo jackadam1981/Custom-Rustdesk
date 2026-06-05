@@ -231,14 +231,16 @@ function test_build_job_does_not_export_trigger_data_env() {
     return 1
 }
 
-function test_repository_dispatch_checks_http_status() {
-    if [ "$(grep -c 'http_code=$(curl -sS -o "$response_file" -w "%{http_code}" -X POST' "$WORKFLOW_FILE")" -ge 2 ] &&
-       [ "$(grep -c '\[ "$http_code" = "204" \]' "$WORKFLOW_FILE")" -ge 2 ]; then
-        record_test_result "repository_dispatch_checks_http_status" "PASS" "repository_dispatch 按 GitHub HTTP 204 判断成功"
+function test_build_uploads_patched_source_artifact() {
+    if grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
+       grep -q 'path: rustdesk-source' "$WORKFLOW_FILE" &&
+       grep -q 'steps.record-artifact.outputs.download_url' "$WORKFLOW_FILE" &&
+       ! grep -q 'https://api.github.com/repos/$RUSTDESK_REPO/dispatches' "$WORKFLOW_FILE"; then
+        record_test_result "build_uploads_patched_source_artifact" "PASS" "build 阶段上传已定制源码 artifact，不再触发无权限的官方仓库 dispatch"
         return 0
     fi
 
-    record_test_result "repository_dispatch_checks_http_status" "FAIL" "repository_dispatch 不能只看 curl 进程退出码，必须检查 HTTP 204"
+    record_test_result "build_uploads_patched_source_artifact" "FAIL" "build 阶段应上传已定制源码 artifact，并避免触发 rustdesk/rustdesk dispatch"
     return 1
 }
 
@@ -259,7 +261,7 @@ function run_workflow_tests() {
     test_source_patcher_applies_to_fixture_tree || failed=1
     test_build_job_uses_trigger_data_for_parameters || failed=1
     test_build_job_does_not_export_trigger_data_env || failed=1
-    test_repository_dispatch_checks_http_status || failed=1
+    test_build_uploads_patched_source_artifact || failed=1
 
     log_info "workflow 结构测试完成"
     return $failed

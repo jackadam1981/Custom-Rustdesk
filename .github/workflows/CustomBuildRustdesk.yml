@@ -359,7 +359,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_success: ${{ steps.extract-vars.outputs.build_success }}
-      download_url: ${{ steps.extract-vars.outputs.download_url }}
+      download_url: ${{ steps.record-artifact.outputs.download_url || steps.extract-vars.outputs.download_url }}
       error_message: ${{ steps.extract-vars.outputs.error_message }}
     steps:
       - name: Checkout code
@@ -588,59 +588,25 @@ jobs:
           echo "✅ Cache cleanup completed"
           echo "cleanup_completed=true" >> $GITHUB_OUTPUT
 
-      # 步骤7: 触发远程构建
-      - name: Trigger remote build
-        id: trigger-remote
+      # 步骤7: 上传已定制源码快照
+      - name: Upload patched source snapshot
+        id: upload-patched-source
+        if: steps.wait-cleanup.outputs.cleanup_completed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: patched-source-${{ github.run_id }}
+          path: rustdesk-source
+          retention-days: 7
+
+      # 步骤8: 记录源码快照下载入口
+      - name: Record patched source artifact
+        id: record-artifact
         if: steps.wait-cleanup.outputs.cleanup_completed == 'true'
         run: |
-          echo "🔧 Step 7: Triggering remote RustDesk workflow..."
-          
-          # 使用GitHub API触发远程仓库的工作流
-          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
-          customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
-          tag=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
-          response_file=$(mktemp)
-          http_code=$(curl -sS -o "$response_file" -w "%{http_code}" -X POST \
-            -H "Authorization: token ${{ secrets.BUILD_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/$RUSTDESK_REPO/dispatches \
-            -d '{
-              "event_type": "custom-build",
-              "client_payload": {
-                "build_id": "${{ github.run_id }}",
-                "customer": "'$customer'",
-                "tag": "'$tag'",
-                "source_repo": "${{ github.repository }}",
-                "source_branch": "custom-build-${{ github.run_id }}"
-              }
-            }'
-          )
-          
-          if [ "$http_code" = "204" ]; then
-            echo "✅ Successfully triggered remote workflow"
-            echo "trigger_success=true" >> $GITHUB_OUTPUT
-          else
-            echo "❌ Failed to trigger remote workflow (HTTP $http_code)"
-            cat "$response_file"
-            echo "trigger_success=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
-      # 步骤8: 等待远程构建完成
-      - name: Wait for remote build completion
-        id: wait-remote
-        if: steps.trigger-remote.outputs.trigger_success == 'true'
-        run: |
-          echo "🔧 Step 8: Waiting for remote build completion..."
-          
-          # 等待远程构建完成
-          echo "⏳ Waiting for remote build to complete..."
-          
-          # 模拟等待过程
-          sleep 15
-          
-          echo "✅ Remote build completed"
-          echo "wait_success=true" >> $GITHUB_OUTPUT
+          echo "🔧 Step 8: Recording patched source artifact..."
+          echo "artifact_name=patched-source-${{ github.run_id }}" >> $GITHUB_OUTPUT
+          echo "download_url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_OUTPUT
+          echo "✅ Patched source artifact is available from this workflow run"
 
       # 步骤9: 最终清理（代码回滚）
       - name: Final cleanup and rollback
