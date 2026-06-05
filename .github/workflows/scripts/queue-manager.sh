@@ -980,6 +980,16 @@ release_all_locks() {
         debug "warning" "Failed to release build lock"
         build_lock_result=1
     fi
+
+    # 当前任务完成后必须离开队列，否则成功构建会残留并占用队列容量。
+    local queue_leave_result=0
+    if _leave_queue; then
+        debug "success" "Queue item removed successfully"
+        queue_leave_result=0
+    else
+        debug "warning" "Failed to remove queue item"
+        queue_leave_result=1
+    fi
     
     # 释放问题锁（如果当前持有）
     local issue_lock_result=0
@@ -998,7 +1008,7 @@ release_all_locks() {
     fi
     
     # 返回总体结果
-    if [ $build_lock_result -eq 0 ] && [ $issue_lock_result -eq 0 ]; then
+    if [ $build_lock_result -eq 0 ] && [ $queue_leave_result -eq 0 ] && [ $issue_lock_result -eq 0 ]; then
         debug "success" "All locks released successfully"
         return 0
     else
