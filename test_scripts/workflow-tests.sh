@@ -86,6 +86,19 @@ function test_build_lock_failure_exits_job() {
     return 1
 }
 
+function test_queue_issue_lock_uses_ref_guard() {
+    if grep -q 'REF_LOCK_PREFIX="queue-locks"' .github/workflows/scripts/queue-manager.sh &&
+       grep -q '_acquire_ref_lock' .github/workflows/scripts/queue-manager.sh &&
+       grep -q 'git/refs' .github/workflows/scripts/queue-manager.sh &&
+       grep -q 'contents: write' .github/workflows/CustomBuildRustdesk.yml; then
+        record_test_result "queue_issue_lock_uses_ref_guard" "PASS" "Issue body 更新由 Git ref 原子锁保护"
+        return 0
+    fi
+
+    record_test_result "queue_issue_lock_uses_ref_guard" "FAIL" "Issue body 乐观锁不是原子 CAS，应使用 Git ref 原子锁保护"
+    return 1
+}
+
 function run_workflow_tests() {
     log_info "开始运行 workflow 结构测试..."
     local failed=0
@@ -96,6 +109,7 @@ function run_workflow_tests() {
     test_finish_queue_cleanup_is_best_effort || failed=1
     test_actions_ci_does_not_enable_test_mode || failed=1
     test_build_lock_failure_exits_job || failed=1
+    test_queue_issue_lock_uses_ref_guard || failed=1
 
     log_info "workflow 结构测试完成"
     return $failed

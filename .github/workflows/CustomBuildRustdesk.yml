@@ -52,7 +52,7 @@ on:
 
 permissions:
   issues: write
-  contents: read
+  contents: write
   actions: read
 
 # 统一环境变量配置
