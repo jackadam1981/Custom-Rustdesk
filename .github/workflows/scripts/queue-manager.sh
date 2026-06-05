@@ -970,25 +970,38 @@ cleanup_queue() {
 release_all_locks() {
     local build_id="${GITHUB_RUN_ID:-}"
     debug "log" "Public interface: release_all_locks() called for $build_id"
+    _load_queue_data
     
     # 释放构建锁
     local build_lock_result=0
-    if _release_build_lock; then
-        debug "success" "Build lock released successfully"
-        build_lock_result=0
+    local current_build_holder=$(echo "$QUEUE_DATA" | jq -r '.build_locked_by // null')
+    if [ "$current_build_holder" = "$build_id" ]; then
+        if _release_build_lock; then
+            debug "success" "Build lock released successfully"
+            build_lock_result=0
+        else
+            debug "warning" "Failed to release build lock"
+            build_lock_result=1
+        fi
     else
-        debug "warning" "Failed to release build lock"
-        build_lock_result=1
+        debug "log" "Skipping build lock release; current holder is $current_build_holder"
+        build_lock_result=0
     fi
 
     # 当前任务完成后必须离开队列，否则成功构建会残留并占用队列容量。
     local queue_leave_result=0
-    if _leave_queue; then
-        debug "success" "Queue item removed successfully"
-        queue_leave_result=0
+    local queue_membership=$(echo "$QUEUE_DATA" | jq --arg run_id "$build_id" '.queue | map(select(.run_id == $run_id)) | length')
+    if [ "$queue_membership" -gt 0 ]; then
+        if _leave_queue; then
+            debug "success" "Queue item removed successfully"
+            queue_leave_result=0
+        else
+            debug "warning" "Failed to remove queue item"
+            queue_leave_result=1
+        fi
     else
-        debug "warning" "Failed to remove queue item"
-        queue_leave_result=1
+        debug "log" "Skipping queue leave; current run is not queued"
+        queue_leave_result=0
     fi
     
     # 释放问题锁（如果当前持有）

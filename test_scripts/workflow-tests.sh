@@ -37,12 +37,39 @@ function test_release_all_locks_leaves_queue() {
     return 1
 }
 
+function test_release_all_locks_skips_unowned_build_lock() {
+    if awk '
+        /^release_all_locks\(\)/ { in_func=1 }
+        in_func && /current_build_holder/ { saw_holder=1 }
+        in_func && /Skipping build lock release/ { saw_skip=1 }
+        in_func && /^}/ { exit((saw_holder && saw_skip) ? 0 : 1) }
+    ' .github/workflows/scripts/queue-manager.sh; then
+        record_test_result "release_all_locks_skips_unowned_build_lock" "PASS" "未持有构建锁的 run 不会释放别人的锁"
+        return 0
+    fi
+
+    record_test_result "release_all_locks_skips_unowned_build_lock" "FAIL" "release_all_locks 应在当前 run 未持有构建锁时跳过释放"
+    return 1
+}
+
+function test_finish_queue_cleanup_is_best_effort() {
+    if grep -q 'cleanup_queue || echo "⚠️ Queue cleanup skipped or failed"' .github/workflows/CustomBuildRustdesk.yml; then
+        record_test_result "finish_queue_cleanup_is_best_effort" "PASS" "finish 阶段的队列清理是 best-effort"
+        return 0
+    fi
+
+    record_test_result "finish_queue_cleanup_is_best_effort" "FAIL" "finish 阶段 cleanup_queue 不应因抢不到锁导致整个 finish 失败"
+    return 1
+}
+
 function run_workflow_tests() {
     log_info "开始运行 workflow 结构测试..."
     local failed=0
 
     test_build_branch_uses_orphan_snapshot || failed=1
     test_release_all_locks_leaves_queue || failed=1
+    test_release_all_locks_skips_unowned_build_lock || failed=1
+    test_finish_queue_cleanup_is_best_effort || failed=1
 
     log_info "workflow 结构测试完成"
     return $failed

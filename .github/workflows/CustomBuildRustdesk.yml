@@ -703,7 +703,7 @@ jobs:
           
           # 清理队列
           echo "Cleaning up queue..."
-          cleanup_queue
+          cleanup_queue || echo "⚠️ Queue cleanup skipped or failed"
           echo "✅ Queue cleanup completed"
           
           # 生成完成通知
