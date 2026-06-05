@@ -136,6 +136,27 @@ function test_review_timeout_is_48_hours() {
     return 1
 }
 
+function test_review_prompt_comment_does_not_self_approve() {
+    local comments decision
+
+    comments=$(jq -c -n '[
+        {
+            user: {login: "repo-owner"},
+            body: "## 🔍 构建审核请求\n\n**同意构建：**\n- 确认服务器配置正确\n- 同意进行构建\n\n**拒绝构建：**\n- 服务器配置有误"
+        }
+    ]')
+
+    decision=$(_review_decision_from_comments "$comments" "repo-owner")
+
+    if [ "$decision" = "none" ]; then
+        record_test_result "review_prompt_comment_does_not_self_approve" "PASS" "审核提示评论不会被误判为 owner 批准"
+        return 0
+    fi
+
+    record_test_result "review_prompt_comment_does_not_self_approve" "FAIL" "审核提示评论不应自动批准，实际: $decision"
+    return 1
+}
+
 function run_review_tests() {
     log_info "开始运行审核逻辑测试..."
     local failed=0
@@ -145,6 +166,7 @@ function run_review_tests() {
     test_review_domain_issue_requires_approval || failed=1
     test_review_workflow_dispatch_auto_approves || failed=1
     test_review_timeout_is_48_hours || failed=1
+    test_review_prompt_comment_does_not_self_approve || failed=1
 
     log_info "审核逻辑测试完成"
     return $failed

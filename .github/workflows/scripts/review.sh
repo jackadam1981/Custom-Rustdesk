@@ -273,6 +273,31 @@ _need_review() {
     echo "false"
 }
 
+_review_decision_from_comments() {
+    local comments="$1"
+    local repo_owner="$2"
+
+    if echo "$comments" | jq -e --arg owner "$repo_owner" '
+        .[]
+        | select(.user.login == $owner or .user.login == "admin" or .user.login == "管理员用户名")
+        | select(.body | test("^\\s*同意构建\\s*$"))
+    ' > /dev/null 2>&1; then
+        echo "approved"
+        return 0
+    fi
+
+    if echo "$comments" | jq -e --arg owner "$repo_owner" '
+        .[]
+        | select(.user.login == $owner or .user.login == "admin" or .user.login == "管理员用户名")
+        | select(.body | test("^\\s*拒绝构建\\s*$"))
+    ' > /dev/null 2>&1; then
+        echo "rejected"
+        return 0
+    fi
+
+    echo "none"
+}
+
 # 处理审核流程
 _handle_review() {
     local event_data="$1"
@@ -315,13 +340,16 @@ _handle_review() {
             comments="[$comments]"
         fi
         
-        # 检查是否有管理员回复        
-        if echo "$comments" | jq -e --arg owner "$repo_owner" '.[] | select(.user.login == $owner or .user.login == "admin" or .user.login == "管理员用户名") | select(.body | contains("同意构建"))' > /dev/null 2>&1; then
+        local review_decision
+        review_decision=$(_review_decision_from_comments "$comments" "$repo_owner")
+
+        # 检查是否有管理员回复
+        if [ "$review_decision" = "approved" ]; then
             approved=true
             break
         fi
         
-        if echo "$comments" | jq -e --arg owner "$repo_owner" '.[] | select(.user.login == $owner or .user.login == "admin" or .user.login == "管理员用户名") | select(.body | contains("拒绝构建"))' > /dev/null 2>&1; then
+        if [ "$review_decision" = "rejected" ]; then
             rejected=true
             break
         fi
