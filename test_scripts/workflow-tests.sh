@@ -347,13 +347,13 @@ function test_linux_build_uses_official_sciter_flow() {
        grep -q 'export USE_AOM_391=1' "$WORKFLOW_FILE" &&
        grep -q 'cargo build --locked --features inline,hwcodec,unix-file-copy-paste --release --bins --target "${{ matrix.client.target }}" --jobs 1' "$WORKFLOW_FILE" &&
        grep -q 'Release/libsciter-gtk.so' "$WORKFLOW_FILE" &&
-       grep -q './build.py --package ./Release' "$WORKFLOW_FILE" &&
+       grep -q 'python3 ./build.py --package ./Release' "$WORKFLOW_FILE" &&
        grep -q 'DEB_ARCH=amd64' "$WORKFLOW_FILE"; then
         record_test_result "linux_build_uses_official_sciter_flow" "PASS" "Linux 使用官方 Sciter inline/deb 打包路径"
         return 0
     fi
 
-    record_test_result "linux_build_uses_official_sciter_flow" "FAIL" "Linux 应使用官方 Sciter inline、libsciter-gtk 和 build.py --package 流程"
+    record_test_result "linux_build_uses_official_sciter_flow" "FAIL" "Linux 应使用官方 Sciter inline、libsciter-gtk 和 python3 build.py --package 流程"
     return 1
 }
 

@@ -804,7 +804,7 @@ jobs:
           rm -rf ../Release
           cp -a Release ../Release
           export DEB_ARCH=amd64
-          ./build.py --package ./Release
+          python3 ./build.py --package ./Release
 
       - name: Build Windows RustDesk client
         if: runner.os == 'Windows'
