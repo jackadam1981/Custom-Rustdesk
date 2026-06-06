@@ -131,7 +131,9 @@ function test_source_patcher_covers_server_key_and_brand() {
        grep -q 'BUILD_RS_PUB_KEY' "$patcher" &&
        grep -q 'flutter/android/app/src/main/res/values/strings.xml' "$patcher" &&
        grep -q 'flutter/ios/Runner/Info.plist' "$patcher" &&
-       grep -q 'res/rustdesk.desktop' "$patcher"; then
+       grep -q 'res/rustdesk.desktop' "$patcher" &&
+       grep -q 'libs/portable/src/main.rs' "$patcher" &&
+       grep -q 'current_dir' "$patcher"; then
         record_test_result "source_patcher_covers_server_key_and_brand" "PASS" "源码 patch 覆盖服务器、密钥和主要品牌外观"
         return 0
     fi
@@ -149,6 +151,7 @@ function test_source_patcher_applies_to_fixture_tree() {
         "$tmp_dir/src/lang" \
         "$tmp_dir/flutter/android/app/src/main/res/values" \
         "$tmp_dir/flutter/ios/Runner" \
+        "$tmp_dir/libs/portable/src" \
         "$tmp_dir/res"
 
     cat > "$tmp_dir/src/common.rs" <<'EOF'
@@ -186,6 +189,15 @@ pub static T: &[(&str, &str)] = &[
     ("powered_by_me", "Powered by RustDesk"),
 ];
 EOF
+    cat > "$tmp_dir/libs/portable/src/main.rs" <<'EOF'
+use std::{path::PathBuf, process::Command};
+
+fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
+    let mut cmd = Command::new(path);
+    cmd.args(args);
+    let _child = cmd.spawn();
+}
+EOF
 
     if (
         set -e
@@ -207,6 +219,7 @@ EOF
         grep -q 'Name=Open a New Window' res/rustdesk.desktop
         grep -q '由 FixtureDesk 提供支持' src/lang/cn.rs
         grep -q 'Powered by FixtureDesk' src/lang/en.rs
+        grep -q 'cmd.current_dir' libs/portable/src/main.rs
     ); then
         rm -rf "$tmp_dir"
         record_test_result "source_patcher_applies_to_fixture_tree" "PASS" "源码 patch 脚本可修改 fixture 源码树"

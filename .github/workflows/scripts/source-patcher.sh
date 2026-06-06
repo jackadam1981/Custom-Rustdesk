@@ -181,6 +181,22 @@ _custom_patch_sciter_ui_text() {
     fi
 }
 
+_custom_patch_portable_working_dir() {
+    local file="libs/portable/src/main.rs"
+
+    if [ ! -f "$file" ]; then
+        echo "source-patcher: $file not found, skipping portable working directory patch"
+        return 0
+    fi
+
+    if grep -q "CUSTOM_RUSTDESK_PORTABLE_WORKDIR_PATCH" "$file"; then
+        echo "source-patcher: portable working directory already patched"
+        return 0
+    fi
+
+    perl -0pi -e 's{cmd\.args\(args\);\n}{cmd.args(args);\n    // CUSTOM_RUSTDESK_PORTABLE_WORKDIR_PATCH\n    if let Some(dir) = path.parent() {\n        cmd.current_dir(dir);\n    }\n}' "$file"
+}
+
 apply_custom_source_patches() {
     CUSTOM_APP_NAME="${BUILD_CUSTOMER:-${BUILD_TAG:-CustomRustDesk}}"
     CUSTOM_CUSTOMER_LINK="${BUILD_CUSTOMER_LINK:-}"
@@ -208,6 +224,7 @@ apply_custom_source_patches() {
     _custom_patch_common_rs
     _custom_patch_brand_files
     _custom_patch_sciter_ui_text
+    _custom_patch_portable_working_dir
 
     echo "source-patcher: custom source patches applied"
 }
