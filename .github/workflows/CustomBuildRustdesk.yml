@@ -821,15 +821,16 @@ jobs:
 
       - name: Build Windows MSI
         if: runner.os == 'Windows'
-        shell: bash
+        shell: pwsh
         working-directory: rustdesk-source/res/msi
         run: |
-          python preprocess.py --arp -d ../../windows-dist --app-name "$WINDOWS_PRODUCT_NAME"
+          python preprocess.py --arp -d ../../windows-dist --app-name "$env:WINDOWS_PRODUCT_NAME"
           nuget restore msi.sln
           msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
-          cp ./Package/bin/x64/Release/en-us/Package.msi "../../../rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi"
-          cd ../../..
-          sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi.sha256"
+          $artifact = Join-Path $env:GITHUB_WORKSPACE "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi"
+          Copy-Item -Path "./Package/bin/x64/Release/en-us/Package.msi" -Destination $artifact
+          $hash = (Get-FileHash -Path $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path -Leaf $artifact)" | Set-Content -Path "$artifact.sha256" -NoNewline
 
       - name: Upload client artifact
         uses: actions/upload-artifact@v4
