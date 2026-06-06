@@ -748,12 +748,23 @@ jobs:
 
       - name: Install Windows vcpkg dependencies
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: bash
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.client.vcpkg-triplet }}
         working-directory: rustdesk-source
         run: |
-          & "$env:VCPKG_ROOT\vcpkg.exe" install `
-            --triplet "${{ matrix.client.vcpkg-triplet }}" `
-            --x-install-root="$env:VCPKG_ROOT\installed"
+          if ! "$VCPKG_ROOT/vcpkg" install \
+            --triplet "${{ matrix.client.vcpkg-triplet }}" \
+            --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r log_file; do
+              echo "$log_file:"
+              echo "======"
+              cat "$log_file"
+              echo "======"
+            done
+            exit 1
+          fi
+          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.client.vcpkg-triplet }}-rel-out.log" || true
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

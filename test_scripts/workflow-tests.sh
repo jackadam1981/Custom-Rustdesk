@@ -300,17 +300,18 @@ function test_workflow_builds_real_client_artifact() {
 
 function test_windows_build_uses_official_sciter_inline_resources() {
     if grep -q "runner.os == 'Windows'" "$WORKFLOW_FILE" &&
+       grep -q 'VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.client.vcpkg-triplet }}' "$WORKFLOW_FILE" &&
        grep -q 'python3 res/inline-sciter.py' "$WORKFLOW_FILE" &&
        grep -q 'cargo build --locked --features inline,vram,hwcodec --release --bins --target "${{ matrix.client.target }}"' "$WORKFLOW_FILE" &&
        grep -q 'mkdir -p Release' "$WORKFLOW_FILE" &&
        grep -q 'sciter.dll' "$WORKFLOW_FILE" &&
        grep -q 'raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll' "$WORKFLOW_FILE" &&
        ! grep -q 'cp -R rustdesk-source/src/ui rustdesk-source/windows-dist/src/' "$WORKFLOW_FILE"; then
-        record_test_result "windows_build_uses_official_sciter_inline_resources" "PASS" "Windows 使用官方 inline Sciter 构建方式，避免运行时 src/ui 白屏"
+        record_test_result "windows_build_uses_official_sciter_inline_resources" "PASS" "Windows 使用官方 inline Sciter/vcpkg 构建方式，避免运行时 src/ui 白屏"
         return 0
     fi
 
-    record_test_result "windows_build_uses_official_sciter_inline_resources" "FAIL" "Windows 应参考官方 Actions 使用 inline Sciter 构建，而不是运行时查找 src/ui"
+    record_test_result "windows_build_uses_official_sciter_inline_resources" "FAIL" "Windows 应参考官方 Actions 使用 inline Sciter 和 VCPKG_DEFAULT_HOST_TRIPLET"
     return 1
 }
 
