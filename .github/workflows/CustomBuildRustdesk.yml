@@ -766,11 +766,25 @@ jobs:
           workspaces: rustdesk-source
           key: ${{ matrix.client.name }}
 
-      - name: Build RustDesk client
+      - name: Build Linux RustDesk client
+        if: runner.os == 'Linux'
         shell: bash
         working-directory: rustdesk-source
         run: |
           cargo build --release --locked --target "${{ matrix.client.target }}"
+
+      - name: Build Windows RustDesk client
+        if: runner.os == 'Windows'
+        shell: bash
+        working-directory: rustdesk-source
+        run: |
+          python3 res/inline-sciter.py
+          cargo build --locked --features inline,vram,hwcodec --release --bins --target "${{ matrix.client.target }}"
+          mkdir -p Release
+          cp "target/${{ matrix.client.target }}/release/rustdesk.exe" Release/rustdesk.exe
+          curl -fsSL \
+            -o Release/sciter.dll \
+            https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll
 
       - name: Prepare Linux client artifact
         if: runner.os == 'Linux'
@@ -785,34 +799,13 @@ jobs:
           tar -C client-artifacts -czf "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" .
           sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.sha256"
 
-      - name: Prepare Windows distribution directory
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          app_name="$(python3 -c 'import json; from pathlib import Path; data=json.loads(Path("rustdesk-source/custom-build-config.json").read_text(encoding="utf-8")); name=data.get("customer") or data.get("app_name") or "RustDesk"; bad=set(chr(i) for i in range(32)) | set(chr(34) + chr(42) + chr(47) + chr(58) + chr(60) + chr(62) + chr(63) + chr(92) + chr(124)); name="".join("_" if c in bad else c for c in name).strip(" ."); print(name or "RustDesk")')"
-          app_exe="${app_name}.exe"
-          {
-            echo "WINDOWS_PRODUCT_NAME=$app_name"
-            echo "WINDOWS_PRODUCT_EXE=$app_exe"
-          } >> "$GITHUB_ENV"
-
-          mkdir -p rustdesk-source/windows-dist/src
-          binary_path="rustdesk-source/target/${{ matrix.client.target }}/release/${{ matrix.client.binary }}"
-          test -f "$binary_path"
-          cp "$binary_path" "rustdesk-source/windows-dist/$app_exe"
-          cp rustdesk-source/custom-build-config.json rustdesk-source/windows-dist/
-          curl -fsSL \
-            -o rustdesk-source/windows-dist/sciter.dll \
-            https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll
-          cp -R rustdesk-source/src/ui rustdesk-source/windows-dist/src/
-
       - name: Build Windows single-file executable
         if: runner.os == 'Windows'
         shell: bash
         working-directory: rustdesk-source/libs/portable
         run: |
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../windows-dist/ -o . -e ../../windows-dist/"${WINDOWS_PRODUCT_EXE}"
+          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
           portable_exe="$(find ../../target -name rustdesk-portable-packer.exe -type f | head -n 1)"
           test -n "$portable_exe"
           cp "$portable_exe" "../../../rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe"
@@ -824,7 +817,7 @@ jobs:
         shell: pwsh
         working-directory: rustdesk-source/res/msi
         run: |
-          python preprocess.py --arp -d ../../windows-dist --app-name "$env:WINDOWS_PRODUCT_NAME"
+          python preprocess.py --arp -d ../../Release
           nuget restore msi.sln
           msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
           $artifact = Join-Path $env:GITHUB_WORKSPACE "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi"

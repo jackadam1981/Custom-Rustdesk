@@ -298,28 +298,31 @@ function test_workflow_builds_real_client_artifact() {
     return 1
 }
 
-function test_windows_artifact_includes_sciter_runtime_and_ui_resources() {
+function test_windows_build_uses_official_sciter_inline_resources() {
     if grep -q "runner.os == 'Windows'" "$WORKFLOW_FILE" &&
+       grep -q 'python3 res/inline-sciter.py' "$WORKFLOW_FILE" &&
+       grep -q 'cargo build --locked --features inline,vram,hwcodec --release --bins --target "${{ matrix.client.target }}"' "$WORKFLOW_FILE" &&
+       grep -q 'mkdir -p Release' "$WORKFLOW_FILE" &&
        grep -q 'sciter.dll' "$WORKFLOW_FILE" &&
        grep -q 'raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll' "$WORKFLOW_FILE" &&
-       grep -q 'cp -R rustdesk-source/src/ui rustdesk-source/windows-dist/src/' "$WORKFLOW_FILE"; then
-        record_test_result "windows_artifact_includes_sciter_runtime_and_ui_resources" "PASS" "Windows Sciter artifact 包含运行所需 dll 和 UI 资源"
+       ! grep -q 'cp -R rustdesk-source/src/ui rustdesk-source/windows-dist/src/' "$WORKFLOW_FILE"; then
+        record_test_result "windows_build_uses_official_sciter_inline_resources" "PASS" "Windows 使用官方 inline Sciter 构建方式，避免运行时 src/ui 白屏"
         return 0
     fi
 
-    record_test_result "windows_artifact_includes_sciter_runtime_and_ui_resources" "FAIL" "Windows artifact 应包含 sciter.dll 和 src/ui，否则 exe 无法直接打开完整 UI"
+    record_test_result "windows_build_uses_official_sciter_inline_resources" "FAIL" "Windows 应参考官方 Actions 使用 inline Sciter 构建，而不是运行时查找 src/ui"
     return 1
 }
 
 function test_windows_release_outputs_single_exe_and_msi() {
     if grep -q 'Build Windows single-file executable' "$WORKFLOW_FILE" &&
        grep -q 'libs/portable' "$WORKFLOW_FILE" &&
-       grep -q 'python3 ./generate.py -f ../../windows-dist/ -o . -e ../../windows-dist/' "$WORKFLOW_FILE" &&
+       grep -q 'python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe' "$WORKFLOW_FILE" &&
        grep -q 'rustdesk-portable-packer.exe' "$WORKFLOW_FILE" &&
        grep -q 'find ../../target -name rustdesk-portable-packer.exe' "$WORKFLOW_FILE" &&
        grep -q 'Add MSBuild to PATH' "$WORKFLOW_FILE" &&
        grep -q 'Build Windows MSI' "$WORKFLOW_FILE" &&
-       grep -q 'python preprocess.py --arp -d ../../windows-dist --app-name' "$WORKFLOW_FILE" &&
+       grep -q 'python preprocess.py --arp -d ../../Release' "$WORKFLOW_FILE" &&
        grep -q 'msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10' "$WORKFLOW_FILE" &&
        grep -q 'Package.msi' "$WORKFLOW_FILE" &&
        grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe' "$WORKFLOW_FILE" &&
@@ -394,7 +397,7 @@ function run_workflow_tests() {
     test_build_job_does_not_export_trigger_data_env || failed=1
     test_build_uploads_patched_source_artifact || failed=1
     test_workflow_builds_real_client_artifact || failed=1
-    test_windows_artifact_includes_sciter_runtime_and_ui_resources || failed=1
+    test_windows_build_uses_official_sciter_inline_resources || failed=1
     test_windows_release_outputs_single_exe_and_msi || failed=1
     test_workflow_builds_android_apk_artifact || failed=1
     test_delete_runs_counter_not_in_pipeline_subshell || failed=1
