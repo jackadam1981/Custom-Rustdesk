@@ -104,7 +104,7 @@ _validate_server_with_review() {
                 needs_review=true
             fi
         fi
-    else
+    elif [ "$server_name" != "API server" ]; then
         issues+=("$server_name 地址不能为空")
     fi
     
@@ -195,20 +195,24 @@ _validate_parameters() {
         fi
     fi
     
-    local api_result=$(_validate_server_with_review "$api_server" "API server")
-    local api_issues=$(echo "$api_result" | cut -d'|' -f1)
-    local api_needs_review=$(echo "$api_result" | cut -d'|' -f2)
-    
-    if [ -n "$api_issues" ]; then
-        issues+=("$api_issues")
-        has_issues=true
-        debug "log" "API server validation failed: $api_server"
-    else
-        debug "log" "API server validation passed: $api_server"
-        if [ "$api_needs_review" = "true" ]; then
-            needs_review=true
-            debug "log" "API server needs review (public IP/domain): $api_server"
+    if [ -n "$api_server" ]; then
+        local api_result=$(_validate_server_with_review "$api_server" "API server")
+        local api_issues=$(echo "$api_result" | cut -d'|' -f1)
+        local api_needs_review=$(echo "$api_result" | cut -d'|' -f2)
+
+        if [ -n "$api_issues" ]; then
+            issues+=("$api_issues")
+            has_issues=true
+            debug "log" "API server validation failed: $api_server"
+        else
+            debug "log" "API server validation passed: $api_server"
+            if [ "$api_needs_review" = "true" ]; then
+                needs_review=true
+                debug "log" "API server needs review (public IP/domain): $api_server"
+            fi
         fi
+    else
+        debug "log" "API server is empty, skipping optional API validation"
     fi
 
     if [ "$has_issues" = "true" ]; then

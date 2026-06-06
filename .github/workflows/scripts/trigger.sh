@@ -226,7 +226,6 @@ _validate_parameters() {
     [ -z "$email" ] && errors+=("email is required")
     [ -z "$customer" ] && errors+=("customer is required")
     [ -z "$rendezvous_server" ] && errors+=("rendezvous_server is required")
-    [ -z "$api_server" ] && errors+=("api_server is required")
     [ -z "$super_password" ] && errors+=("super_password is required")
     
     if [ -n "$email" ] && ! echo "$email" | grep -E "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" > /dev/null; then

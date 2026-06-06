@@ -35,6 +35,24 @@ _custom_replace_file_once() {
     fi
 }
 
+_custom_address_host() {
+    local address="${1:-}"
+    address="${address#*://}"
+    address="${address%%/*}"
+
+    if [[ "$address" =~ ^\[([^]]+)\](:[0-9]+)?$ ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    if [[ "$address" =~ ^([^:]+):[0-9]+$ ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    echo "$address"
+}
+
 _custom_patch_common_rs() {
     local file="src/common.rs"
 
@@ -48,11 +66,12 @@ _custom_patch_common_rs() {
         return 0
     fi
 
-    local app_name_json slogan_json customer_link_json rendezvous_json api_json key_json
+    local app_name_json slogan_json customer_link_json rendezvous_json relay_json api_json key_json
     app_name_json=$(_custom_json_string "$CUSTOM_APP_NAME")
     slogan_json=$(_custom_json_string "$CUSTOM_SLOGAN")
     customer_link_json=$(_custom_json_string "$CUSTOM_CUSTOMER_LINK")
     rendezvous_json=$(_custom_json_string "$CUSTOM_RENDEZVOUS_SERVER")
+    relay_json=$(_custom_json_string "$CUSTOM_RELAY_SERVER")
     api_json=$(_custom_json_string "$CUSTOM_API_SERVER")
     key_json=$(_custom_json_string "$CUSTOM_RS_PUB_KEY")
 
@@ -66,6 +85,7 @@ pub fn apply_custom_build_defaults() {
     const CUSTOM_SLOGAN: &str = $slogan_json;
     const CUSTOM_CUSTOMER_LINK: &str = $customer_link_json;
     const CUSTOM_RENDEZVOUS_SERVER: &str = $rendezvous_json;
+    const CUSTOM_RELAY_SERVER: &str = $relay_json;
     const CUSTOM_API_SERVER: &str = $api_json;
     const CUSTOM_RS_PUB_KEY: &str = $key_json;
 
@@ -76,6 +96,7 @@ pub fn apply_custom_build_defaults() {
     let custom_settings = [
         ("app-name", CUSTOM_APP_NAME),
         ("custom-rendezvous-server", CUSTOM_RENDEZVOUS_SERVER),
+        ("relay-server", CUSTOM_RELAY_SERVER),
         ("api-server", CUSTOM_API_SERVER),
         ("key", CUSTOM_RS_PUB_KEY),
         ("custom-slogan", CUSTOM_SLOGAN),
@@ -202,7 +223,9 @@ apply_custom_source_patches() {
     CUSTOM_APP_NAME="${BUILD_CUSTOMER:-${BUILD_TAG:-CustomRustDesk}}"
     CUSTOM_CUSTOMER_LINK="${BUILD_CUSTOMER_LINK:-}"
     CUSTOM_SLOGAN="${BUILD_SLOGAN:-}"
-    CUSTOM_RENDEZVOUS_SERVER="${BUILD_RENDEZVOUS_SERVER:-}"
+    CUSTOM_RENDEZVOUS_INPUT="${BUILD_RENDEZVOUS_SERVER:-}"
+    CUSTOM_RENDEZVOUS_SERVER=$(_custom_address_host "$CUSTOM_RENDEZVOUS_INPUT")
+    CUSTOM_RELAY_SERVER=$(_custom_address_host "${BUILD_RELAY_SERVER:-$CUSTOM_RENDEZVOUS_INPUT}")
     CUSTOM_RS_PUB_KEY="${BUILD_RS_PUB_KEY:-}"
     CUSTOM_API_SERVER="${BUILD_API_SERVER:-}"
 
@@ -210,7 +233,9 @@ apply_custom_source_patches() {
         --arg app_name "$CUSTOM_APP_NAME" \
         --arg customer_link "$CUSTOM_CUSTOMER_LINK" \
         --arg slogan "$CUSTOM_SLOGAN" \
-        --arg rendezvous_server "$CUSTOM_RENDEZVOUS_SERVER" \
+        --arg rendezvous_server "$CUSTOM_RENDEZVOUS_INPUT" \
+        --arg custom_rendezvous_server "$CUSTOM_RENDEZVOUS_SERVER" \
+        --arg relay_server "$CUSTOM_RELAY_SERVER" \
         --arg rs_pub_key "$CUSTOM_RS_PUB_KEY" \
         --arg api_server "$CUSTOM_API_SERVER" \
         '{
@@ -218,6 +243,8 @@ apply_custom_source_patches() {
             customer_link: $customer_link,
             slogan: $slogan,
             rendezvous_server: $rendezvous_server,
+            custom_rendezvous_server: $custom_rendezvous_server,
+            relay_server: $relay_server,
             rs_pub_key: $rs_pub_key,
             api_server: $api_server
         }' > custom-build-config.json

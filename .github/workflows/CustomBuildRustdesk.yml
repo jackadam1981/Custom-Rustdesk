@@ -41,9 +41,9 @@ on:
         required: false
         default: ''
       api_server:
-        description: 'API服务地址'
-        required: true
-        default: 'http://192.168.1.100:21114'
+        description: 'API服务地址（可选，没有 API 服务时留空）'
+        required: false
+        default: ''
       enable_debug:
         description: '启用调试模式（仅手动触发时有效）'
         required: false

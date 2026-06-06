@@ -126,6 +126,24 @@ function test_review_workflow_dispatch_auto_approves() {
     return 1
 }
 
+function test_review_empty_api_server_is_valid() {
+    local event_data trigger_data validation_result
+
+    export GITHUB_EVENT_NAME="workflow_dispatch"
+    event_data=$(_review_test_event "workflow_dispatch" "repo-owner" "repo-owner")
+    trigger_data=$(_review_test_trigger_data "192.168.2.22" "")
+
+    validation_result=$(review_manager "validate" "$event_data" "$trigger_data")
+
+    if [ "$validation_result" = "[]" ]; then
+        record_test_result "review_empty_api_server_is_valid" "PASS" "api_server 为空时通过校验"
+        return 0
+    fi
+
+    record_test_result "review_empty_api_server_is_valid" "FAIL" "api_server 为空不应导致校验失败，实际: $validation_result"
+    return 1
+}
+
 function test_review_timeout_is_48_hours() {
     if [ "${REVIEW_TIMEOUT_SECONDS:-}" = "172800" ]; then
         record_test_result "review_timeout_is_48_hours" "PASS" "审批超时为 48 小时"
@@ -165,6 +183,7 @@ function run_review_tests() {
     test_review_public_ip_issue_requires_approval || failed=1
     test_review_domain_issue_requires_approval || failed=1
     test_review_workflow_dispatch_auto_approves || failed=1
+    test_review_empty_api_server_is_valid || failed=1
     test_review_timeout_is_48_hours || failed=1
     test_review_prompt_comment_does_not_self_approve || failed=1
 

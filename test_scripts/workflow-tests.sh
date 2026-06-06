@@ -127,6 +127,7 @@ function test_source_patcher_covers_server_key_and_brand() {
 
     if [ -f "$patcher" ] &&
        grep -q 'custom-rendezvous-server' "$patcher" &&
+       grep -q 'relay-server' "$patcher" &&
        grep -q 'api-server' "$patcher" &&
        grep -q 'BUILD_RS_PUB_KEY' "$patcher" &&
        grep -q 'flutter/android/app/src/main/res/values/strings.xml' "$patcher" &&
@@ -211,7 +212,14 @@ EOF
         cd "$tmp_dir"
         apply_custom_source_patches
         grep -q 'FixtureDesk' custom-build-config.json
+        grep -q '"rendezvous_server": "192.168.2.22:21117"' custom-build-config.json
+        grep -q '"custom_rendezvous_server": "192.168.2.22"' custom-build-config.json
+        grep -q '"relay_server": "192.168.2.22"' custom-build-config.json
         grep -q 'custom-rendezvous-server' src/common.rs
+        grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
+        grep -q 'const CUSTOM_RENDEZVOUS_SERVER: &str = "192.168.2.22";' src/common.rs
+        grep -q 'const CUSTOM_RELAY_SERVER: &str = "192.168.2.22";' src/common.rs
+        ! grep -q '("custom-rendezvous-server", "192.168.2.22:21117")' src/common.rs
         grep -q 'fixture-public-key' src/common.rs
         grep -q '<string name="app_name">FixtureDesk</string>' flutter/android/app/src/main/res/values/strings.xml
         grep -q '<string>FixtureDesk</string>' flutter/ios/Runner/Info.plist
@@ -230,6 +238,23 @@ EOF
 
     rm -rf "$tmp_dir"
     record_test_result "source_patcher_applies_to_fixture_tree" "FAIL" "源码 patch 脚本未正确修改 fixture 源码树"
+    return 1
+}
+
+function test_api_server_is_optional_for_plain_hbbs_hbbr() {
+    if grep -q "description: 'API服务地址（可选，没有 API 服务时留空）'" "$WORKFLOW_FILE" &&
+       awk '
+        /api_server:/ { in_api=1 }
+        in_api && /required: false/ { found=1 }
+        in_api && /^      [a-z_]+:/ && !/api_server:/ { in_api=0 }
+        END { exit(found ? 0 : 1) }
+       ' "$WORKFLOW_FILE" &&
+       ! grep -q '\[ -z "$api_server" \].*api_server is required' .github/workflows/scripts/trigger.sh; then
+        record_test_result "api_server_is_optional_for_plain_hbbs_hbbr" "PASS" "没有 API 服务的 hbbs/hbbr 构建允许 api_server 留空"
+        return 0
+    fi
+
+    record_test_result "api_server_is_optional_for_plain_hbbs_hbbr" "FAIL" "api_server 应为可选，避免纯 hbbs/hbbr 服务器被迫写入不可达 API"
     return 1
 }
 
@@ -396,6 +421,7 @@ function run_workflow_tests() {
     test_source_patcher_is_invoked || failed=1
     test_source_patcher_covers_server_key_and_brand || failed=1
     test_source_patcher_applies_to_fixture_tree || failed=1
+    test_api_server_is_optional_for_plain_hbbs_hbbr || failed=1
     test_build_job_uses_trigger_data_for_parameters || failed=1
     test_build_job_does_not_export_trigger_data_env || failed=1
     test_build_uploads_patched_source_artifact || failed=1

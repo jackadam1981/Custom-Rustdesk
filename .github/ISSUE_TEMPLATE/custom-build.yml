@@ -17,7 +17,7 @@ body:
         slogan: 标语
         rendezvous_server: 服务器地址
         rs_pub_key: 公钥
-        api_server: API服务器地址
+        api_server: API服务器地址（可选，没有 API 服务时留空）
         ```
 
   - type: textarea
@@ -32,8 +32,8 @@ body:
         customer_link: https://rustdesk.com
         super_password: 123456
         slogan: 安全可靠的远程桌面解决方案
-        rendezvous_server: 1.2.3.4:21117
+        rendezvous_server: rustdesk.example.com
         rs_pub_key: xxxxx
-        api_server: https://api.example.com
+        api_server:
     validations:
-      required: false 
+      required: false
