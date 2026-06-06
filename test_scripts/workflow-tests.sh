@@ -53,6 +53,22 @@ function test_release_all_locks_skips_unowned_build_lock() {
     return 1
 }
 
+function test_cleanup_queue_clears_orphan_build_lock() {
+    if awk '
+        /^_cleanup_queue\(\)/ { in_func=1 }
+        in_func && /build_lock_holder_in_cleaned_queue/ { saw_queue_check=1 }
+        in_func && /孤儿构建锁/ { saw_orphan_log=1 }
+        in_func && /should_clear_build_lock=true/ && saw_queue_check { saw_clear=1 }
+        in_func && /^}/ { exit((saw_queue_check && saw_orphan_log && saw_clear) ? 0 : 1) }
+    ' .github/workflows/scripts/queue-manager.sh; then
+        record_test_result "cleanup_queue_clears_orphan_build_lock" "PASS" "清理队列会移除不再属于队列成员的孤儿构建锁"
+        return 0
+    fi
+
+    record_test_result "cleanup_queue_clears_orphan_build_lock" "FAIL" "cleanup_queue 应清理 queue=[] 但 build_locked_by 仍指向旧 run 的孤儿锁"
+    return 1
+}
+
 function test_finish_queue_cleanup_is_best_effort() {
     if grep -q 'cleanup_queue || echo "⚠️ Queue cleanup skipped or failed"' .github/workflows/CustomBuildRustdesk.yml; then
         record_test_result "finish_queue_cleanup_is_best_effort" "PASS" "finish 阶段的队列清理是 best-effort"
@@ -413,6 +429,7 @@ function run_workflow_tests() {
     test_build_branch_uses_orphan_snapshot || failed=1
     test_release_all_locks_leaves_queue || failed=1
     test_release_all_locks_skips_unowned_build_lock || failed=1
+    test_cleanup_queue_clears_orphan_build_lock || failed=1
     test_finish_queue_cleanup_is_best_effort || failed=1
     test_actions_ci_does_not_enable_test_mode || failed=1
     test_build_lock_failure_exits_job || failed=1

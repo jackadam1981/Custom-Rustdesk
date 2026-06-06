@@ -720,6 +720,18 @@ _cleanup_queue() {
       fi
     done
   fi
+
+  # A build lock is only valid while its holder is still in the queue. Under
+  # cancellation pressure, another finish job may remove the queue item before
+  # the original holder gets a chance to release its build lock.
+  if [ -n "$build_lock_holder" ]; then
+    local build_lock_holder_in_cleaned_queue
+    build_lock_holder_in_cleaned_queue=$(echo "$cleaned_queue" | jq --arg run_id "$build_lock_holder" 'map(select(.run_id == $run_id)) | length')
+    if [ "$build_lock_holder_in_cleaned_queue" -eq 0 ]; then
+      debug "log" "构建锁持有者已不在清理后的队列中，需要清理孤儿构建锁"
+      should_clear_build_lock=true
+    fi
+  fi
   
   debug "log" "队列清理统计: $cleaned_count/$total_count 个任务被移除"
   
