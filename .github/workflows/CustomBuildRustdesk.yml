@@ -720,6 +720,10 @@ jobs:
         with:
           version: "15.0.6"
 
+      - name: Add MSBuild to PATH
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v2
+
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v7
         with:
@@ -768,7 +772,8 @@ jobs:
         run: |
           cargo build --release --locked --target "${{ matrix.client.target }}"
 
-      - name: Package client artifact
+      - name: Prepare Linux client artifact
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           mkdir -p client-artifacts
@@ -777,15 +782,52 @@ jobs:
           chmod +x "$binary_path"
           cp "$binary_path" "client-artifacts/${{ matrix.client.binary }}"
           cp rustdesk-source/custom-build-config.json client-artifacts/
-          if [ "${{ matrix.client.os == 'windows-2022' }}" = "true" ]; then
-            curl -fsSL \
-              -o client-artifacts/sciter.dll \
-              https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll
-            mkdir -p client-artifacts/src
-            cp -R rustdesk-source/src/ui client-artifacts/src/
-          fi
           tar -C client-artifacts -czf "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" .
           sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.sha256"
+
+      - name: Prepare Windows distribution directory
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          app_name="$(python3 -c 'import json,re; from pathlib import Path; data=json.loads(Path("rustdesk-source/custom-build-config.json").read_text(encoding="utf-8")); name=data.get("customer") or data.get("app_name") or "RustDesk"; name=re.sub(r"[<>:\"/\\\\|?*\\x00-\\x1f]", "_", name).strip(" ."); print(name or "RustDesk")')"
+          app_exe="${app_name}.exe"
+          {
+            echo "WINDOWS_PRODUCT_NAME=$app_name"
+            echo "WINDOWS_PRODUCT_EXE=$app_exe"
+          } >> "$GITHUB_ENV"
+
+          mkdir -p rustdesk-source/windows-dist/src
+          binary_path="rustdesk-source/target/${{ matrix.client.target }}/release/${{ matrix.client.binary }}"
+          test -f "$binary_path"
+          cp "$binary_path" "rustdesk-source/windows-dist/$app_exe"
+          cp rustdesk-source/custom-build-config.json rustdesk-source/windows-dist/
+          curl -fsSL \
+            -o rustdesk-source/windows-dist/sciter.dll \
+            https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll
+          cp -R rustdesk-source/src/ui rustdesk-source/windows-dist/src/
+
+      - name: Build Windows single-file executable
+        if: runner.os == 'Windows'
+        shell: bash
+        working-directory: rustdesk-source/libs/portable
+        run: |
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../windows-dist/ -o . -e ../../windows-dist/"${WINDOWS_PRODUCT_EXE}"
+          cp ./target/release/rustdesk-portable-packer.exe "../../../rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe"
+          cd ../../..
+          sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe.sha256"
+
+      - name: Build Windows MSI
+        if: runner.os == 'Windows'
+        shell: bash
+        working-directory: rustdesk-source/res/msi
+        run: |
+          python preprocess.py --arp -d ../../windows-dist --app-name "$WINDOWS_PRODUCT_NAME"
+          nuget restore msi.sln
+          msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
+          cp ./Package/bin/x64/Release/en-us/Package.msi "../../../rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi"
+          cd ../../..
+          sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi.sha256"
 
       - name: Upload client artifact
         uses: actions/upload-artifact@v4
@@ -794,6 +836,10 @@ jobs:
           path: |
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.sha256
+            rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe
+            rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe.sha256
+            rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi
+            rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi.sha256
           retention-days: 14
 
   # 06-编译 Android APK 真实客户端产物

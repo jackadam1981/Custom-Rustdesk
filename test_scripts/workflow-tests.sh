@@ -286,15 +286,35 @@ function test_workflow_builds_real_client_artifact() {
 }
 
 function test_windows_artifact_includes_sciter_runtime_and_ui_resources() {
-    if grep -q 'matrix.client.os == '"'"'windows-2022'"'"'' "$WORKFLOW_FILE" &&
+    if grep -q "runner.os == 'Windows'" "$WORKFLOW_FILE" &&
        grep -q 'sciter.dll' "$WORKFLOW_FILE" &&
        grep -q 'raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll' "$WORKFLOW_FILE" &&
-       grep -q 'cp -R rustdesk-source/src/ui client-artifacts/src/' "$WORKFLOW_FILE"; then
+       grep -q 'cp -R rustdesk-source/src/ui rustdesk-source/windows-dist/src/' "$WORKFLOW_FILE"; then
         record_test_result "windows_artifact_includes_sciter_runtime_and_ui_resources" "PASS" "Windows Sciter artifact 包含运行所需 dll 和 UI 资源"
         return 0
     fi
 
     record_test_result "windows_artifact_includes_sciter_runtime_and_ui_resources" "FAIL" "Windows artifact 应包含 sciter.dll 和 src/ui，否则 exe 无法直接打开完整 UI"
+    return 1
+}
+
+function test_windows_release_outputs_single_exe_and_msi() {
+    if grep -q 'Build Windows single-file executable' "$WORKFLOW_FILE" &&
+       grep -q 'libs/portable' "$WORKFLOW_FILE" &&
+       grep -q 'python3 ./generate.py -f ../../windows-dist/ -o . -e ../../windows-dist/' "$WORKFLOW_FILE" &&
+       grep -q 'rustdesk-portable-packer.exe' "$WORKFLOW_FILE" &&
+       grep -q 'Add MSBuild to PATH' "$WORKFLOW_FILE" &&
+       grep -q 'Build Windows MSI' "$WORKFLOW_FILE" &&
+       grep -q 'python preprocess.py --arp -d ../../windows-dist --app-name' "$WORKFLOW_FILE" &&
+       grep -q 'msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10' "$WORKFLOW_FILE" &&
+       grep -q 'Package.msi' "$WORKFLOW_FILE" &&
+       grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe' "$WORKFLOW_FILE" &&
+       grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi' "$WORKFLOW_FILE"; then
+        record_test_result "windows_release_outputs_single_exe_and_msi" "PASS" "Windows 发行产物包含单文件 exe 和 MSI"
+        return 0
+    fi
+
+    record_test_result "windows_release_outputs_single_exe_and_msi" "FAIL" "Windows 应使用 RustDesk portable/MSI 链路生成单文件 exe 和 MSI"
     return 1
 }
 
@@ -361,6 +381,7 @@ function run_workflow_tests() {
     test_build_uploads_patched_source_artifact || failed=1
     test_workflow_builds_real_client_artifact || failed=1
     test_windows_artifact_includes_sciter_runtime_and_ui_resources || failed=1
+    test_windows_release_outputs_single_exe_and_msi || failed=1
     test_workflow_builds_android_apk_artifact || failed=1
     test_delete_runs_counter_not_in_pipeline_subshell || failed=1
 
