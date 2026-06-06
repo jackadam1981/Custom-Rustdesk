@@ -194,7 +194,8 @@ _custom_patch_portable_working_dir() {
         return 0
     fi
 
-    perl -0pi -e 's{cmd\.args\(args\);\n}{cmd.args(args);\n    // CUSTOM_RUSTDESK_PORTABLE_WORKDIR_PATCH\n    if let Some(dir) = path.parent() {\n        cmd.current_dir(dir);\n    }\n}' "$file"
+    perl -0pi -e 's{let mut cmd = Command::new\(path\);\n}{// CUSTOM_RUSTDESK_PORTABLE_WORKDIR_PATCH\n    let current_dir = path.parent().map(|dir| dir.to_path_buf());\n    let mut cmd = Command::new(path);\n}' "$file"
+    perl -0pi -e 's{cmd\.args\(args\);\n}{cmd.args(args);\n    if let Some(dir) = current_dir {\n        cmd.current_dir(dir);\n    }\n}' "$file"
 }
 
 apply_custom_source_patches() {

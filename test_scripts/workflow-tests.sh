@@ -219,7 +219,9 @@ EOF
         grep -q 'Name=Open a New Window' res/rustdesk.desktop
         grep -q '由 FixtureDesk 提供支持' src/lang/cn.rs
         grep -q 'Powered by FixtureDesk' src/lang/en.rs
+        grep -q 'let current_dir = path.parent().map(|dir| dir.to_path_buf());' libs/portable/src/main.rs
         grep -q 'cmd.current_dir' libs/portable/src/main.rs
+        ! grep -q 'cmd.args(args);.*path.parent' libs/portable/src/main.rs
     ); then
         rm -rf "$tmp_dir"
         record_test_result "source_patcher_applies_to_fixture_tree" "PASS" "源码 patch 脚本可修改 fixture 源码树"
