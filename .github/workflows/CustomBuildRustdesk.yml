@@ -813,7 +813,7 @@ jobs:
         run: |
           pip3 install -r requirements.txt
           python3 ./generate.py -f ../../windows-dist/ -o . -e ../../windows-dist/"${WINDOWS_PRODUCT_EXE}"
-          portable_exe="$(find ./target -name rustdesk-portable-packer.exe -type f | head -n 1)"
+          portable_exe="$(find ../../target -name rustdesk-portable-packer.exe -type f | head -n 1)"
           test -n "$portable_exe"
           cp "$portable_exe" "../../../rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe"
           cd ../../..
