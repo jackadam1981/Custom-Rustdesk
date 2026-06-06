@@ -803,6 +803,7 @@ jobs:
           wget -O Release/libsciter-gtk.so https://github.com/c-smile/sciter-sdk/raw/master/bin.lnx/x64/libsciter-gtk.so
           rm -rf ../Release
           cp -a Release ../Release
+          chmod 755 res/DEBIAN/preinst res/DEBIAN/postinst res/DEBIAN/prerm res/DEBIAN/postrm
           export DEB_ARCH=amd64
           python3 ./build.py --package ./Release
 
