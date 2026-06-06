@@ -303,6 +303,7 @@ function test_windows_release_outputs_single_exe_and_msi() {
        grep -q 'libs/portable' "$WORKFLOW_FILE" &&
        grep -q 'python3 ./generate.py -f ../../windows-dist/ -o . -e ../../windows-dist/' "$WORKFLOW_FILE" &&
        grep -q 'rustdesk-portable-packer.exe' "$WORKFLOW_FILE" &&
+       grep -q 'find ./target -name rustdesk-portable-packer.exe' "$WORKFLOW_FILE" &&
        grep -q 'Add MSBuild to PATH' "$WORKFLOW_FILE" &&
        grep -q 'Build Windows MSI' "$WORKFLOW_FILE" &&
        grep -q 'python preprocess.py --arp -d ../../windows-dist --app-name' "$WORKFLOW_FILE" &&
