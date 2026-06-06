@@ -328,8 +328,9 @@ function test_workflow_builds_real_client_artifact() {
        grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q -- '--recurse-submodules' "$WORKFLOW_FILE" &&
        grep -q 'include-hidden-files: true' "$WORKFLOW_FILE" &&
-       grep -q 'cargo build --release --locked --target "${{ matrix.client.target }}"' "$WORKFLOW_FILE" &&
+       grep -q 'cargo build --locked --features inline,hwcodec,unix-file-copy-paste --release --bins --target "${{ matrix.client.target }}" --jobs 1' "$WORKFLOW_FILE" &&
        grep -q 'binary_path="rustdesk-source/target/${{ matrix.client.target }}/release/${{ matrix.client.binary }}"' "$WORKFLOW_FILE" &&
+       grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb' "$WORKFLOW_FILE" &&
        grep -q 'name: rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q 'finish:' "$WORKFLOW_FILE" &&
        grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, compile-client, compile-android]' "$WORKFLOW_FILE"; then
@@ -338,6 +339,21 @@ function test_workflow_builds_real_client_artifact() {
     fi
 
     record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 应递归拉 submodule 并编译 Linux/Windows 真实客户端 artifact"
+    return 1
+}
+
+function test_linux_build_uses_official_sciter_flow() {
+    if grep -q 'python3 ./res/inline-sciter.py' "$WORKFLOW_FILE" &&
+       grep -q 'export USE_AOM_391=1' "$WORKFLOW_FILE" &&
+       grep -q 'cargo build --locked --features inline,hwcodec,unix-file-copy-paste --release --bins --target "${{ matrix.client.target }}" --jobs 1' "$WORKFLOW_FILE" &&
+       grep -q 'Release/libsciter-gtk.so' "$WORKFLOW_FILE" &&
+       grep -q './build.py --package ./Release' "$WORKFLOW_FILE" &&
+       grep -q 'DEB_ARCH=amd64' "$WORKFLOW_FILE"; then
+        record_test_result "linux_build_uses_official_sciter_flow" "PASS" "Linux 使用官方 Sciter inline/deb 打包路径"
+        return 0
+    fi
+
+    record_test_result "linux_build_uses_official_sciter_flow" "FAIL" "Linux 应使用官方 Sciter inline、libsciter-gtk 和 build.py --package 流程"
     return 1
 }
 
@@ -443,6 +459,7 @@ function run_workflow_tests() {
     test_build_job_does_not_export_trigger_data_env || failed=1
     test_build_uploads_patched_source_artifact || failed=1
     test_workflow_builds_real_client_artifact || failed=1
+    test_linux_build_uses_official_sciter_flow || failed=1
     test_windows_build_uses_official_sciter_inline_resources || failed=1
     test_windows_release_outputs_single_exe_and_msi || failed=1
     test_workflow_builds_android_apk_artifact || failed=1

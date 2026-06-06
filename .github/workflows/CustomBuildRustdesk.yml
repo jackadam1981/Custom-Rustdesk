@@ -697,10 +697,15 @@ jobs:
             gcc \
             g++ \
             git \
+            libayatana-appindicator3-dev \
             libasound2-dev \
+            libclang-dev \
+            libdbus-1-dev \
+            libglib2.0-dev \
             libgstreamer-plugins-base1.0-dev \
             libgstreamer1.0-dev \
             libgtk-3-dev \
+            liblzma-dev \
             libpam0g-dev \
             libpulse-dev \
             libunwind-dev \
@@ -711,8 +716,15 @@ jobs:
             libxcb-xfixes0-dev \
             libxdo-dev \
             libxfixes-dev \
+            libssl-dev \
             nasm \
-            wget
+            ninja-build \
+            pkg-config \
+            python3 \
+            unzip \
+            wget \
+            xz-utils \
+            zip
 
       - name: Install Windows build dependencies
         if: runner.os == 'Windows'
@@ -782,7 +794,17 @@ jobs:
         shell: bash
         working-directory: rustdesk-source
         run: |
-          cargo build --release --locked --target "${{ matrix.client.target }}"
+          python3 ./res/inline-sciter.py
+          export CARGO_INCREMENTAL=0
+          export USE_AOM_391=1
+          cargo build --locked --features inline,hwcodec,unix-file-copy-paste --release --bins --target "${{ matrix.client.target }}" --jobs 1
+          mkdir -p Release
+          cp "target/${{ matrix.client.target }}/release/rustdesk" Release/rustdesk
+          wget -O Release/libsciter-gtk.so https://github.com/c-smile/sciter-sdk/raw/master/bin.lnx/x64/libsciter-gtk.so
+          rm -rf ../Release
+          cp -a Release ../Release
+          export DEB_ARCH=amd64
+          ./build.py --package ./Release
 
       - name: Build Windows RustDesk client
         if: runner.os == 'Windows'
@@ -806,9 +828,14 @@ jobs:
           test -f "$binary_path"
           chmod +x "$binary_path"
           cp "$binary_path" "client-artifacts/${{ matrix.client.binary }}"
+          cp rustdesk-source/Release/libsciter-gtk.so client-artifacts/
           cp rustdesk-source/custom-build-config.json client-artifacts/
           tar -C client-artifacts -czf "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" .
           sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.sha256"
+          deb_path="$(find . rustdesk-source -maxdepth 1 -name 'rustdesk-*.deb' -type f | head -n 1)"
+          test -n "$deb_path"
+          cp "$deb_path" "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb"
+          sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb.sha256"
 
       - name: Build Windows single-file executable
         if: runner.os == 'Windows'
@@ -843,6 +870,8 @@ jobs:
           path: |
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.sha256
+            rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb
+            rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb.sha256
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe.sha256
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi
