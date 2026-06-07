@@ -714,6 +714,8 @@ jobs:
             libxcb-randr0-dev \
             libxcb-shape0-dev \
             libxcb-xfixes0-dev \
+            libarchive-tools \
+            libfuse2 \
             libxdo-dev \
             libxfixes-dev \
             libssl-dev \
@@ -721,6 +723,7 @@ jobs:
             ninja-build \
             pkg-config \
             python3 \
+            python3-pip \
             unzip \
             wget \
             xz-utils \
@@ -807,6 +810,20 @@ jobs:
           export DEB_ARCH=amd64
           python3 ./build.py --package ./Release
 
+      - name: Build Linux AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        working-directory: rustdesk-source
+        run: |
+          deb_path="$(find . .. -maxdepth 1 \( -name 'rustdesk.deb' -o -name 'rustdesk-*.deb' \) -type f | head -n 1)"
+          test -n "$deb_path"
+          cp "$deb_path" appimage/rustdesk.deb
+          sed -i 's#tar -xvf ./data.tar.xz#bsdtar -xf ./data.tar.*#' appimage/AppImageBuilder-x86_64.yml
+          sudo pip3 install git+https://github.com/rustdesk-org/appimage-builder.git
+          pushd appimage
+          sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-x86_64.yml
+          popd
+
       - name: Build Windows RustDesk client
         if: runner.os == 'Windows'
         shell: bash
@@ -833,10 +850,15 @@ jobs:
           cp rustdesk-source/custom-build-config.json client-artifacts/
           tar -C client-artifacts -czf "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" .
           sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.tar.gz" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.sha256"
-          deb_path="$(find . rustdesk-source -maxdepth 1 -name 'rustdesk-*.deb' -type f | head -n 1)"
+          deb_path="$(find . rustdesk-source -maxdepth 1 \( -name 'rustdesk.deb' -o -name 'rustdesk-*.deb' \) -type f | head -n 1)"
           test -n "$deb_path"
           cp "$deb_path" "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb"
           sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb.sha256"
+          appimage_path="$(find rustdesk-source/appimage -maxdepth 1 -name 'rustdesk-*.AppImage' -type f | head -n 1)"
+          test -n "$appimage_path"
+          cp "$appimage_path" "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.AppImage"
+          chmod +x "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.AppImage"
+          sha256sum "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.AppImage" > "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.AppImage.sha256"
 
       - name: Build Windows single-file executable
         if: runner.os == 'Windows'
@@ -873,6 +895,8 @@ jobs:
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.sha256
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb.sha256
+            rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.AppImage
+            rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.AppImage.sha256
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe.sha256
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi

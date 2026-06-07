@@ -331,6 +331,7 @@ function test_workflow_builds_real_client_artifact() {
        grep -q 'cargo build --locked --features inline,hwcodec,unix-file-copy-paste --release --bins --target "${{ matrix.client.target }}" --jobs 1' "$WORKFLOW_FILE" &&
        grep -q 'binary_path="rustdesk-source/target/${{ matrix.client.target }}/release/${{ matrix.client.binary }}"' "$WORKFLOW_FILE" &&
        grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb' "$WORKFLOW_FILE" &&
+       grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.AppImage' "$WORKFLOW_FILE" &&
        grep -q 'name: rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q 'finish:' "$WORKFLOW_FILE" &&
        grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, compile-client, compile-android]' "$WORKFLOW_FILE"; then
@@ -349,6 +350,18 @@ function test_linux_build_uses_official_sciter_flow() {
        grep -q 'Release/libsciter-gtk.so' "$WORKFLOW_FILE" &&
        grep -q 'chmod 755 res/DEBIAN/preinst res/DEBIAN/postinst res/DEBIAN/prerm res/DEBIAN/postrm' "$WORKFLOW_FILE" &&
        grep -q 'python3 ./build.py --package ./Release' "$WORKFLOW_FILE" &&
+       grep -q 'libarchive-tools' "$WORKFLOW_FILE" &&
+       grep -q 'libfuse2' "$WORKFLOW_FILE" &&
+       grep -q 'python3-pip' "$WORKFLOW_FILE" &&
+       grep -q 'Build Linux AppImage' "$WORKFLOW_FILE" &&
+       grep -q "find . .. -maxdepth 1" "$WORKFLOW_FILE" &&
+       grep -q "find . rustdesk-source -maxdepth 1" "$WORKFLOW_FILE" &&
+       grep -q "rustdesk.deb" "$WORKFLOW_FILE" &&
+       grep -q 'appimage/rustdesk.deb' "$WORKFLOW_FILE" &&
+       grep -Fq "s#tar -xvf ./data.tar.xz#bsdtar -xf ./data.tar.*#" "$WORKFLOW_FILE" &&
+       grep -q 'git+https://github.com/rustdesk-org/appimage-builder.git' "$WORKFLOW_FILE" &&
+       grep -q 'appimage-builder --skip-tests --recipe ./AppImageBuilder-x86_64.yml' "$WORKFLOW_FILE" &&
+       grep -Fq "find rustdesk-source/appimage -maxdepth 1 -name 'rustdesk-*.AppImage'" "$WORKFLOW_FILE" &&
        grep -q 'DEB_ARCH=amd64' "$WORKFLOW_FILE"; then
         record_test_result "linux_build_uses_official_sciter_flow" "PASS" "Linux 使用官方 Sciter inline/deb 打包路径"
         return 0
