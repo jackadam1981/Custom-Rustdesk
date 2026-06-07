@@ -329,6 +329,9 @@ function test_build_uploads_patched_source_artifact() {
     if grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q 'path: rustdesk-source' "$WORKFLOW_FILE" &&
        grep -q 'source_branch: ${{ steps.commit-repo.outputs.branch_name }}' "$WORKFLOW_FILE" &&
+       grep -q 'custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
+       grep -q 'uses: ./.github/workflows/flutter-build.yml' .github/workflows/custom-rustdesk-upstream-build.yml &&
+       grep -q 'RustDesk Upstream Flutter Build Placeholder' .github/workflows/flutter-build.yml &&
        grep -q 'steps.record-artifact.outputs.download_url' "$WORKFLOW_FILE" &&
        grep -q 'actions: write' "$WORKFLOW_FILE" &&
        grep -q 'Delete trigger data artifact' "$WORKFLOW_FILE" &&
@@ -344,37 +347,23 @@ function test_build_uploads_patched_source_artifact() {
 }
 
 function test_workflow_builds_real_client_artifact() {
-    if grep -q '^  compile-client:' "$WORKFLOW_FILE" &&
-       grep -q 'strategy:' "$WORKFLOW_FILE" &&
-       grep -q 'target: x86_64-unknown-linux-gnu' "$WORKFLOW_FILE" &&
-       grep -q 'target: x86_64-pc-windows-msvc' "$WORKFLOW_FILE" &&
-       grep -q 'name: windows-x64' "$WORKFLOW_FILE" &&
-       grep -q 'os: windows-2022' "$WORKFLOW_FILE" &&
-       grep -q 'vcpkg-triplet: x64-windows-static' "$WORKFLOW_FILE" &&
-       grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
-       grep -q 'Checkout custom RustDesk source' "$WORKFLOW_FILE" &&
-       grep -q 'ref: ${{ needs.build.outputs.source_branch }}' "$WORKFLOW_FILE" &&
-       grep -q 'submodules: recursive' "$WORKFLOW_FILE" &&
-       ! awk '
-          /compile-client:/ { in_compile=1 }
-          in_compile && /compile-android:/ { in_compile=0 }
-          in_compile && /actions\/download-artifact@v4/ { found=1 }
-          END { exit(found ? 0 : 1) }
-       ' "$WORKFLOW_FILE" &&
-       grep -q -- '--recurse-submodules' "$WORKFLOW_FILE" &&
-       grep -q 'include-hidden-files: true' "$WORKFLOW_FILE" &&
-       grep -q 'cargo build --locked --features inline,hwcodec,unix-file-copy-paste --release --bins --target "${{ matrix.client.target }}" --jobs 1' "$WORKFLOW_FILE" &&
-       grep -q 'binary_path="rustdesk-source/target/${{ matrix.client.target }}/release/${{ matrix.client.binary }}"' "$WORKFLOW_FILE" &&
-       grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb' "$WORKFLOW_FILE" &&
-       grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.AppImage' "$WORKFLOW_FILE" &&
-       grep -q 'name: rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}' "$WORKFLOW_FILE" &&
+    if grep -q '^  upstream-build:' "$WORKFLOW_FILE" &&
+       grep -q 'push:' .github/workflows/custom-rustdesk-upstream-build.yml &&
+       grep -Fq '"custom-build-*"' .github/workflows/custom-rustdesk-upstream-build.yml &&
+       grep -q -- '--workflow custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
+       grep -q -- '--branch "$SOURCE_BRANCH"' "$WORKFLOW_FILE" &&
+       ! grep -q 'gh workflow run custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
+       grep -q 'gh run watch "$upstream_run_id"' "$WORKFLOW_FILE" &&
+       grep -Fq 'upstream_run_url=https://github.com/${{ github.repository }}/actions/runs/$upstream_run_id' "$WORKFLOW_FILE" &&
+       grep -q '^  compile-client:' "$WORKFLOW_FILE" &&
+       grep -q "if: false && needs.build.result == 'success'" "$WORKFLOW_FILE" &&
        grep -q 'finish:' "$WORKFLOW_FILE" &&
-       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, compile-client, compile-android]' "$WORKFLOW_FILE"; then
-        record_test_result "workflow_builds_real_client_artifact" "PASS" "workflow 会编译 Linux/Windows 真实客户端产物并上传 artifact"
+       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, upstream-build]' "$WORKFLOW_FILE"; then
+        record_test_result "workflow_builds_real_client_artifact" "PASS" "workflow 通过 custom source 分支触发 RustDesk 原版 workflow 编译客户端产物"
         return 0
     fi
 
-    record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 应递归拉 submodule 并编译 Linux/Windows 真实客户端 artifact"
+    record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 应通过 custom source 分支触发 RustDesk 原版 workflow，而不是继续自编 compile-client"
     return 1
 }
 
@@ -450,14 +439,9 @@ function test_windows_release_outputs_single_exe_and_msi() {
 
 function test_workflow_builds_android_apk_artifact() {
     if grep -q '^  compile-android:' "$WORKFLOW_FILE" &&
-       grep -q 'Checkout custom RustDesk source' "$WORKFLOW_FILE" &&
-       grep -q 'ref: ${{ needs.build.outputs.source_branch }}' "$WORKFLOW_FILE" &&
-       ! awk '
-          /compile-android:/ { in_android=1 }
-          in_android && /finish:/ { in_android=0 }
-          in_android && /actions\/download-artifact@v4/ { found=1 }
-          END { exit(found ? 0 : 1) }
-       ' "$WORKFLOW_FILE" &&
+       grep -q "if: false && needs.build.result == 'success'" "$WORKFLOW_FILE" &&
+       grep -q '^  upstream-build:' "$WORKFLOW_FILE" &&
+       grep -q 'custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
        grep -q 'target: aarch64-linux-android' "$WORKFLOW_FILE" &&
        grep -q 'abi: arm64-v8a' "$WORKFLOW_FILE" &&
        grep -q 'flutter-target-platform: android-arm64' "$WORKFLOW_FILE" &&
@@ -473,12 +457,12 @@ function test_workflow_builds_android_apk_artifact() {
        grep -q 'liblibrustdesk.so' "$WORKFLOW_FILE" &&
        grep -q 'flutter build apk --release --target-platform "${{ matrix.android.flutter-target-platform }}" --split-per-abi' "$WORKFLOW_FILE" &&
        grep -q 'name: rustdesk-client-android-${{ matrix.android.name }}-${{ github.run_id }}' "$WORKFLOW_FILE" &&
-       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, compile-client, compile-android]' "$WORKFLOW_FILE"; then
-        record_test_result "workflow_builds_android_apk_artifact" "PASS" "workflow 会编译 Android APK 真实客户端产物并上传 artifact"
+       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, upstream-build]' "$WORKFLOW_FILE"; then
+        record_test_result "workflow_builds_android_apk_artifact" "PASS" "Android 构建改由定制源码分支上的 RustDesk 原版 workflow 承担，旧自编 job 已关闭"
         return 0
     fi
 
-    record_test_result "workflow_builds_android_apk_artifact" "FAIL" "workflow 应编译 Android arm64 APK artifact，并让 finish 等待 Android job"
+    record_test_result "workflow_builds_android_apk_artifact" "FAIL" "Android 构建应由 upstream-build 承担，finish 应等待 upstream-build"
     return 1
 }
 

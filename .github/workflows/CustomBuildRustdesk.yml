@@ -495,6 +495,32 @@ jobs:
 
           echo "🧩 应用自定义源码补丁..."
           apply_custom_source_patches
+
+          mkdir -p .github/workflows
+          cat > .github/workflows/custom-rustdesk-upstream-build.yml <<'EOF'
+          name: Custom RustDesk Upstream Build
+
+          on:
+            push:
+              branches:
+                - "custom-build-*"
+            workflow_dispatch:
+              inputs:
+                upload-artifact:
+                  type: boolean
+                  default: true
+                upload-tag:
+                  type: string
+                  default: "custom"
+
+          jobs:
+            run-upstream-flutter-build:
+              uses: ./.github/workflows/flutter-build.yml
+              secrets: inherit
+              with:
+                upload-artifact: ${{ inputs.upload-artifact }}
+                upload-tag: ${{ inputs.upload-tag }}
+          EOF
           
           # 创建构建状态文件
           echo "📝 创建构建状态文件..."
@@ -646,10 +672,59 @@ jobs:
           echo "✅ Final cleanup and rollback completed"
           echo "cleanup_completed=true" >> $GITHUB_OUTPUT
 
-  # 05-编译真实客户端产物
-  compile-client:
+  # 05-等待定制源码分支 push 自动触发的 RustDesk 原版 workflow
+  upstream-build:
     needs: [build]
     if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      upstream_run_id: ${{ steps.wait-upstream.outputs.upstream_run_id }}
+      upstream_run_url: ${{ steps.wait-upstream.outputs.upstream_run_url }}
+      upstream_conclusion: ${{ steps.wait-upstream.outputs.upstream_conclusion }}
+    steps:
+      - name: Download trigger data
+        uses: actions/download-artifact@v4
+        with:
+          name: trigger-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/trigger-data
+
+      - name: Wait for upstream RustDesk workflow
+        id: wait-upstream
+        env:
+          GH_TOKEN: ${{ secrets.BUILD_TOKEN }}
+          SOURCE_BRANCH: ${{ needs.build.outputs.source_branch }}
+        run: |
+          set -euo pipefail
+          upstream_run_id=""
+          for _ in $(seq 1 30); do
+            upstream_run_id="$(gh run list \
+              --repo "${{ github.repository }}" \
+              --workflow custom-rustdesk-upstream-build.yml \
+              --branch "$SOURCE_BRANCH" \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // empty')"
+            if [ -n "$upstream_run_id" ]; then
+              break
+            fi
+            sleep 10
+          done
+
+          if [ -z "$upstream_run_id" ]; then
+            echo "Failed to find upstream workflow run"
+            exit 1
+          fi
+
+          echo "upstream_run_id=$upstream_run_id" >> "$GITHUB_OUTPUT"
+          echo "upstream_run_url=https://github.com/${{ github.repository }}/actions/runs/$upstream_run_id" >> "$GITHUB_OUTPUT"
+          gh run watch "$upstream_run_id" --repo "${{ github.repository }}" --interval 60 --exit-status
+          conclusion="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')"
+          echo "upstream_conclusion=$conclusion" >> "$GITHUB_OUTPUT"
+
+  # 06-旧自编编译链暂时保留但关闭；后续删除，改由 upstream-build 承担编译。
+  compile-client:
+    needs: [build]
+    if: false && needs.build.result == 'success' && needs.build.outputs.build_success == 'true'
     runs-on: ${{ matrix.client.os }}
     strategy:
       fail-fast: false
@@ -909,10 +984,10 @@ jobs:
             rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi.sha256
           retention-days: 14
 
-  # 06-编译 Android APK 真实客户端产物
+  # 07-旧自编 Android 编译链暂时保留但关闭；后续删除，改由 upstream-build 承担编译。
   compile-android:
     needs: [build]
-    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true'
+    if: false && needs.build.result == 'success' && needs.build.outputs.build_success == 'true'
     runs-on: ${{ matrix.android.os }}
     strategy:
       fail-fast: false
@@ -1104,7 +1179,7 @@ jobs:
 
   # 07-完成处理
   finish:
-    needs: [trigger, review, join-queue, wait-build-lock, build, compile-client, compile-android]
+    needs: [trigger, review, join-queue, wait-build-lock, build, upstream-build]
     if: always() && needs.trigger.result != 'skipped'
     runs-on: ubuntu-latest
     outputs:
@@ -1134,9 +1209,9 @@ jobs:
           EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"
 
           # 确定构建状态
-          if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ] && [ "${{ needs.compile-client.result }}" = "success" ] && [ "${{ needs['compile-android'].result }}" = "success" ]; then
+          if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ] && [ "${{ needs.upstream-build.result }}" = "success" ]; then
             build_status="success"
-            download_url="${{ needs.build.outputs.download_url || '' }}"
+            download_url="${{ needs.upstream-build.outputs.upstream_run_url || needs.build.outputs.download_url || '' }}"
             error_message="${{ needs.build.outputs.error_message || '' }}"
           else
             build_status="failure"
