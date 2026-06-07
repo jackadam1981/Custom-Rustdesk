@@ -182,6 +182,26 @@ _custom_patch_brand_files() {
     _custom_replace_file "flutter/windows/runner/Runner.rc" \
         'VALUE "FileDescription", "RustDesk Remote Desktop"' \
         "VALUE \"FileDescription\", \"$CUSTOM_APP_NAME Remote Desktop\""
+
+    _custom_replace_file "Cargo.toml" \
+        'description = "RustDesk Remote Desktop"' \
+        "description = \"$CUSTOM_APP_NAME Remote Desktop\""
+    _custom_replace_file "Cargo.toml" \
+        'ProductName = "RustDesk"' \
+        "ProductName = \"$CUSTOM_APP_NAME\""
+    _custom_replace_file "Cargo.toml" \
+        'FileDescription = "RustDesk Remote Desktop"' \
+        "FileDescription = \"$CUSTOM_APP_NAME Remote Desktop\""
+
+    _custom_replace_file "libs/portable/Cargo.toml" \
+        'description = "RustDesk Remote Desktop"' \
+        "description = \"$CUSTOM_APP_NAME Remote Desktop\""
+    _custom_replace_file "libs/portable/Cargo.toml" \
+        'ProductName = "RustDesk"' \
+        "ProductName = \"$CUSTOM_APP_NAME\""
+    _custom_replace_file "libs/portable/Cargo.toml" \
+        'FileDescription = "RustDesk Remote Desktop"' \
+        "FileDescription = \"$CUSTOM_APP_NAME Remote Desktop\""
 }
 
 _custom_patch_sciter_ui_text() {

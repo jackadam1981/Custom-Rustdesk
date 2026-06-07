@@ -149,6 +149,8 @@ function test_source_patcher_covers_server_key_and_brand() {
        grep -q 'flutter/android/app/src/main/res/values/strings.xml' "$patcher" &&
        grep -q 'flutter/ios/Runner/Info.plist' "$patcher" &&
        grep -q 'res/rustdesk.desktop' "$patcher" &&
+       grep -q 'ProductName = "RustDesk"' "$patcher" &&
+       grep -q 'libs/portable/Cargo.toml' "$patcher" &&
        grep -q 'libs/portable/src/main.rs' "$patcher" &&
        grep -q 'current_dir' "$patcher"; then
         record_test_result "source_patcher_covers_server_key_and_brand" "PASS" "源码 patch 覆盖服务器、密钥和主要品牌外观"
@@ -215,6 +217,22 @@ fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
     let _child = cmd.spawn();
 }
 EOF
+    cat > "$tmp_dir/Cargo.toml" <<'EOF'
+[package]
+description = "RustDesk Remote Desktop"
+
+[package.metadata.winres]
+ProductName = "RustDesk"
+FileDescription = "RustDesk Remote Desktop"
+EOF
+    cat > "$tmp_dir/libs/portable/Cargo.toml" <<'EOF'
+[package]
+description = "RustDesk Remote Desktop"
+
+[package.metadata.winres]
+ProductName = "RustDesk"
+FileDescription = "RustDesk Remote Desktop"
+EOF
 
     if (
         set -e
@@ -241,6 +259,12 @@ EOF
         grep -q '<string>FixtureDesk</string>' flutter/ios/Runner/Info.plist
         grep -q 'Name=FixtureDesk' res/rustdesk.desktop
         grep -q 'Name=Open a New Window' res/rustdesk.desktop
+        grep -q 'description = "FixtureDesk Remote Desktop"' Cargo.toml
+        grep -q 'ProductName = "FixtureDesk"' Cargo.toml
+        grep -q 'FileDescription = "FixtureDesk Remote Desktop"' Cargo.toml
+        grep -q 'description = "FixtureDesk Remote Desktop"' libs/portable/Cargo.toml
+        grep -q 'ProductName = "FixtureDesk"' libs/portable/Cargo.toml
+        grep -q 'FileDescription = "FixtureDesk Remote Desktop"' libs/portable/Cargo.toml
         grep -q '由 FixtureDesk 提供支持' src/lang/cn.rs
         grep -q 'Powered by FixtureDesk' src/lang/en.rs
         grep -q 'let current_dir = path.parent().map(|dir| dir.to_path_buf());' libs/portable/src/main.rs
@@ -396,7 +420,8 @@ function test_windows_release_outputs_single_exe_and_msi() {
        grep -q 'find ../../target -name rustdesk-portable-packer.exe' "$WORKFLOW_FILE" &&
        grep -q 'Add MSBuild to PATH' "$WORKFLOW_FILE" &&
        grep -q 'Build Windows MSI' "$WORKFLOW_FILE" &&
-       grep -q 'python preprocess.py --arp -d ../../Release' "$WORKFLOW_FILE" &&
+       grep -q 'ConvertFrom-Json' "$WORKFLOW_FILE" &&
+       grep -q 'python preprocess.py --arp -d ../../Release --app-name "$($config.app_name)"' "$WORKFLOW_FILE" &&
        grep -q 'msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10' "$WORKFLOW_FILE" &&
        grep -q 'Package.msi' "$WORKFLOW_FILE" &&
        grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe' "$WORKFLOW_FILE" &&

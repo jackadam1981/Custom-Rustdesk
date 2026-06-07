@@ -878,7 +878,8 @@ jobs:
         shell: pwsh
         working-directory: rustdesk-source/res/msi
         run: |
-          python preprocess.py --arp -d ../../Release
+          $config = Get-Content -Raw -Path "../../custom-build-config.json" | ConvertFrom-Json
+          python preprocess.py --arp -d ../../Release --app-name "$($config.app_name)"
           nuget restore msi.sln
           msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
           $artifact = Join-Path $env:GITHUB_WORKSPACE "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi"
