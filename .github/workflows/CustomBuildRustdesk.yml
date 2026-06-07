@@ -879,9 +879,23 @@ jobs:
         working-directory: rustdesk-source/res/msi
         run: |
           $config = Get-Content -Raw -Path "../../custom-build-config.json" | ConvertFrom-Json
-          python preprocess.py --arp -d ../../Release --app-name "$($config.app_name)"
+          $appName = $config.app_name
+          if ([string]::IsNullOrWhiteSpace($appName)) {
+            $appName = "RustDesk"
+          }
+          $releaseDir = Resolve-Path "../../Release"
+          $sourceExe = Join-Path $releaseDir "rustdesk.exe"
+          $msiExe = Join-Path $releaseDir "$appName.exe"
+          if ($sourceExe -ne $msiExe) {
+            Copy-Item -Path $sourceExe -Destination $msiExe -Force
+            Remove-Item -Path $sourceExe -Force
+          }
+          python preprocess.py --arp -d ../../Release --app-name "$appName"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           nuget restore msi.sln
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $artifact = Join-Path $env:GITHUB_WORKSPACE "rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi"
           Copy-Item -Path "./Package/bin/x64/Release/en-us/Package.msi" -Destination $artifact
           $hash = (Get-FileHash -Path $artifact -Algorithm SHA256).Hash.ToLowerInvariant()

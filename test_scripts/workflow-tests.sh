@@ -421,7 +421,10 @@ function test_windows_release_outputs_single_exe_and_msi() {
        grep -q 'Add MSBuild to PATH' "$WORKFLOW_FILE" &&
        grep -q 'Build Windows MSI' "$WORKFLOW_FILE" &&
        grep -q 'ConvertFrom-Json' "$WORKFLOW_FILE" &&
-       grep -q 'python preprocess.py --arp -d ../../Release --app-name "$($config.app_name)"' "$WORKFLOW_FILE" &&
+       grep -q 'Copy-Item -Path $sourceExe -Destination $msiExe -Force' "$WORKFLOW_FILE" &&
+       grep -q 'Remove-Item -Path $sourceExe -Force' "$WORKFLOW_FILE" &&
+       grep -q 'python preprocess.py --arp -d ../../Release --app-name "$appName"' "$WORKFLOW_FILE" &&
+       grep -q 'if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }' "$WORKFLOW_FILE" &&
        grep -q 'msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10' "$WORKFLOW_FILE" &&
        grep -q 'Package.msi' "$WORKFLOW_FILE" &&
        grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe' "$WORKFLOW_FILE" &&
