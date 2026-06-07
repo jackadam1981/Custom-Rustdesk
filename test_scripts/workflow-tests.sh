@@ -328,9 +328,11 @@ function test_build_job_does_not_export_trigger_data_env() {
 function test_build_uploads_patched_source_artifact() {
     if grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q 'path: rustdesk-source' "$WORKFLOW_FILE" &&
+       grep -q 'source_branch: ${{ steps.commit-repo.outputs.branch_name }}' "$WORKFLOW_FILE" &&
        grep -q 'steps.record-artifact.outputs.download_url' "$WORKFLOW_FILE" &&
        grep -q 'actions: write' "$WORKFLOW_FILE" &&
        grep -q 'Delete trigger data artifact' "$WORKFLOW_FILE" &&
+       grep -q 'Delete custom source branch' "$WORKFLOW_FILE" &&
        grep -q 'trigger-data-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        ! grep -q 'https://api.github.com/repos/$RUSTDESK_REPO/dispatches' "$WORKFLOW_FILE"; then
         record_test_result "build_uploads_patched_source_artifact" "PASS" "build 阶段上传已定制源码 artifact，不再触发无权限的官方仓库 dispatch"
@@ -350,6 +352,15 @@ function test_workflow_builds_real_client_artifact() {
        grep -q 'os: windows-2022' "$WORKFLOW_FILE" &&
        grep -q 'vcpkg-triplet: x64-windows-static' "$WORKFLOW_FILE" &&
        grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
+       grep -q 'Checkout custom RustDesk source' "$WORKFLOW_FILE" &&
+       grep -q 'ref: ${{ needs.build.outputs.source_branch }}' "$WORKFLOW_FILE" &&
+       grep -q 'submodules: recursive' "$WORKFLOW_FILE" &&
+       ! awk '
+          /compile-client:/ { in_compile=1 }
+          in_compile && /compile-android:/ { in_compile=0 }
+          in_compile && /actions\/download-artifact@v4/ { found=1 }
+          END { exit(found ? 0 : 1) }
+       ' "$WORKFLOW_FILE" &&
        grep -q -- '--recurse-submodules' "$WORKFLOW_FILE" &&
        grep -q 'include-hidden-files: true' "$WORKFLOW_FILE" &&
        grep -q 'cargo build --locked --features inline,hwcodec,unix-file-copy-paste --release --bins --target "${{ matrix.client.target }}" --jobs 1' "$WORKFLOW_FILE" &&
@@ -439,6 +450,14 @@ function test_windows_release_outputs_single_exe_and_msi() {
 
 function test_workflow_builds_android_apk_artifact() {
     if grep -q '^  compile-android:' "$WORKFLOW_FILE" &&
+       grep -q 'Checkout custom RustDesk source' "$WORKFLOW_FILE" &&
+       grep -q 'ref: ${{ needs.build.outputs.source_branch }}' "$WORKFLOW_FILE" &&
+       ! awk '
+          /compile-android:/ { in_android=1 }
+          in_android && /finish:/ { in_android=0 }
+          in_android && /actions\/download-artifact@v4/ { found=1 }
+          END { exit(found ? 0 : 1) }
+       ' "$WORKFLOW_FILE" &&
        grep -q 'target: aarch64-linux-android' "$WORKFLOW_FILE" &&
        grep -q 'abi: arm64-v8a' "$WORKFLOW_FILE" &&
        grep -q 'flutter-target-platform: android-arm64' "$WORKFLOW_FILE" &&
