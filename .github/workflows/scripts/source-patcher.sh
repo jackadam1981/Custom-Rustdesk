@@ -127,15 +127,6 @@ pub fn apply_custom_build_defaults() {
             }
         }
     }
-    {
-        let mut hard_settings = config::HARD_SETTINGS.write().unwrap();
-        for (key, value) in custom_settings {
-            if !value.is_empty() {
-                hard_settings.insert(key.to_owned(), value.to_owned());
-            }
-        }
-        hard_settings.insert("disable-settings".to_owned(), "Y".to_owned());
-    }
 }
 // CUSTOM_RUSTDESK_PATCH_END
 EOF

@@ -251,6 +251,8 @@ EOF
         grep -q '"relay_server": "192.168.2.22"' custom-build-config.json
         grep -q 'custom-rendezvous-server' src/common.rs
         grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
+        ! grep -q 'HARD_SETTINGS' src/common.rs
+        ! grep -q 'disable-settings' src/common.rs
         grep -q 'const CUSTOM_RENDEZVOUS_SERVER: &str = "192.168.2.22";' src/common.rs
         grep -q 'const CUSTOM_RELAY_SERVER: &str = "192.168.2.22";' src/common.rs
         ! grep -q '("custom-rendezvous-server", "192.168.2.22:21117")' src/common.rs
