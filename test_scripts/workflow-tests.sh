@@ -448,6 +448,22 @@ function test_workflow_builds_real_client_artifact() {
     return 1
 }
 
+function test_upstream_build_uses_platform_result_summary() {
+    if grep -q 'upstream_platform_conclusion' "$WORKFLOW_FILE" &&
+       grep -q 'platform_results' "$WORKFLOW_FILE" &&
+       grep -q 'gh run watch "$upstream_run_id" --repo "${{ github.repository }}" --interval 60 || true' "$WORKFLOW_FILE" &&
+       grep -q 'gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json jobs' "$WORKFLOW_FILE" &&
+       grep -q 'def platform($name):' "$WORKFLOW_FILE" &&
+       grep -q 'partial_success' "$WORKFLOW_FILE" &&
+       grep -q 'Some target platforms failed: $platform_results' "$WORKFLOW_FILE"; then
+        record_test_result "upstream_build_uses_platform_result_summary" "PASS" "外层汇总按目标平台判定内层原版 workflow 结果"
+        return 0
+    fi
+
+    record_test_result "upstream_build_uses_platform_result_summary" "FAIL" "外层不应因内层原版 workflow 的非目标平台失败而直接判整轮失败"
+    return 1
+}
+
 function test_linux_build_uses_official_sciter_flow() {
     if grep -q 'python3 ./res/inline-sciter.py' "$WORKFLOW_FILE" &&
        grep -q 'export USE_AOM_391=1' "$WORKFLOW_FILE" &&
@@ -586,6 +602,7 @@ function run_workflow_tests() {
     test_build_job_does_not_export_trigger_data_env || failed=1
     test_build_uploads_patched_source_artifact || failed=1
     test_workflow_builds_real_client_artifact || failed=1
+    test_upstream_build_uses_platform_result_summary || failed=1
     test_linux_build_uses_official_sciter_flow || failed=1
     test_windows_build_uses_official_sciter_inline_resources || failed=1
     test_windows_release_outputs_single_exe_and_msi || failed=1

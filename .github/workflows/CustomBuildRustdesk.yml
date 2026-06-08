@@ -693,6 +693,10 @@ jobs:
       upstream_run_id: ${{ steps.wait-upstream.outputs.upstream_run_id }}
       upstream_run_url: ${{ steps.wait-upstream.outputs.upstream_run_url }}
       upstream_conclusion: ${{ steps.wait-upstream.outputs.upstream_conclusion }}
+      upstream_platform_conclusion: ${{ steps.wait-upstream.outputs.upstream_platform_conclusion }}
+      platform_results: ${{ steps.wait-upstream.outputs.platform_results }}
+      platform_successes: ${{ steps.wait-upstream.outputs.platform_successes }}
+      platform_failures: ${{ steps.wait-upstream.outputs.platform_failures }}
     steps:
       - name: Download trigger data
         uses: actions/download-artifact@v4
@@ -729,9 +733,75 @@ jobs:
 
           echo "upstream_run_id=$upstream_run_id" >> "$GITHUB_OUTPUT"
           echo "upstream_run_url=https://github.com/${{ github.repository }}/actions/runs/$upstream_run_id" >> "$GITHUB_OUTPUT"
-          gh run watch "$upstream_run_id" --repo "${{ github.repository }}" --interval 60 --exit-status
+          gh run watch "$upstream_run_id" --repo "${{ github.repository }}" --interval 60 || true
           conclusion="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')"
           echo "upstream_conclusion=$conclusion" >> "$GITHUB_OUTPUT"
+
+          jobs_json="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json jobs)"
+          platform_summary="$(echo "$jobs_json" | jq -r '
+            def platform($name):
+              ($name | ascii_downcase) as $n |
+              if ($n | test("android|linux-android")) then "android"
+              elif ($n | test("ios|apple-ios")) then "ios"
+              elif ($n | test("windows|pc-windows")) then "windows"
+              elif ($n | test("macos|apple-darwin|darwin")) then "macos"
+              elif ($n | test("linux")) then "linux"
+              else "other" end;
+            [
+              .jobs[]
+              | select(.conclusion != "skipped")
+              | {name, status, conclusion, platform: platform(.name)}
+              | select(.platform != "other")
+            ] as $jobs |
+            ["windows","linux","macos","android","ios"] as $platforms |
+            [
+              $platforms[] as $p |
+              ($jobs | map(select(.platform == $p))) as $pjobs |
+              select(($pjobs | length) > 0) |
+              {
+                platform: $p,
+                total: ($pjobs | length),
+                success: ($pjobs | map(select(.conclusion == "success")) | length),
+                failed: ($pjobs | map(select(.conclusion != "success")) | length),
+                failed_jobs: ($pjobs | map(select(.conclusion != "success") | .name) | join(" | "))
+              }
+              | .status = (if .failed == 0 and .success > 0 then "success" else "failure" end)
+            ]
+            | .[] | [.platform, .status, ("success=" + (.success|tostring)), ("failed=" + (.failed|tostring)), .failed_jobs] | @tsv
+          ')"
+
+          echo "Platform result summary:"
+          if [ -n "$platform_summary" ]; then
+            echo "$platform_summary"
+          else
+            echo "No platform jobs found in upstream workflow"
+          fi
+
+          success_count="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF && $2=="success"{count++} END{print count+0}')"
+          failure_count="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF && $2=="failure"{count++} END{print count+0}')"
+          platform_successes="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF && $2=="success"{print $1}' | paste -sd ',' -)"
+          platform_failures="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF && $2=="failure"{print $1}' | paste -sd ',' -)"
+          platform_results="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF{printf "%s=%s", $1, $2; if ($5 != "") printf "(%s)", $5; printf ";"}')"
+
+          if [ "$success_count" -gt 0 ]; then
+            if [ "$failure_count" -gt 0 ]; then
+              platform_conclusion="partial_success"
+            else
+              platform_conclusion="success"
+            fi
+          else
+            platform_conclusion="failure"
+          fi
+
+          echo "upstream_platform_conclusion=$platform_conclusion" >> "$GITHUB_OUTPUT"
+          echo "platform_successes=$platform_successes" >> "$GITHUB_OUTPUT"
+          echo "platform_failures=$platform_failures" >> "$GITHUB_OUTPUT"
+          echo "platform_results=$platform_results" >> "$GITHUB_OUTPUT"
+
+          if [ "$success_count" -eq 0 ]; then
+            echo "No target platform succeeded in upstream workflow"
+            exit 1
+          fi
 
   # 06-旧自编编译链暂时保留但关闭；后续删除，改由 upstream-build 承担编译。
   compile-client:
@@ -1236,6 +1306,22 @@ jobs:
           customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
           email=$(echo "$TRIGGER_DATA" | jq -r '.build_params.email // empty')
           build_id="${{ needs.trigger.outputs.build_id }}"
+
+          upstream_platform_conclusion="${{ needs.upstream-build.outputs.upstream_platform_conclusion || '' }}"
+          platform_results="${{ needs.upstream-build.outputs.platform_results || '' }}"
+          if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ] && [ "${{ needs.upstream-build.result }}" = "success" ] && { [ "$upstream_platform_conclusion" = "success" ] || [ "$upstream_platform_conclusion" = "partial_success" ]; }; then
+            build_status="success"
+            download_url="${{ needs.upstream-build.outputs.upstream_run_url || needs.build.outputs.download_url || '' }}"
+            if [ "$upstream_platform_conclusion" = "partial_success" ]; then
+              error_message="Some target platforms failed: $platform_results"
+            else
+              error_message="${{ needs.build.outputs.error_message || '' }}"
+            fi
+          elif [ -n "$platform_results" ]; then
+            build_status="failure"
+            download_url=""
+            error_message="Target platform builds failed: $platform_results"
+          fi
           
           # 设置构建参数
           EMAIL="$email"
