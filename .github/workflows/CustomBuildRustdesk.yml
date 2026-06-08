@@ -518,9 +518,14 @@ jobs:
               uses: ./.github/workflows/flutter-build.yml
               secrets: inherit
               with:
-                upload-artifact: ${{ inputs.upload-artifact }}
-                upload-tag: ${{ inputs.upload-tag }}
+                upload-artifact: __CUSTOM_UPLOAD_ARTIFACT_EXPR__
+                upload-tag: __CUSTOM_UPLOAD_TAG_EXPR__
           EOF
+          upload_artifact_expr='$''{{ github.event_name == '\''workflow_dispatch'\'' && inputs.upload-artifact || true }}'
+          upload_tag_expr='$''{{ github.event_name == '\''workflow_dispatch'\'' && inputs.upload-tag || '\''custom'\'' }}'
+          CUSTOM_UPLOAD_ARTIFACT_EXPR="$upload_artifact_expr" \
+          CUSTOM_UPLOAD_TAG_EXPR="$upload_tag_expr" \
+          perl -0pi -e 's/__CUSTOM_UPLOAD_ARTIFACT_EXPR__/$ENV{CUSTOM_UPLOAD_ARTIFACT_EXPR}/g; s/__CUSTOM_UPLOAD_TAG_EXPR__/$ENV{CUSTOM_UPLOAD_TAG_EXPR}/g' .github/workflows/custom-rustdesk-upstream-build.yml
           
           # 创建构建状态文件
           echo "📝 创建构建状态文件..."

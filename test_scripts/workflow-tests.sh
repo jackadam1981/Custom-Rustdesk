@@ -331,6 +331,12 @@ function test_build_uploads_patched_source_artifact() {
        grep -q 'source_branch: ${{ steps.commit-repo.outputs.branch_name }}' "$WORKFLOW_FILE" &&
        grep -q 'custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
        grep -q 'uses: ./.github/workflows/flutter-build.yml' .github/workflows/custom-rustdesk-upstream-build.yml &&
+       grep -Fq "github.event_name == 'workflow_dispatch' && inputs.upload-artifact || true" .github/workflows/custom-rustdesk-upstream-build.yml &&
+       grep -Fq "github.event_name == 'workflow_dispatch' && inputs.upload-tag || 'custom'" .github/workflows/custom-rustdesk-upstream-build.yml &&
+       grep -Fq "upload-artifact: __CUSTOM_UPLOAD_ARTIFACT_EXPR__" "$WORKFLOW_FILE" &&
+       grep -Fq "upload_artifact_expr=" "$WORKFLOW_FILE" &&
+       grep -Fq 'CUSTOM_UPLOAD_ARTIFACT_EXPR="$upload_artifact_expr"' "$WORKFLOW_FILE" &&
+       grep -Fq 'perl -0pi -e' "$WORKFLOW_FILE" &&
        grep -q 'RustDesk Upstream Flutter Build Placeholder' .github/workflows/flutter-build.yml &&
        grep -q 'steps.record-artifact.outputs.download_url' "$WORKFLOW_FILE" &&
        grep -q 'actions: write' "$WORKFLOW_FILE" &&
