@@ -324,6 +324,16 @@ _custom_patch_windows_test_signing() {
 }
 
 apply_custom_source_patches() {
+    case "${BUILD_SOURCE_PATCH_MODE:-custom}" in
+        upstream|original|none)
+            jq -n \
+                --arg source_patch_mode "${BUILD_SOURCE_PATCH_MODE:-upstream}" \
+                '{source_patch_mode: $source_patch_mode, skipped: true}' > custom-build-config.json
+            echo "source-patcher: skipped custom source patches for upstream baseline"
+            return 0
+            ;;
+    esac
+
     CUSTOM_APP_NAME="${BUILD_CUSTOMER:-${BUILD_TAG:-CustomRustDesk}}"
     CUSTOM_CUSTOMER_LINK="${BUILD_CUSTOMER_LINK:-}"
     CUSTOM_SLOGAN="${BUILD_SLOGAN:-}"

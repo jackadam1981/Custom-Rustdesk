@@ -325,6 +325,37 @@ EOF
     return 1
 }
 
+function test_source_patcher_can_skip_for_upstream_baseline() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    mkdir -p "$tmp_dir/src" "$tmp_dir/.github/workflows/scripts"
+    cat > "$tmp_dir/src/common.rs" <<'EOF'
+fn read_custom_client_advanced_settings() {}
+pub fn load_custom_client() {
+}
+EOF
+
+    if (
+        set -e
+        export BUILD_SOURCE_PATCH_MODE="upstream"
+        source "$patcher"
+        cd "$tmp_dir"
+        apply_custom_source_patches
+        grep -q '"skipped": true' custom-build-config.json
+        ! grep -q 'CUSTOM_RUSTDESK_PATCH_START' src/common.rs
+    ); then
+        rm -rf "$tmp_dir"
+        record_test_result "source_patcher_can_skip_for_upstream_baseline" "PASS" "源码 patch 支持 upstream 原版基线跳过"
+        return 0
+    fi
+
+    rm -rf "$tmp_dir"
+    record_test_result "source_patcher_can_skip_for_upstream_baseline" "FAIL" "upstream 原版基线模式不应修改源码"
+    return 1
+}
+
 function test_api_server_is_optional_for_plain_hbbs_hbbr() {
     if grep -q "description: 'API服务地址（可选，没有 API 服务时留空）'" "$WORKFLOW_FILE" &&
        awk '
@@ -549,6 +580,7 @@ function run_workflow_tests() {
     test_source_patcher_is_invoked || failed=1
     test_source_patcher_covers_server_key_and_brand || failed=1
     test_source_patcher_applies_to_fixture_tree || failed=1
+    test_source_patcher_can_skip_for_upstream_baseline || failed=1
     test_api_server_is_optional_for_plain_hbbs_hbbr || failed=1
     test_build_job_uses_trigger_data_for_parameters || failed=1
     test_build_job_does_not_export_trigger_data_env || failed=1

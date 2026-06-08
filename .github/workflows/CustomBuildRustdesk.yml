@@ -44,6 +44,10 @@ on:
         description: 'API服务地址（可选，没有 API 服务时留空）'
         required: false
         default: ''
+      source_patch_mode:
+        description: '源码补丁模式：custom=完整定制，upstream=原版基线'
+        required: false
+        default: 'custom'
       enable_debug:
         description: '启用调试模式（仅手动触发时有效）'
         required: false
@@ -475,6 +479,7 @@ jobs:
           export BUILD_RENDEZVOUS_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rendezvous_server // empty')"
           export BUILD_RS_PUB_KEY="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rs_pub_key // empty')"
           export BUILD_API_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.api_server // empty')"
+          export BUILD_SOURCE_PATCH_MODE="$(echo "$TRIGGER_DATA" | jq -r '.build_params.source_patch_mode // "custom"')"
           
           # 创建构建配置文件
           echo "📝 创建构建配置文件..."
@@ -489,6 +494,7 @@ jobs:
             "rendezvous_server": "$BUILD_RENDEZVOUS_SERVER",
             "rs_pub_key": "$BUILD_RS_PUB_KEY",
             "api_server": "$BUILD_API_SERVER",
+            "source_patch_mode": "$BUILD_SOURCE_PATCH_MODE",
             "build_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
           EOF

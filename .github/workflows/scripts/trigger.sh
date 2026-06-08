@@ -26,6 +26,7 @@ _extract_workflow_dispatch_params() {
     echo "RENDEZVOUS_SERVER=\"$(echo "$event_data" | jq -r '.inputs.rendezvous_server // empty')\""
     echo "RS_PUB_KEY=\"$(echo "$event_data" | jq -r '.inputs.rs_pub_key // empty')\""
     echo "API_SERVER=\"$(echo "$event_data" | jq -r '.inputs.api_server // empty')\""
+    echo "SOURCE_PATCH_MODE=\"$(echo "$event_data" | jq -r '.inputs.source_patch_mode // "custom"')\""
 }
 
 # 从 issue 内容中提取参数
@@ -77,6 +78,8 @@ _extract_issue_params() {
 
     local api_server=$(echo "$issue_body" | sed -n 's/.*api_server:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
     debug "log" "Extracted api_server: '$api_server'"
+    local source_patch_mode=$(echo "$issue_body" | sed -n 's/.*source_patch_mode:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    debug "log" "Extracted source_patch_mode: '$source_patch_mode'"
     
     echo "BUILD_ID=\"$build_id\""
     echo "TAG=\"$tag\""
@@ -88,6 +91,7 @@ _extract_issue_params() {
     echo "RENDEZVOUS_SERVER=\"$rendezvous_server\""
     echo "RS_PUB_KEY=\"$rs_pub_key\""
     echo "API_SERVER=\"$api_server\""
+    echo "SOURCE_PATCH_MODE=\"$source_patch_mode\""
 }
 
 # 应用默认值
@@ -106,6 +110,7 @@ _apply_default_values() {
         local rendezvous_server=$(echo "$event_data" | jq -r '.inputs.rendezvous_server // empty')
         local rs_pub_key=$(echo "$event_data" | jq -r '.inputs.rs_pub_key // empty')
         local api_server=$(echo "$event_data" | jq -r '.inputs.api_server // empty')
+        local source_patch_mode=$(echo "$event_data" | jq -r '.inputs.source_patch_mode // "custom"')
     else
         local tag="$TAG"
         local email="$EMAIL"
@@ -116,6 +121,7 @@ _apply_default_values() {
         local rendezvous_server="$RENDEZVOUS_SERVER"
         local rs_pub_key="$RS_PUB_KEY"
         local api_server="$API_SERVER"
+        local source_patch_mode="${SOURCE_PATCH_MODE:-custom}"
     fi
     
     echo "TAG=\"${tag:-${DEFAULT_TAG:-}}\""
@@ -127,6 +133,7 @@ _apply_default_values() {
     echo "RENDEZVOUS_SERVER=\"${rendezvous_server:-${DEFAULT_RENDEZVOUS_SERVER:-}}\""
     echo "RS_PUB_KEY=\"${rs_pub_key:-${DEFAULT_RS_PUB_KEY:-}}\""
     echo "API_SERVER=\"${api_server:-${DEFAULT_API_SERVER:-}}\""
+    echo "SOURCE_PATCH_MODE=\"${source_patch_mode:-custom}\""
 }
 
 # 处理 tag 时间戳
@@ -172,6 +179,7 @@ _generate_final_data() {
         local rendezvous_server=$(echo "$event_data" | jq -r '.inputs.rendezvous_server // empty')
         local rs_pub_key=$(echo "$event_data" | jq -r '.inputs.rs_pub_key // empty')
         local api_server=$(echo "$event_data" | jq -r '.inputs.api_server // empty')
+        local source_patch_mode=$(echo "$event_data" | jq -r '.inputs.source_patch_mode // "custom"')
         local trigger_type="workflow_dispatch"
         local issue_number="null"
     else
@@ -184,6 +192,7 @@ _generate_final_data() {
         local rendezvous_server="$RENDEZVOUS_SERVER"
         local rs_pub_key="$RS_PUB_KEY"
         local api_server="$API_SERVER"
+        local source_patch_mode="${SOURCE_PATCH_MODE:-custom}"
         local trigger_type="issue"
         local issue_number=$(echo "$event_data" | jq -r '.issue.number // empty')
     fi
@@ -202,7 +211,8 @@ _generate_final_data() {
         --arg rendezvous_server "$rendezvous_server" \
         --arg rs_pub_key "$rs_pub_key" \
         --arg api_server "$api_server" \
-        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, rs_pub_key: $rs_pub_key, api_server: $api_server}}')
+        --arg source_patch_mode "${source_patch_mode:-custom}" \
+        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, rs_pub_key: $rs_pub_key, api_server: $api_server, source_patch_mode: $source_patch_mode}}')
     
     debug "var" "Generated JSON data" "$data"
     echo "$data"
