@@ -171,6 +171,7 @@ function test_source_patcher_applies_to_fixture_tree() {
         "$tmp_dir/flutter/android/app/src/main/res/values" \
         "$tmp_dir/flutter/ios/Runner" \
         "$tmp_dir/libs/portable/src" \
+        "$tmp_dir/.github/workflows/scripts" \
         "$tmp_dir/res"
 
     cat > "$tmp_dir/src/common.rs" <<'EOF'
@@ -233,6 +234,37 @@ description = "RustDesk Remote Desktop"
 ProductName = "RustDesk"
 FileDescription = "RustDesk Remote Desktop"
 EOF
+    cat > "$tmp_dir/.github/workflows/flutter-build.yml" <<'EOF'
+env:
+  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+  SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}-2"
+
+jobs:
+  build-for-windows-flutter:
+    steps:
+      - name: Sign rustdesk files
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        shell: bash
+        run: |
+          BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./rustdesk/
+      - name: Sign rustdesk self-extracted file
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        shell: bash
+        run: |
+          BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput
+  build-for-windows-sciter:
+    steps:
+      - name: Sign rustdesk files
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        shell: bash
+        run: |
+          BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./Release/
+      - name: Sign rustdesk self-extracted file
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        shell: bash
+        run: |
+          BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput/
+EOF
 
     if (
         set -e
@@ -272,6 +304,13 @@ EOF
         grep -q 'let current_dir = path.parent().map(|dir| dir.to_path_buf());' libs/portable/src/main.rs
         grep -q 'cmd.current_dir' libs/portable/src/main.rs
         ! grep -q 'cmd.args(args);.*path.parent' libs/portable/src/main.rs
+        grep -q 'ONECLOUD_WINDOWS_PFX_BASE64' .github/workflows/flutter-build.yml
+        grep -q 'onecloud-windows-sign.ps1 -Path ./rustdesk' .github/workflows/flutter-build.yml
+        grep -q 'onecloud-windows-sign.ps1 -Path ./Release' .github/workflows/flutter-build.yml
+        grep -q 'onecloud-windows-sign.ps1 -Path ./SignOutput' .github/workflows/flutter-build.yml
+        grep -q 'signtool.exe' .github/workflows/scripts/onecloud-windows-sign.ps1
+        grep -q 'Code Signing' .github/workflows/scripts/onecloud-windows-sign.ps1
+        grep -q '/sha1 $cert.Thumbprint' .github/workflows/scripts/onecloud-windows-sign.ps1
     ); then
         rm -rf "$tmp_dir"
         record_test_result "source_patcher_applies_to_fixture_tree" "PASS" "源码 patch 脚本可修改 fixture 源码树"
