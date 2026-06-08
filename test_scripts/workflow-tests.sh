@@ -304,7 +304,10 @@ EOF
         grep -q 'let current_dir = path.parent().map(|dir| dir.to_path_buf());' libs/portable/src/main.rs
         grep -q 'cmd.current_dir' libs/portable/src/main.rs
         ! grep -q 'cmd.args(args);.*path.parent' libs/portable/src/main.rs
-        grep -q 'ONECLOUD_WINDOWS_PFX_BASE64' .github/workflows/flutter-build.yml
+        grep -q 'ONECLOUD_WINDOWS_SIGNING_ENABLED' .github/workflows/flutter-build.yml
+        grep -q "env.ONECLOUD_WINDOWS_SIGNING_ENABLED == 'true'" .github/workflows/flutter-build.yml
+        grep -q 'ONECLOUD_WINDOWS_PFX_BASE64: ${{ secrets.ONECLOUD_WINDOWS_PFX_BASE64 }}' .github/workflows/flutter-build.yml
+        grep -q 'ONECLOUD_WINDOWS_PFX_PASSWORD: ${{ secrets.ONECLOUD_WINDOWS_PFX_PASSWORD }}' .github/workflows/flutter-build.yml
         grep -q 'onecloud-windows-sign.ps1 -Path ./rustdesk' .github/workflows/flutter-build.yml
         grep -q 'onecloud-windows-sign.ps1 -Path ./Release' .github/workflows/flutter-build.yml
         grep -q 'onecloud-windows-sign.ps1 -Path ./SignOutput' .github/workflows/flutter-build.yml
