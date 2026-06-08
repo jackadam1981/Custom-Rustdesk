@@ -45,7 +45,11 @@ function Invoke-Step {
         [string]$Action,
         [scriptblock]$Script
     )
-    if ($PSCmdlet.ShouldProcess($Target, $Action)) {
+    $shouldRun = $true
+    if ($null -ne $PSCmdlet) {
+        $shouldRun = $PSCmdlet.ShouldProcess($Target, $Action)
+    }
+    if ($shouldRun) {
         try {
             & $Script
         } catch {
