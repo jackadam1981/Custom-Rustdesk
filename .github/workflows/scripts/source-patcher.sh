@@ -100,6 +100,8 @@ _custom_patch_common_rs() {
 
 // CUSTOM_RUSTDESK_PATCH_START
 pub fn apply_custom_build_defaults() {
+    static CUSTOM_BUILD_DEFAULTS_ONCE: std::sync::Once = std::sync::Once::new();
+    CUSTOM_BUILD_DEFAULTS_ONCE.call_once(|| {
     const CUSTOM_APP_NAME: &str = $app_name_json;
     const CUSTOM_SLOGAN: &str = $slogan_json;
     const CUSTOM_CUSTOMER_LINK: &str = $customer_link_json;
@@ -161,6 +163,7 @@ pub fn apply_custom_build_defaults() {
         }
     }
 $hard_settings_patch
+    });
 }
 // CUSTOM_RUSTDESK_PATCH_END
 EOF
@@ -177,6 +180,8 @@ EOF
     rm -f "$patch_file"
 
     perl -0pi -e 's/pub fn load_custom_client\(\) \{\n/pub fn load_custom_client() {\n    apply_custom_build_defaults();\n/' "$file"
+    perl -0pi -e 's/pub fn get_custom_rendezvous_server\(custom: String\) -> String \{\n/pub fn get_custom_rendezvous_server(custom: String) -> String {\n    apply_custom_build_defaults();\n    let custom = if custom.is_empty() {\n        config::Config::get_option("custom-rendezvous-server")\n    } else {\n        custom\n    };\n/' "$file"
+    perl -0pi -e 's/pub fn get_api_server\(api: String, custom: String\) -> String \{\n/pub fn get_api_server(api: String, custom: String) -> String {\n    apply_custom_build_defaults();\n    if api.is_empty()\n        && config::Config::get_option("api-server").is_empty()\n        && config::Config::get_option("register-device") == "N"\n    {\n        return "".to_owned();\n    }\n/' "$file"
 }
 
 _custom_patch_brand_files() {

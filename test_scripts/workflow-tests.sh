@@ -179,6 +179,20 @@ pub fn load_custom_client() {
     println!("load");
 }
 
+pub fn get_custom_rendezvous_server(custom: String) -> String {
+    if !custom.is_empty() {
+        return custom;
+    }
+    "".to_owned()
+}
+
+pub fn get_api_server(api: String, custom: String) -> String {
+    if !api.is_empty() {
+        return api.to_owned();
+    }
+    custom
+}
+
 fn read_custom_client_advanced_settings() {}
 EOF
     cat > "$tmp_dir/flutter/android/app/src/main/res/values/strings.xml" <<'EOF'
@@ -286,6 +300,11 @@ EOF
         grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
         grep -q '("register-device", CUSTOM_REGISTER_DEVICE)' src/common.rs
         grep -q 'const CUSTOM_REGISTER_DEVICE: &str = "";' src/common.rs
+        grep -q 'static CUSTOM_BUILD_DEFAULTS_ONCE: std::sync::Once' src/common.rs
+        grep -q 'let custom = if custom.is_empty()' src/common.rs
+        grep -q 'config::Config::get_option("custom-rendezvous-server")' src/common.rs
+        grep -q 'config::Config::get_option("register-device") == "N"' src/common.rs
+        grep -q 'return "".to_owned();' src/common.rs
         grep -q 'config::Config::set_options(runtime_settings)' src/common.rs
         ! grep -q 'HARD_SETTINGS' src/common.rs
         ! grep -q 'disable-settings' src/common.rs
@@ -339,6 +358,17 @@ function test_source_patcher_lock_network_settings_matches_historical_defaults()
 pub fn load_custom_client() {
 }
 
+pub fn get_custom_rendezvous_server(custom: String) -> String {
+    custom
+}
+
+pub fn get_api_server(api: String, custom: String) -> String {
+    if !api.is_empty() {
+        return api.to_owned();
+    }
+    custom
+}
+
 fn read_custom_client_advanced_settings() {}
 EOF
     cat > "$tmp_dir/.github/workflows/flutter-build.yml" <<'EOF'
@@ -364,6 +394,9 @@ EOF
         grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
         grep -q '("register-device", CUSTOM_REGISTER_DEVICE)' src/common.rs
         grep -q 'const CUSTOM_REGISTER_DEVICE: &str = "N";' src/common.rs
+        grep -q 'static CUSTOM_BUILD_DEFAULTS_ONCE: std::sync::Once' src/common.rs
+        grep -q 'let custom = if custom.is_empty()' src/common.rs
+        grep -q 'config::Config::get_option("register-device") == "N"' src/common.rs
         grep -q 'config::Config::set_options(runtime_settings)' src/common.rs
         grep -q '("key", CUSTOM_RS_PUB_KEY)' src/common.rs
     ); then
