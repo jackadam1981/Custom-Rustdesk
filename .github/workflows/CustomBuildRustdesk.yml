@@ -533,6 +533,13 @@ jobs:
           CUSTOM_UPLOAD_ARTIFACT_EXPR="$upload_artifact_expr" \
           CUSTOM_UPLOAD_TAG_EXPR="$upload_tag_expr" \
           perl -0pi -e 's/__CUSTOM_UPLOAD_ARTIFACT_EXPR__/$ENV{CUSTOM_UPLOAD_ARTIFACT_EXPR}/g; s/__CUSTOM_UPLOAD_TAG_EXPR__/$ENV{CUSTOM_UPLOAD_TAG_EXPR}/g' .github/workflows/custom-rustdesk-upstream-build.yml
+
+          if [ -f .github/workflows/flutter-build.yml ] && grep -q -- '--target-platform android-arm64,android-arm,android-x64' .github/workflows/flutter-build.yml; then
+            echo "Injecting diagnostics for upstream Android universal APK build..."
+            perl -0pi -e 's#^(\s*)flutter build apk (.*--target-platform android-arm64,android-arm,android-x64.*)$#$1echo "::group::Android universal APK diagnostics before build"\n$1uname -a || true\n$1nproc || true\n$1free -h || true\n$1df -h . "\$ANDROID_HOME" "\$ANDROID_NDK_HOME" 2>/dev/null || df -h . || true\n$1java -version || true\n$1flutter --version || true\n$1find android/app/src/main/jniLibs -maxdepth 2 -type f -printf "%p %s bytes\\n" 2>/dev/null || true\n$1echo "::endgroup::"\n$1( while true; do echo "::group::Android universal APK monitor \$(date -u +%Y-%m-%dT%H:%M:%SZ)"; free -h || true; df -h . "\$ANDROID_HOME" "\$ANDROID_NDK_HOME" 2>/dev/null || df -h . || true; ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 25 || true; echo "::endgroup::"; sleep 60; done ) &\n$1monitor_pid=\$!\n$1trap '\''kill "\$monitor_pid" 2>/dev/null || true'\'' EXIT\n$1set +e\n$1flutter build apk $2\n$1build_status=\$?\n$1set -e\n$1kill "\$monitor_pid" 2>/dev/null || true\n$1wait "\$monitor_pid" 2>/dev/null || true\n$1echo "::group::Android universal APK diagnostics after build"\n$1free -h || true\n$1df -h . || true\n$1find build/app/outputs/flutter-apk -maxdepth 1 -type f -printf "%p %s bytes\\n" 2>/dev/null || true\n$1echo "::endgroup::"\n$1if [ "\$build_status" -ne 0 ]; then exit "\$build_status"; fi#m' .github/workflows/flutter-build.yml
+          else
+            echo "::warning::Unable to find upstream Android universal APK build command for diagnostics injection"
+          fi
           
           # 创建构建状态文件
           echo "📝 创建构建状态文件..."

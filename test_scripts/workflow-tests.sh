@@ -464,6 +464,22 @@ function test_upstream_build_uses_platform_result_summary() {
     return 1
 }
 
+function test_upstream_android_universal_apk_has_diagnostics_injection() {
+    if grep -q 'Injecting diagnostics for upstream Android universal APK build' "$WORKFLOW_FILE" &&
+       grep -q -- '--target-platform android-arm64,android-arm,android-x64' "$WORKFLOW_FILE" &&
+       grep -q 'Android universal APK diagnostics before build' "$WORKFLOW_FILE" &&
+       grep -q 'Android universal APK monitor' "$WORKFLOW_FILE" &&
+       grep -q 'android/app/src/main/jniLibs' "$WORKFLOW_FILE" &&
+       grep -q 'ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss' "$WORKFLOW_FILE" &&
+       grep -q 'build/app/outputs/flutter-apk' "$WORKFLOW_FILE"; then
+        record_test_result "upstream_android_universal_apk_has_diagnostics_injection" "PASS" "inner upstream workflow injects diagnostics for Android universal APK only"
+        return 0
+    fi
+
+    record_test_result "upstream_android_universal_apk_has_diagnostics_injection" "FAIL" "Android universal APK should get resource diagnostics without replacing per-ABI APK builds"
+    return 1
+}
+
 function test_linux_build_uses_official_sciter_flow() {
     if grep -q 'python3 ./res/inline-sciter.py' "$WORKFLOW_FILE" &&
        grep -q 'export USE_AOM_391=1' "$WORKFLOW_FILE" &&
@@ -603,6 +619,7 @@ function run_workflow_tests() {
     test_build_uploads_patched_source_artifact || failed=1
     test_workflow_builds_real_client_artifact || failed=1
     test_upstream_build_uses_platform_result_summary || failed=1
+    test_upstream_android_universal_apk_has_diagnostics_injection || failed=1
     test_linux_build_uses_official_sciter_flow || failed=1
     test_windows_build_uses_official_sciter_inline_resources || failed=1
     test_windows_release_outputs_single_exe_and_msi || failed=1
