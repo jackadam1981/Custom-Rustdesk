@@ -26,10 +26,28 @@ _extract_workflow_dispatch_params() {
     echo "RENDEZVOUS_SERVER=\"$(echo "$event_data" | jq -r '.inputs.rendezvous_server // empty')\""
     echo "RS_PUB_KEY=\"$(echo "$event_data" | jq -r '.inputs.rs_pub_key // empty')\""
     echo "API_SERVER=\"$(echo "$event_data" | jq -r '.inputs.api_server // empty')\""
-    echo "SOURCE_PATCH_MODE=\"$(echo "$event_data" | jq -r '.inputs.source_patch_mode // "custom"')\""
+    echo "LOCK_NETWORK_SETTINGS=\"$(echo "$event_data" | jq -r '.inputs.lock_network_settings // "false"')\""
 }
 
 # 从 issue 内容中提取参数
+_extract_issue_value() {
+    local issue_body="$1"
+    local key="$2"
+
+    printf '%s\n' "$issue_body" |
+        awk -v key="$key" '
+            {
+                sub(/\r$/, "")
+                pattern = "^[[:space:]>`*-]*" key "[[:space:]]*:"
+                if ($0 ~ pattern) {
+                    sub(pattern "[[:space:]]*", "")
+                    print
+                }
+            }
+        ' |
+        tail -1
+}
+
 _extract_issue_params() {
     local event_data="$1"
     
@@ -52,34 +70,34 @@ _extract_issue_params() {
     debug "log" "Extracting parameters from issue body using key:value format"
     debug "log" "Raw issue body: '$issue_body'"
 
-    local tag=$(echo "$issue_body" | sed -n 's/.*tag:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local tag=$(_extract_issue_value "$issue_body" "tag")
     debug "log" "Extracted tag: '$tag'"
 
-    local email=$(echo "$issue_body" | sed -n 's/.*email:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local email=$(_extract_issue_value "$issue_body" "email")
     debug "log" "Extracted email: '$email'"
 
-    local customer=$(echo "$issue_body" | sed -n 's/.*customer:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local customer=$(_extract_issue_value "$issue_body" "customer")
     debug "log" "Extracted customer: '$customer'"
 
-    local customer_link=$(echo "$issue_body" | sed -n 's/.*customer_link:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local customer_link=$(_extract_issue_value "$issue_body" "customer_link")
     debug "log" "Extracted customer_link: '$customer_link'"
 
-    local super_password=$(echo "$issue_body" | sed -n 's/.*super_password:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local super_password=$(_extract_issue_value "$issue_body" "super_password")
     debug "log" "Extracted super_password: '$super_password'"
 
-    local slogan=$(echo "$issue_body" | sed -n 's/.*slogan:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local slogan=$(_extract_issue_value "$issue_body" "slogan")
     debug "log" "Extracted slogan: '$slogan'"
 
-    local rendezvous_server=$(echo "$issue_body" | sed -n 's/.*rendezvous_server:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local rendezvous_server=$(_extract_issue_value "$issue_body" "rendezvous_server")
     debug "log" "Extracted rendezvous_server: '$rendezvous_server'"
 
-    local rs_pub_key=$(echo "$issue_body" | sed -n 's/.*rs_pub_key:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local rs_pub_key=$(_extract_issue_value "$issue_body" "rs_pub_key")
     debug "log" "Extracted rs_pub_key: '$rs_pub_key'"
 
-    local api_server=$(echo "$issue_body" | sed -n 's/.*api_server:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
+    local api_server=$(_extract_issue_value "$issue_body" "api_server")
     debug "log" "Extracted api_server: '$api_server'"
-    local source_patch_mode=$(echo "$issue_body" | sed -n 's/.*source_patch_mode:[[:space:]]*\([^[:space:]\r\n]*\).*/\1/p' | tail -1)
-    debug "log" "Extracted source_patch_mode: '$source_patch_mode'"
+    local lock_network_settings=$(_extract_issue_value "$issue_body" "lock_network_settings")
+    debug "log" "Extracted lock_network_settings: '$lock_network_settings'"
     
     echo "BUILD_ID=\"$build_id\""
     echo "TAG=\"$tag\""
@@ -91,7 +109,7 @@ _extract_issue_params() {
     echo "RENDEZVOUS_SERVER=\"$rendezvous_server\""
     echo "RS_PUB_KEY=\"$rs_pub_key\""
     echo "API_SERVER=\"$api_server\""
-    echo "SOURCE_PATCH_MODE=\"$source_patch_mode\""
+    echo "LOCK_NETWORK_SETTINGS=\"$lock_network_settings\""
 }
 
 # 应用默认值
@@ -110,7 +128,7 @@ _apply_default_values() {
         local rendezvous_server=$(echo "$event_data" | jq -r '.inputs.rendezvous_server // empty')
         local rs_pub_key=$(echo "$event_data" | jq -r '.inputs.rs_pub_key // empty')
         local api_server=$(echo "$event_data" | jq -r '.inputs.api_server // empty')
-        local source_patch_mode=$(echo "$event_data" | jq -r '.inputs.source_patch_mode // "custom"')
+        local lock_network_settings=$(echo "$event_data" | jq -r '.inputs.lock_network_settings // "false"')
     else
         local tag="$TAG"
         local email="$EMAIL"
@@ -121,7 +139,7 @@ _apply_default_values() {
         local rendezvous_server="$RENDEZVOUS_SERVER"
         local rs_pub_key="$RS_PUB_KEY"
         local api_server="$API_SERVER"
-        local source_patch_mode="${SOURCE_PATCH_MODE:-custom}"
+        local lock_network_settings="${LOCK_NETWORK_SETTINGS:-false}"
     fi
     
     echo "TAG=\"${tag:-${DEFAULT_TAG:-}}\""
@@ -133,7 +151,7 @@ _apply_default_values() {
     echo "RENDEZVOUS_SERVER=\"${rendezvous_server:-${DEFAULT_RENDEZVOUS_SERVER:-}}\""
     echo "RS_PUB_KEY=\"${rs_pub_key:-${DEFAULT_RS_PUB_KEY:-}}\""
     echo "API_SERVER=\"${api_server:-${DEFAULT_API_SERVER:-}}\""
-    echo "SOURCE_PATCH_MODE=\"${source_patch_mode:-custom}\""
+    echo "LOCK_NETWORK_SETTINGS=\"${lock_network_settings:-false}\""
 }
 
 # 处理 tag 时间戳
@@ -179,7 +197,7 @@ _generate_final_data() {
         local rendezvous_server=$(echo "$event_data" | jq -r '.inputs.rendezvous_server // empty')
         local rs_pub_key=$(echo "$event_data" | jq -r '.inputs.rs_pub_key // empty')
         local api_server=$(echo "$event_data" | jq -r '.inputs.api_server // empty')
-        local source_patch_mode=$(echo "$event_data" | jq -r '.inputs.source_patch_mode // "custom"')
+        local lock_network_settings=$(echo "$event_data" | jq -r '.inputs.lock_network_settings // "false"')
         local trigger_type="workflow_dispatch"
         local issue_number="null"
     else
@@ -192,7 +210,7 @@ _generate_final_data() {
         local rendezvous_server="$RENDEZVOUS_SERVER"
         local rs_pub_key="$RS_PUB_KEY"
         local api_server="$API_SERVER"
-        local source_patch_mode="${SOURCE_PATCH_MODE:-custom}"
+        local lock_network_settings="${LOCK_NETWORK_SETTINGS:-false}"
         local trigger_type="issue"
         local issue_number=$(echo "$event_data" | jq -r '.issue.number // empty')
     fi
@@ -211,8 +229,8 @@ _generate_final_data() {
         --arg rendezvous_server "$rendezvous_server" \
         --arg rs_pub_key "$rs_pub_key" \
         --arg api_server "$api_server" \
-        --arg source_patch_mode "${source_patch_mode:-custom}" \
-        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, rs_pub_key: $rs_pub_key, api_server: $api_server, source_patch_mode: $source_patch_mode}}')
+        --arg lock_network_settings "${lock_network_settings:-false}" \
+        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, rs_pub_key: $rs_pub_key, api_server: $api_server, lock_network_settings: $lock_network_settings}}')
     
     debug "var" "Generated JSON data" "$data"
     echo "$data"

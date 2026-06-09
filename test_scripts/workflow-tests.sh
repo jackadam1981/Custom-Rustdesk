@@ -325,34 +325,68 @@ EOF
     return 1
 }
 
-function test_source_patcher_can_skip_for_upstream_baseline() {
+function test_source_patcher_lock_network_settings_matches_historical_defaults() {
     local patcher=".github/workflows/scripts/source-patcher.sh"
     local tmp_dir
     tmp_dir=$(mktemp -d)
 
     mkdir -p "$tmp_dir/src" "$tmp_dir/.github/workflows/scripts"
     cat > "$tmp_dir/src/common.rs" <<'EOF'
-fn read_custom_client_advanced_settings() {}
 pub fn load_custom_client() {
 }
+
+fn read_custom_client_advanced_settings() {}
+EOF
+    cat > "$tmp_dir/.github/workflows/flutter-build.yml" <<'EOF'
+env:
+  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+  SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}-2"
 EOF
 
     if (
         set -e
-        export BUILD_SOURCE_PATCH_MODE="upstream"
+        export BUILD_LOCK_NETWORK_SETTINGS="true"
+        export BUILD_CUSTOMER="FixtureDesk"
+        export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21117"
+        export BUILD_RS_PUB_KEY="fixture-public-key"
         source "$patcher"
         cd "$tmp_dir"
         apply_custom_source_patches
-        grep -q '"skipped": true' custom-build-config.json
-        ! grep -q 'CUSTOM_RUSTDESK_PATCH_START' src/common.rs
+        grep -q '"lock_network_settings": true' custom-build-config.json
+        grep -q 'HARD_SETTINGS' src/common.rs
+        grep -q 'disable-settings' src/common.rs
+        grep -q 'custom-rendezvous-server' src/common.rs
+        grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
+        grep -q '("key", CUSTOM_RS_PUB_KEY)' src/common.rs
     ); then
         rm -rf "$tmp_dir"
-        record_test_result "source_patcher_can_skip_for_upstream_baseline" "PASS" "源码 patch 支持 upstream 原版基线跳过"
+        record_test_result "source_patcher_lock_network_settings_matches_historical_defaults" "PASS" "lock_network_settings 恢复历史可就绪的 hard settings 定制"
         return 0
     fi
 
     rm -rf "$tmp_dir"
-    record_test_result "source_patcher_can_skip_for_upstream_baseline" "FAIL" "upstream 原版基线模式不应修改源码"
+    record_test_result "source_patcher_lock_network_settings_matches_historical_defaults" "FAIL" "lock_network_settings=true 应写入 HARD_SETTINGS 和 disable-settings"
+    return 1
+}
+
+function test_issue_params_preserve_issue_supplied_patch_variables() {
+    local trigger=".github/workflows/scripts/trigger.sh"
+    local event_data
+    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true' '{issue:{number:123, body:$body}}')
+
+    if (
+        set -e
+        source "$trigger"
+        extracted="$(trigger_manager extract-issue "$event_data")"
+        echo "$extracted" | grep -q 'RS_PUB_KEY="dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI="'
+        echo "$extracted" | grep -q 'SLOGAN="Powered by OneCloud Desk"'
+        echo "$extracted" | grep -q 'LOCK_NETWORK_SETTINGS="true"'
+    ); then
+        record_test_result "issue_params_preserve_issue_supplied_patch_variables" "PASS" "Issue 变量保留完整 key、空格和网络锁定项"
+        return 0
+    fi
+
+    record_test_result "issue_params_preserve_issue_supplied_patch_variables" "FAIL" "Issue 参数解析不应截断 rs_pub_key、slogan 或 lock_network_settings"
     return 1
 }
 
@@ -612,7 +646,8 @@ function run_workflow_tests() {
     test_source_patcher_is_invoked || failed=1
     test_source_patcher_covers_server_key_and_brand || failed=1
     test_source_patcher_applies_to_fixture_tree || failed=1
-    test_source_patcher_can_skip_for_upstream_baseline || failed=1
+    test_source_patcher_lock_network_settings_matches_historical_defaults || failed=1
+    test_issue_params_preserve_issue_supplied_patch_variables || failed=1
     test_api_server_is_optional_for_plain_hbbs_hbbr || failed=1
     test_build_job_uses_trigger_data_for_parameters || failed=1
     test_build_job_does_not_export_trigger_data_env || failed=1

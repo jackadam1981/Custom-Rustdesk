@@ -75,6 +75,20 @@ _custom_patch_common_rs() {
     api_json=$(_custom_json_string "$CUSTOM_API_SERVER")
     key_json=$(_custom_json_string "$CUSTOM_RS_PUB_KEY")
 
+    local hard_settings_patch=""
+    if [ "${CUSTOM_LOCK_SETTINGS:-false}" = "true" ]; then
+        hard_settings_patch='
+    {
+        let mut hard_settings = config::HARD_SETTINGS.write().unwrap();
+        for (key, value) in custom_settings {
+            if !value.is_empty() {
+                hard_settings.insert(key.to_owned(), value.to_owned());
+            }
+        }
+        hard_settings.insert("disable-settings".to_owned(), "Y".to_owned());
+    }'
+    fi
+
     local patch_file
     patch_file=$(mktemp)
     cat > "$patch_file" <<EOF
@@ -127,6 +141,7 @@ pub fn apply_custom_build_defaults() {
             }
         }
     }
+$hard_settings_patch
 }
 // CUSTOM_RUSTDESK_PATCH_END
 EOF
@@ -324,13 +339,16 @@ _custom_patch_windows_test_signing() {
 }
 
 apply_custom_source_patches() {
-    case "${BUILD_SOURCE_PATCH_MODE:-custom}" in
-        upstream|original|none)
-            jq -n \
-                --arg source_patch_mode "${BUILD_SOURCE_PATCH_MODE:-upstream}" \
-                '{source_patch_mode: $source_patch_mode, skipped: true}' > custom-build-config.json
-            echo "source-patcher: skipped custom source patches for upstream baseline"
-            return 0
+    case "${BUILD_LOCK_NETWORK_SETTINGS:-false}" in
+        true|TRUE|True|1|yes|YES|y|Y|on|ON)
+            CUSTOM_LOCK_SETTINGS="true"
+            ;;
+        false|FALSE|False|0|no|NO|n|N|off|OFF|"")
+            CUSTOM_LOCK_SETTINGS="false"
+            ;;
+        *)
+            echo "source-patcher: unsupported lock_network_settings '${BUILD_LOCK_NETWORK_SETTINGS}'" >&2
+            return 1
             ;;
     esac
 
@@ -352,6 +370,7 @@ apply_custom_source_patches() {
         --arg relay_server "$CUSTOM_RELAY_SERVER" \
         --arg rs_pub_key "$CUSTOM_RS_PUB_KEY" \
         --arg api_server "$CUSTOM_API_SERVER" \
+        --arg lock_network_settings "$CUSTOM_LOCK_SETTINGS" \
         '{
             app_name: $app_name,
             customer_link: $customer_link,
@@ -360,7 +379,8 @@ apply_custom_source_patches() {
             custom_rendezvous_server: $custom_rendezvous_server,
             relay_server: $relay_server,
             rs_pub_key: $rs_pub_key,
-            api_server: $api_server
+            api_server: $api_server,
+            lock_network_settings: ($lock_network_settings == "true")
         }' > custom-build-config.json
 
     _custom_patch_common_rs
