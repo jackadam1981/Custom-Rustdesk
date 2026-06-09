@@ -66,7 +66,7 @@ _custom_patch_common_rs() {
         return 0
     fi
 
-    local app_name_json slogan_json customer_link_json rendezvous_json relay_json api_json key_json
+    local app_name_json slogan_json customer_link_json rendezvous_json relay_json api_json key_json register_device_json
     app_name_json=$(_custom_json_string "$CUSTOM_APP_NAME")
     slogan_json=$(_custom_json_string "$CUSTOM_SLOGAN")
     customer_link_json=$(_custom_json_string "$CUSTOM_CUSTOMER_LINK")
@@ -74,6 +74,11 @@ _custom_patch_common_rs() {
     relay_json=$(_custom_json_string "$CUSTOM_RELAY_SERVER")
     api_json=$(_custom_json_string "$CUSTOM_API_SERVER")
     key_json=$(_custom_json_string "$CUSTOM_RS_PUB_KEY")
+    if [ -z "$CUSTOM_API_SERVER" ]; then
+        register_device_json=$(_custom_json_string "N")
+    else
+        register_device_json=$(_custom_json_string "")
+    fi
 
     local hard_settings_patch=""
     if [ "${CUSTOM_LOCK_SETTINGS:-false}" = "true" ]; then
@@ -102,6 +107,7 @@ pub fn apply_custom_build_defaults() {
     const CUSTOM_RELAY_SERVER: &str = $relay_json;
     const CUSTOM_API_SERVER: &str = $api_json;
     const CUSTOM_RS_PUB_KEY: &str = $key_json;
+    const CUSTOM_REGISTER_DEVICE: &str = $register_device_json;
 
     if !CUSTOM_APP_NAME.is_empty() {
         *config::APP_NAME.write().unwrap() = CUSTOM_APP_NAME.to_owned();
@@ -113,6 +119,7 @@ pub fn apply_custom_build_defaults() {
         ("rendezvous-servers", CUSTOM_RENDEZVOUS_SERVER),
         ("relay-server", CUSTOM_RELAY_SERVER),
         ("api-server", CUSTOM_API_SERVER),
+        ("register-device", CUSTOM_REGISTER_DEVICE),
         ("key", CUSTOM_RS_PUB_KEY),
         ("custom-slogan", CUSTOM_SLOGAN),
         ("custom-customer-link", CUSTOM_CUSTOMER_LINK),

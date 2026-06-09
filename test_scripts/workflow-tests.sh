@@ -284,6 +284,8 @@ EOF
         grep -q 'custom-rendezvous-server' src/common.rs
         grep -q 'rendezvous-servers' src/common.rs
         grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
+        grep -q '("register-device", CUSTOM_REGISTER_DEVICE)' src/common.rs
+        grep -q 'const CUSTOM_REGISTER_DEVICE: &str = "";' src/common.rs
         grep -q 'config::Config::set_options(runtime_settings)' src/common.rs
         ! grep -q 'HARD_SETTINGS' src/common.rs
         ! grep -q 'disable-settings' src/common.rs
@@ -360,6 +362,8 @@ EOF
         grep -q 'custom-rendezvous-server' src/common.rs
         grep -q 'rendezvous-servers' src/common.rs
         grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
+        grep -q '("register-device", CUSTOM_REGISTER_DEVICE)' src/common.rs
+        grep -q 'const CUSTOM_REGISTER_DEVICE: &str = "N";' src/common.rs
         grep -q 'config::Config::set_options(runtime_settings)' src/common.rs
         grep -q '("key", CUSTOM_RS_PUB_KEY)' src/common.rs
     ); then
