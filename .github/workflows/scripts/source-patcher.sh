@@ -100,8 +100,6 @@ _custom_patch_common_rs() {
 
 // CUSTOM_RUSTDESK_PATCH_START
 pub fn apply_custom_build_defaults() {
-    static CUSTOM_BUILD_DEFAULTS_ONCE: std::sync::Once = std::sync::Once::new();
-    CUSTOM_BUILD_DEFAULTS_ONCE.call_once(|| {
     const CUSTOM_APP_NAME: &str = $app_name_json;
     const CUSTOM_SLOGAN: &str = $slogan_json;
     const CUSTOM_CUSTOMER_LINK: &str = $customer_link_json;
@@ -163,7 +161,6 @@ pub fn apply_custom_build_defaults() {
         }
     }
 $hard_settings_patch
-    });
 }
 // CUSTOM_RUSTDESK_PATCH_END
 EOF

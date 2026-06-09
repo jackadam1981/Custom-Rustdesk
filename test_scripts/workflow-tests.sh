@@ -300,7 +300,8 @@ EOF
         grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
         grep -q '("register-device", CUSTOM_REGISTER_DEVICE)' src/common.rs
         grep -q 'const CUSTOM_REGISTER_DEVICE: &str = "";' src/common.rs
-        grep -q 'static CUSTOM_BUILD_DEFAULTS_ONCE: std::sync::Once' src/common.rs
+        ! grep -q 'CUSTOM_BUILD_DEFAULTS_ONCE' src/common.rs
+        ! grep -q 'call_once' src/common.rs
         grep -q 'let custom = if custom.is_empty()' src/common.rs
         grep -q 'config::Config::get_option("custom-rendezvous-server")' src/common.rs
         grep -q 'config::Config::get_option("register-device") == "N"' src/common.rs
@@ -394,7 +395,8 @@ EOF
         grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
         grep -q '("register-device", CUSTOM_REGISTER_DEVICE)' src/common.rs
         grep -q 'const CUSTOM_REGISTER_DEVICE: &str = "N";' src/common.rs
-        grep -q 'static CUSTOM_BUILD_DEFAULTS_ONCE: std::sync::Once' src/common.rs
+        ! grep -q 'CUSTOM_BUILD_DEFAULTS_ONCE' src/common.rs
+        ! grep -q 'call_once' src/common.rs
         grep -q 'let custom = if custom.is_empty()' src/common.rs
         grep -q 'config::Config::get_option("register-device") == "N"' src/common.rs
         grep -q 'config::Config::set_options(runtime_settings)' src/common.rs
