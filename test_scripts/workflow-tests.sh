@@ -282,7 +282,9 @@ EOF
         grep -q '"custom_rendezvous_server": "192.168.2.22"' custom-build-config.json
         grep -q '"relay_server": "192.168.2.22"' custom-build-config.json
         grep -q 'custom-rendezvous-server' src/common.rs
+        grep -q 'rendezvous-servers' src/common.rs
         grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
+        grep -q 'config::Config::set_options(runtime_settings)' src/common.rs
         ! grep -q 'HARD_SETTINGS' src/common.rs
         ! grep -q 'disable-settings' src/common.rs
         grep -q 'const CUSTOM_RENDEZVOUS_SERVER: &str = "192.168.2.22";' src/common.rs
@@ -356,7 +358,9 @@ EOF
         grep -q 'HARD_SETTINGS' src/common.rs
         grep -q 'disable-settings' src/common.rs
         grep -q 'custom-rendezvous-server' src/common.rs
+        grep -q 'rendezvous-servers' src/common.rs
         grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
+        grep -q 'config::Config::set_options(runtime_settings)' src/common.rs
         grep -q '("key", CUSTOM_RS_PUB_KEY)' src/common.rs
     ); then
         rm -rf "$tmp_dir"

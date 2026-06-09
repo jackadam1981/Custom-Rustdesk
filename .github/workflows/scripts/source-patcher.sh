@@ -110,6 +110,7 @@ pub fn apply_custom_build_defaults() {
     let custom_settings = [
         ("app-name", CUSTOM_APP_NAME),
         ("custom-rendezvous-server", CUSTOM_RENDEZVOUS_SERVER),
+        ("rendezvous-servers", CUSTOM_RENDEZVOUS_SERVER),
         ("relay-server", CUSTOM_RELAY_SERVER),
         ("api-server", CUSTOM_API_SERVER),
         ("key", CUSTOM_RS_PUB_KEY),
@@ -139,6 +140,17 @@ pub fn apply_custom_build_defaults() {
             if !value.is_empty() {
                 overwrite_settings.insert(key.to_owned(), value.to_owned());
             }
+        }
+    }
+    {
+        let mut runtime_settings = std::collections::HashMap::new();
+        for (key, value) in custom_settings {
+            if !value.is_empty() {
+                runtime_settings.insert(key.to_owned(), value.to_owned());
+            }
+        }
+        if !runtime_settings.is_empty() {
+            config::Config::set_options(runtime_settings);
         }
     }
 $hard_settings_patch
