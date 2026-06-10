@@ -57,6 +57,11 @@ on:
         required: false
         default: true
         type: boolean
+      source_patch_debug:
+        description: 'Print detailed source patch before/after diagnostics'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   issues: write
@@ -408,6 +413,7 @@ jobs:
           relay_server=$(echo "$TRIGGER_DATA" | jq -r '.build_params.relay_server // empty')
           rs_pub_key=$(echo "$TRIGGER_DATA" | jq -r '.build_params.rs_pub_key // empty')
           api_server=$(echo "$TRIGGER_DATA" | jq -r '.build_params.api_server // empty')
+          source_patch_debug=$(echo "$TRIGGER_DATA" | jq -r '.build_params.source_patch_debug // "false"')
 
           echo "🔍 提取的构建参数:"
           echo "  - tag: $tag"
@@ -420,6 +426,7 @@ jobs:
           echo "  - super_password: [masked]"
           echo "  - rs_pub_key: [masked]"
           echo "  - api_server: $api_server"
+          echo "  - source_patch_debug: $source_patch_debug"
 
           # 验证关键参数
           if [ -n "$tag" ] && [ -n "$customer" ] && [ -n "$email" ]; then
@@ -488,6 +495,7 @@ jobs:
           export BUILD_RS_PUB_KEY="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rs_pub_key // empty')"
           export BUILD_API_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.api_server // empty')"
           export BUILD_LOCK_NETWORK_SETTINGS="$(echo "$TRIGGER_DATA" | jq -r '.build_params.lock_network_settings // "false"')"
+          export BUILD_SOURCE_PATCH_DEBUG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.source_patch_debug // "false"')"
           
           # 创建构建配置文件
           echo "📝 创建构建配置文件..."
@@ -504,6 +512,7 @@ jobs:
             "rs_pub_key": "$BUILD_RS_PUB_KEY",
             "api_server": "$BUILD_API_SERVER",
             "lock_network_settings": "$BUILD_LOCK_NETWORK_SETTINGS",
+            "source_patch_debug": "$BUILD_SOURCE_PATCH_DEBUG",
             "build_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
           EOF

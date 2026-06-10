@@ -161,6 +161,28 @@ function test_source_patcher_covers_server_key_and_brand() {
     return 1
 }
 
+function test_source_patch_debug_switch_is_wired() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local trigger=".github/workflows/scripts/trigger.sh"
+    local build_script=".github/workflows/scripts/build.sh"
+
+    if grep -q 'source_patch_debug:' "$WORKFLOW_FILE" &&
+       grep -q 'BUILD_SOURCE_PATCH_DEBUG' "$WORKFLOW_FILE" &&
+       grep -q 'source_patch_debug' "$trigger" &&
+       grep -q 'SOURCE_PATCH_DEBUG' "$trigger" &&
+       grep -q 'BUILD_SOURCE_PATCH_DEBUG' "$build_script" &&
+       grep -q 'BUILD_SOURCE_PATCH_DEBUG' "$patcher" &&
+       grep -q 'detailed before/after source diagnostics enabled' "$patcher" &&
+       grep -q 'detailed before/after source diagnostics disabled' "$patcher" &&
+       grep -q '_custom_patch_debug_enabled' "$patcher"; then
+        record_test_result "source_patch_debug_switch_is_wired" "PASS" "source_patch_debug reaches source-patcher diagnostics"
+        return 0
+    fi
+
+    record_test_result "source_patch_debug_switch_is_wired" "FAIL" "source_patch_debug should flow from trigger params to source-patcher.sh"
+    return 1
+}
+
 function test_source_patcher_applies_to_fixture_tree() {
     local patcher=".github/workflows/scripts/source-patcher.sh"
     local tmp_dir
@@ -321,6 +343,7 @@ EOF
         export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21117"
         export BUILD_RS_PUB_KEY="fixture-public-key"
         export BUILD_API_SERVER="http://192.168.2.22:21114"
+        export BUILD_SOURCE_PATCH_DEBUG="true"
         source "$patcher"
         cd "$tmp_dir"
         apply_custom_source_patches
@@ -328,6 +351,7 @@ EOF
         grep -q '"rendezvous_server": "192.168.2.22:21117"' custom-build-config.json
         grep -q '"custom_rendezvous_server": "192.168.2.22"' custom-build-config.json
         grep -q '"relay_server": "192.168.2.22"' custom-build-config.json
+        grep -q '"source_patch_debug": true' custom-build-config.json
         grep -q 'custom-rendezvous-server' src/common.rs
         grep -q 'rendezvous-servers' src/common.rs
         grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
@@ -456,7 +480,7 @@ EOF
 function test_issue_params_preserve_issue_supplied_patch_variables() {
     local trigger=".github/workflows/scripts/trigger.sh"
     local event_data
-    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true' '{issue:{number:123, body:$body}}')
+    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true\nsource_patch_debug: true' '{issue:{number:123, body:$body}}')
 
     if (
         set -e
@@ -466,6 +490,7 @@ function test_issue_params_preserve_issue_supplied_patch_variables() {
         echo "$extracted" | grep -q 'RS_PUB_KEY="dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI="'
         echo "$extracted" | grep -q 'SLOGAN="Powered by OneCloud Desk"'
         echo "$extracted" | grep -q 'LOCK_NETWORK_SETTINGS="true"'
+        echo "$extracted" | grep -q 'SOURCE_PATCH_DEBUG="true"'
     ); then
         record_test_result "issue_params_preserve_issue_supplied_patch_variables" "PASS" "Issue 变量保留完整 key、空格和网络锁定项"
         return 0
@@ -730,6 +755,7 @@ function run_workflow_tests() {
     test_manual_queue_limit_is_five || failed=1
     test_source_patcher_is_invoked || failed=1
     test_source_patcher_covers_server_key_and_brand || failed=1
+    test_source_patch_debug_switch_is_wired || failed=1
     test_source_patcher_applies_to_fixture_tree || failed=1
     test_source_patcher_lock_network_settings_matches_historical_defaults || failed=1
     test_issue_params_preserve_issue_supplied_patch_variables || failed=1

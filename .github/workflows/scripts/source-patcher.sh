@@ -64,11 +64,30 @@ _custom_trace_value() {
     fi
 }
 
+_custom_bool_enabled() {
+    case "${1:-false}" in
+        true|TRUE|True|1|yes|YES|y|Y|on|ON)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+_custom_patch_debug_enabled() {
+    _custom_bool_enabled "${CUSTOM_SOURCE_PATCH_DEBUG:-${BUILD_SOURCE_PATCH_DEBUG:-false}}"
+}
+
 _custom_trace_file_match() {
     local phase="$1"
     local file="$2"
     local label="$3"
     local pattern="$4"
+
+    if ! _custom_patch_debug_enabled; then
+        return 0
+    fi
 
     echo "source-patcher-trace: [$phase] $file :: $label"
     if [ ! -f "$file" ]; then
@@ -528,6 +547,11 @@ apply_custom_source_patches() {
     CUSTOM_RELAY_SERVER=$(_custom_address_host "${BUILD_RELAY_SERVER:-$CUSTOM_RENDEZVOUS_INPUT}")
     CUSTOM_RS_PUB_KEY="${BUILD_RS_PUB_KEY:-}"
     CUSTOM_API_SERVER="${BUILD_API_SERVER:-}"
+    if _custom_bool_enabled "${BUILD_SOURCE_PATCH_DEBUG:-false}"; then
+        CUSTOM_SOURCE_PATCH_DEBUG="true"
+    else
+        CUSTOM_SOURCE_PATCH_DEBUG="false"
+    fi
 
     echo "source-patcher-trace: resolved custom build inputs"
     _custom_trace_value "BUILD_RENDEZVOUS_SERVER(raw)" "${BUILD_RENDEZVOUS_SERVER:-}"
@@ -539,6 +563,13 @@ apply_custom_source_patches() {
     _custom_trace_value "BUILD_RS_PUB_KEY" "$CUSTOM_RS_PUB_KEY"
     _custom_trace_value "BUILD_LOCK_NETWORK_SETTINGS(raw)" "${BUILD_LOCK_NETWORK_SETTINGS:-}"
     _custom_trace_value "CUSTOM_LOCK_SETTINGS(normalized)" "$CUSTOM_LOCK_SETTINGS"
+    _custom_trace_value "BUILD_SOURCE_PATCH_DEBUG(raw)" "${BUILD_SOURCE_PATCH_DEBUG:-}"
+    _custom_trace_value "CUSTOM_SOURCE_PATCH_DEBUG(normalized)" "$CUSTOM_SOURCE_PATCH_DEBUG"
+    if _custom_patch_debug_enabled; then
+        echo "source-patcher-trace: detailed before/after source diagnostics enabled"
+    else
+        echo "source-patcher-trace: detailed before/after source diagnostics disabled"
+    fi
 
     jq -n \
         --arg app_name "$CUSTOM_APP_NAME" \
@@ -550,6 +581,7 @@ apply_custom_source_patches() {
         --arg rs_pub_key "$CUSTOM_RS_PUB_KEY" \
         --arg api_server "$CUSTOM_API_SERVER" \
         --arg lock_network_settings "$CUSTOM_LOCK_SETTINGS" \
+        --arg source_patch_debug "$CUSTOM_SOURCE_PATCH_DEBUG" \
         '{
             app_name: $app_name,
             customer_link: $customer_link,
@@ -559,7 +591,8 @@ apply_custom_source_patches() {
             relay_server: $relay_server,
             rs_pub_key: $rs_pub_key,
             api_server: $api_server,
-            lock_network_settings: ($lock_network_settings == "true")
+            lock_network_settings: ($lock_network_settings == "true"),
+            source_patch_debug: ($source_patch_debug == "true")
         }' > custom-build-config.json
 
     _custom_patch_common_rs

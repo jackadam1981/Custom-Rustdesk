@@ -26,6 +26,7 @@ _extract_build_data() {
     local relay_server=""
     local rs_pub_key=""
     local api_server=""
+    local source_patch_debug=""
     
     # 尝试从 build_params 提取（已处理格式）
     if echo "$input" | jq -e '.build_params' > /dev/null 2>&1; then
@@ -41,6 +42,7 @@ _extract_build_data() {
         relay_server=$(echo "$input" | jq -r '.build_params.relay_server // empty')
         rs_pub_key=$(echo "$input" | jq -r '.build_params.rs_pub_key // empty')
         api_server=$(echo "$input" | jq -r '.build_params.api_server // empty')
+        source_patch_debug=$(echo "$input" | jq -r '.build_params.source_patch_debug // "false"')
     # 尝试从 inputs 提取（github.event 格式）
     elif echo "$input" | jq -e '.inputs' > /dev/null 2>&1; then
         debug "log" "从 inputs 提取构建参数"
@@ -55,6 +57,7 @@ _extract_build_data() {
         relay_server=$(echo "$input" | jq -r '.inputs.relay_server // empty')
         rs_pub_key=$(echo "$input" | jq -r '.inputs.rs_pub_key // empty')
         api_server=$(echo "$input" | jq -r '.inputs.api_server // empty')
+        source_patch_debug=$(echo "$input" | jq -r '.inputs.source_patch_debug // .inputs.enable_debug // "false"')
     else
         debug "error" "无法识别的数据格式，缺少 build_params 或 inputs 字段"
         return 1
@@ -79,6 +82,7 @@ _extract_build_data() {
     debug "var" "RELAY_SERVER" "$relay_server"
     debug "var" "RS_PUB_KEY" "$rs_pub_key"
     debug "var" "API_SERVER" "$api_server"
+    debug "var" "SOURCE_PATCH_DEBUG" "$source_patch_debug"
     
     # 设置环境变量供后续步骤使用（仅在 GitHub Actions 环境中）
     if [ -n "$GITHUB_ENV" ]; then
@@ -93,6 +97,7 @@ _extract_build_data() {
         echo "BUILD_RELAY_SERVER=$relay_server" >> $GITHUB_ENV
         echo "BUILD_RS_PUB_KEY=$rs_pub_key" >> $GITHUB_ENV
         echo "BUILD_API_SERVER=$api_server" >> $GITHUB_ENV
+        echo "BUILD_SOURCE_PATCH_DEBUG=${source_patch_debug:-false}" >> $GITHUB_ENV
         echo "CURRENT_DATA=$input" >> $GITHUB_ENV
     else
         # 本地测试环境：输出到标准输出
@@ -107,6 +112,7 @@ _extract_build_data() {
         echo "BUILD_RELAY_SERVER=$relay_server" >&2
         echo "BUILD_RS_PUB_KEY=$rs_pub_key" >&2
         echo "BUILD_API_SERVER=$api_server" >&2
+        echo "BUILD_SOURCE_PATCH_DEBUG=${source_patch_debug:-false}" >&2
         echo "CURRENT_DATA=$input" >&2
     fi
     
@@ -123,6 +129,7 @@ _extract_build_data() {
         --arg relay_server "$relay_server" \
         --arg rs_pub_key "$rs_pub_key" \
         --arg api_server "$api_server" \
+        --arg source_patch_debug "${source_patch_debug:-false}" \
         '. + {
             build_params: {
                 tag: $tag,
@@ -135,7 +142,8 @@ _extract_build_data() {
                 rendezvous_server: $rendezvous_server,
                 relay_server: $relay_server,
                 rs_pub_key: $rs_pub_key,
-                api_server: $api_server
+                api_server: $api_server,
+                source_patch_debug: $source_patch_debug
             }
         }')
     
@@ -177,11 +185,13 @@ _execute_build_process() {
     local relay_server=$(echo "$current_data" | jq -r '.build_params.relay_server // .inputs.relay_server // empty')
     local rs_pub_key=$(echo "$current_data" | jq -r '.build_params.rs_pub_key // .inputs.rs_pub_key // empty')
     local api_server=$(echo "$current_data" | jq -r '.build_params.api_server // .inputs.api_server // empty')
+    local source_patch_debug=$(echo "$current_data" | jq -r '.build_params.source_patch_debug // .inputs.source_patch_debug // .inputs.enable_debug // "false"')
     
     debug "log" "🔧 提取的构建参数:"
     debug "var" "TAG" "$tag"
     debug "var" "EMAIL" "$email"
     debug "var" "CUSTOMER" "$customer"
+    debug "var" "SOURCE_PATCH_DEBUG" "$source_patch_debug"
     
     # 构建开始时间
     local build_start_time=$(date -Iseconds)
