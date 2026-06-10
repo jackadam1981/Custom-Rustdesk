@@ -240,6 +240,26 @@ fn custom_build_default_option(k: &str) -> Option<&'static str> {
         Some(value)
     }
 }
+
+fn custom_build_default_options() -> HashMap<String, String> {
+    let mut options = HashMap::new();
+    for (key, value) in [
+        ("app-name", custom_build_default_option("app-name")),
+        ("custom-rendezvous-server", custom_build_default_option("custom-rendezvous-server")),
+        ("rendezvous-servers", custom_build_default_option("rendezvous-servers")),
+        ("relay-server", custom_build_default_option("relay-server")),
+        ("api-server", custom_build_default_option("api-server")),
+        ("register-device", custom_build_default_option("register-device")),
+        ("key", custom_build_default_option("key")),
+        ("custom-slogan", custom_build_default_option("custom-slogan")),
+        ("custom-customer-link", custom_build_default_option("custom-customer-link")),
+    ] {
+        if let Some(value) = value {
+            options.insert(key.to_owned(), value.to_owned());
+        }
+    }
+    options
+}
 // CUSTOM_RUSTDESK_HBB_COMMON_PATCH_END
 EOF
 
@@ -255,6 +275,7 @@ EOF
     rm -f "$patch_file"
 
     perl -0pi -e 's/(\s*let s = Self::get_option\("custom-rendezvous-server"\);\n\s*if !s\.is_empty\(\) \{\n\s*return vec!\[s\];\n\s*\})/$1\n        if let Some(s) = custom_build_default_option("custom-rendezvous-server") {\n            return vec![s.to_owned()];\n        }/' "$file"
+    perl -0pi -e 's/(\s*pub fn get_options\(\) -> HashMap<String, String> \{\n\s*let mut res = DEFAULT_SETTINGS\.read\(\)\.unwrap\(\)\.clone\(\);\n)/$1        res.extend(custom_build_default_options());\n/' "$file"
     perl -0pi -e 's/get_or\(\n\s*&OVERWRITE_SETTINGS,\n\s*&CONFIG2\.read\(\)\.unwrap\(\)\.options,\n\s*&DEFAULT_SETTINGS,\n\s*k,\n\s*\)\n\s*\.unwrap_or_default\(\)/get_or(\n            \&OVERWRITE_SETTINGS,\n            \&CONFIG2.read().unwrap().options,\n            \&DEFAULT_SETTINGS,\n            k,\n        )\n        .or_else(|| custom_build_default_option(k).map(|v| v.to_owned()))\n        .unwrap_or_default()/' "$file"
 }
 

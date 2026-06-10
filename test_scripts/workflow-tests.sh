@@ -170,6 +170,7 @@ function test_source_patcher_applies_to_fixture_tree() {
         "$tmp_dir/src/lang" \
         "$tmp_dir/flutter/android/app/src/main/res/values" \
         "$tmp_dir/flutter/ios/Runner" \
+        "$tmp_dir/libs/hbb_common/src" \
         "$tmp_dir/libs/portable/src" \
         "$tmp_dir/.github/workflows/scripts" \
         "$tmp_dir/res"
@@ -194,6 +195,38 @@ pub fn get_api_server(api: String, custom: String) -> String {
 }
 
 fn read_custom_client_advanced_settings() {}
+EOF
+    cat > "$tmp_dir/libs/hbb_common/src/config.rs" <<'EOF'
+use std::collections::HashMap;
+
+pub struct Config;
+
+impl Config {
+    pub fn get_rendezvous_servers() -> Vec<String> {
+        let s = Self::get_option("custom-rendezvous-server");
+        if !s.is_empty() {
+            return vec![s];
+        }
+        return vec!["rs-ny.rustdesk.com".to_string()];
+    }
+
+    pub fn get_options() -> HashMap<String, String> {
+        let mut res = DEFAULT_SETTINGS.read().unwrap().clone();
+        res.extend(CONFIG2.read().unwrap().options.clone());
+        res.extend(OVERWRITE_SETTINGS.read().unwrap().clone());
+        res
+    }
+
+    pub fn get_option(k: &str) -> String {
+        get_or(
+            &OVERWRITE_SETTINGS,
+            &CONFIG2.read().unwrap().options,
+            &DEFAULT_SETTINGS,
+            k,
+        )
+        .unwrap_or_default()
+    }
+}
 EOF
     cat > "$tmp_dir/flutter/android/app/src/main/res/values/strings.xml" <<'EOF'
 <resources>
@@ -313,6 +346,14 @@ EOF
         grep -q 'const CUSTOM_RELAY_SERVER: &str = "192.168.2.22";' src/common.rs
         ! grep -q '("custom-rendezvous-server", "192.168.2.22:21117")' src/common.rs
         grep -q 'fixture-public-key' src/common.rs
+        grep -q 'custom_build_default_option' libs/hbb_common/src/config.rs
+        grep -q 'custom_build_default_options' libs/hbb_common/src/config.rs
+        grep -q 'const CUSTOM_RENDEZVOUS_SERVER: &str = "192.168.2.22";' libs/hbb_common/src/config.rs
+        grep -q '"custom-rendezvous-server" | "rendezvous-servers" => CUSTOM_RENDEZVOUS_SERVER' libs/hbb_common/src/config.rs
+        grep -q '"key" => CUSTOM_RS_PUB_KEY' libs/hbb_common/src/config.rs
+        grep -q 'res.extend(custom_build_default_options());' libs/hbb_common/src/config.rs
+        grep -q 'or_else(|| custom_build_default_option(k).map(|v| v.to_owned()))' libs/hbb_common/src/config.rs
+        grep -q 'custom_build_default_option("custom-rendezvous-server")' libs/hbb_common/src/config.rs
         grep -q '<string name="app_name">FixtureDesk</string>' flutter/android/app/src/main/res/values/strings.xml
         grep -q '<string>FixtureDesk</string>' flutter/ios/Runner/Info.plist
         grep -q 'Name=FixtureDesk' res/rustdesk.desktop
