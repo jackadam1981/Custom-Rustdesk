@@ -24,6 +24,7 @@ _extract_workflow_dispatch_params() {
     echo "SUPER_PASSWORD=\"$(echo "$event_data" | jq -r '.inputs.super_password // empty')\""
     echo "SLOGAN=\"$(echo "$event_data" | jq -r '.inputs.slogan // empty')\""
     echo "RENDEZVOUS_SERVER=\"$(echo "$event_data" | jq -r '.inputs.rendezvous_server // empty')\""
+    echo "RELAY_SERVER=\"$(echo "$event_data" | jq -r '.inputs.relay_server // empty')\""
     echo "RS_PUB_KEY=\"$(echo "$event_data" | jq -r '.inputs.rs_pub_key // empty')\""
     echo "API_SERVER=\"$(echo "$event_data" | jq -r '.inputs.api_server // empty')\""
     echo "LOCK_NETWORK_SETTINGS=\"$(echo "$event_data" | jq -r '.inputs.lock_network_settings // "false"')\""
@@ -91,6 +92,9 @@ _extract_issue_params() {
     local rendezvous_server=$(_extract_issue_value "$issue_body" "rendezvous_server")
     debug "log" "Extracted rendezvous_server: '$rendezvous_server'"
 
+    local relay_server=$(_extract_issue_value "$issue_body" "relay_server")
+    debug "log" "Extracted relay_server: '$relay_server'"
+
     local rs_pub_key=$(_extract_issue_value "$issue_body" "rs_pub_key")
     debug "log" "Extracted rs_pub_key: '$rs_pub_key'"
 
@@ -107,6 +111,7 @@ _extract_issue_params() {
     echo "SUPER_PASSWORD=\"$super_password\""
     echo "SLOGAN=\"$slogan\""
     echo "RENDEZVOUS_SERVER=\"$rendezvous_server\""
+    echo "RELAY_SERVER=\"$relay_server\""
     echo "RS_PUB_KEY=\"$rs_pub_key\""
     echo "API_SERVER=\"$api_server\""
     echo "LOCK_NETWORK_SETTINGS=\"$lock_network_settings\""
@@ -126,6 +131,7 @@ _apply_default_values() {
         local super_password=$(echo "$event_data" | jq -r '.inputs.super_password // empty')
         local slogan=$(echo "$event_data" | jq -r '.inputs.slogan // empty')
         local rendezvous_server=$(echo "$event_data" | jq -r '.inputs.rendezvous_server // empty')
+        local relay_server=$(echo "$event_data" | jq -r '.inputs.relay_server // empty')
         local rs_pub_key=$(echo "$event_data" | jq -r '.inputs.rs_pub_key // empty')
         local api_server=$(echo "$event_data" | jq -r '.inputs.api_server // empty')
         local lock_network_settings=$(echo "$event_data" | jq -r '.inputs.lock_network_settings // "false"')
@@ -137,6 +143,7 @@ _apply_default_values() {
         local super_password="$SUPER_PASSWORD"
         local slogan="$SLOGAN"
         local rendezvous_server="$RENDEZVOUS_SERVER"
+        local relay_server="$RELAY_SERVER"
         local rs_pub_key="$RS_PUB_KEY"
         local api_server="$API_SERVER"
         local lock_network_settings="${LOCK_NETWORK_SETTINGS:-false}"
@@ -149,6 +156,7 @@ _apply_default_values() {
     echo "SUPER_PASSWORD=\"${super_password:-${DEFAULT_SUPER_PASSWORD:-}}\""
     echo "SLOGAN=\"${slogan:-${DEFAULT_SLOGAN:-}}\""
     echo "RENDEZVOUS_SERVER=\"${rendezvous_server:-${DEFAULT_RENDEZVOUS_SERVER:-}}\""
+    echo "RELAY_SERVER=\"${relay_server:-${DEFAULT_RELAY_SERVER:-}}\""
     echo "RS_PUB_KEY=\"${rs_pub_key:-${DEFAULT_RS_PUB_KEY:-}}\""
     echo "API_SERVER=\"${api_server:-${DEFAULT_API_SERVER:-}}\""
     echo "LOCK_NETWORK_SETTINGS=\"${lock_network_settings:-false}\""
@@ -195,6 +203,7 @@ _generate_final_data() {
         local super_password=$(echo "$event_data" | jq -r '.inputs.super_password // empty')
         local slogan=$(echo "$event_data" | jq -r '.inputs.slogan // empty')
         local rendezvous_server=$(echo "$event_data" | jq -r '.inputs.rendezvous_server // empty')
+        local relay_server=$(echo "$event_data" | jq -r '.inputs.relay_server // empty')
         local rs_pub_key=$(echo "$event_data" | jq -r '.inputs.rs_pub_key // empty')
         local api_server=$(echo "$event_data" | jq -r '.inputs.api_server // empty')
         local lock_network_settings=$(echo "$event_data" | jq -r '.inputs.lock_network_settings // "false"')
@@ -208,6 +217,7 @@ _generate_final_data() {
         local super_password="$SUPER_PASSWORD"
         local slogan="$SLOGAN"
         local rendezvous_server="$RENDEZVOUS_SERVER"
+        local relay_server="$RELAY_SERVER"
         local rs_pub_key="$RS_PUB_KEY"
         local api_server="$API_SERVER"
         local lock_network_settings="${LOCK_NETWORK_SETTINGS:-false}"
@@ -227,10 +237,11 @@ _generate_final_data() {
         --arg super_password "$super_password" \
         --arg slogan "$slogan" \
         --arg rendezvous_server "$rendezvous_server" \
+        --arg relay_server "$relay_server" \
         --arg rs_pub_key "$rs_pub_key" \
         --arg api_server "$api_server" \
         --arg lock_network_settings "${lock_network_settings:-false}" \
-        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, rs_pub_key: $rs_pub_key, api_server: $api_server, lock_network_settings: $lock_network_settings}}')
+        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, relay_server: $relay_server, rs_pub_key: $rs_pub_key, api_server: $api_server, lock_network_settings: $lock_network_settings}}')
     
     debug "var" "Generated JSON data" "$data"
     echo "$data"

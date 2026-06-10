@@ -456,12 +456,13 @@ EOF
 function test_issue_params_preserve_issue_supplied_patch_variables() {
     local trigger=".github/workflows/scripts/trigger.sh"
     local event_data
-    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true' '{issue:{number:123, body:$body}}')
+    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true' '{issue:{number:123, body:$body}}')
 
     if (
         set -e
         source "$trigger"
         extracted="$(trigger_manager extract-issue "$event_data")"
+        echo "$extracted" | grep -q 'RELAY_SERVER="rustdesk.jackadam.top:21117"'
         echo "$extracted" | grep -q 'RS_PUB_KEY="dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI="'
         echo "$extracted" | grep -q 'SLOGAN="Powered by OneCloud Desk"'
         echo "$extracted" | grep -q 'LOCK_NETWORK_SETTINGS="true"'

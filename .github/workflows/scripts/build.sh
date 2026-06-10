@@ -23,6 +23,7 @@ _extract_build_data() {
     local slogan=""
     local super_password=""
     local rendezvous_server=""
+    local relay_server=""
     local rs_pub_key=""
     local api_server=""
     
@@ -37,6 +38,7 @@ _extract_build_data() {
         slogan=$(echo "$input" | jq -r '.build_params.slogan // empty')
         super_password=$(echo "$input" | jq -r '.build_params.super_password // empty')
         rendezvous_server=$(echo "$input" | jq -r '.build_params.rendezvous_server // empty')
+        relay_server=$(echo "$input" | jq -r '.build_params.relay_server // empty')
         rs_pub_key=$(echo "$input" | jq -r '.build_params.rs_pub_key // empty')
         api_server=$(echo "$input" | jq -r '.build_params.api_server // empty')
     # 尝试从 inputs 提取（github.event 格式）
@@ -50,6 +52,7 @@ _extract_build_data() {
         slogan=$(echo "$input" | jq -r '.inputs.slogan // empty')
         super_password=$(echo "$input" | jq -r '.inputs.super_password // empty')
         rendezvous_server=$(echo "$input" | jq -r '.inputs.rendezvous_server // empty')
+        relay_server=$(echo "$input" | jq -r '.inputs.relay_server // empty')
         rs_pub_key=$(echo "$input" | jq -r '.inputs.rs_pub_key // empty')
         api_server=$(echo "$input" | jq -r '.inputs.api_server // empty')
     else
@@ -73,6 +76,7 @@ _extract_build_data() {
     debug "var" "SLOGAN" "$slogan"
     debug "var" "SUPER_PASSWORD" "$super_password"
     debug "var" "RENDEZVOUS_SERVER" "$rendezvous_server"
+    debug "var" "RELAY_SERVER" "$relay_server"
     debug "var" "RS_PUB_KEY" "$rs_pub_key"
     debug "var" "API_SERVER" "$api_server"
     
@@ -86,6 +90,7 @@ _extract_build_data() {
         echo "BUILD_SLOGAN=$slogan" >> $GITHUB_ENV
         echo "BUILD_SUPER_PASSWORD=$super_password" >> $GITHUB_ENV
         echo "BUILD_RENDEZVOUS_SERVER=$rendezvous_server" >> $GITHUB_ENV
+        echo "BUILD_RELAY_SERVER=$relay_server" >> $GITHUB_ENV
         echo "BUILD_RS_PUB_KEY=$rs_pub_key" >> $GITHUB_ENV
         echo "BUILD_API_SERVER=$api_server" >> $GITHUB_ENV
         echo "CURRENT_DATA=$input" >> $GITHUB_ENV
@@ -99,6 +104,7 @@ _extract_build_data() {
         echo "BUILD_SLOGAN=$slogan" >&2
         echo "BUILD_SUPER_PASSWORD=$super_password" >&2
         echo "BUILD_RENDEZVOUS_SERVER=$rendezvous_server" >&2
+        echo "BUILD_RELAY_SERVER=$relay_server" >&2
         echo "BUILD_RS_PUB_KEY=$rs_pub_key" >&2
         echo "BUILD_API_SERVER=$api_server" >&2
         echo "CURRENT_DATA=$input" >&2
@@ -114,6 +120,7 @@ _extract_build_data() {
         --arg slogan "$slogan" \
         --arg super_password "$super_password" \
         --arg rendezvous_server "$rendezvous_server" \
+        --arg relay_server "$relay_server" \
         --arg rs_pub_key "$rs_pub_key" \
         --arg api_server "$api_server" \
         '. + {
@@ -126,6 +133,7 @@ _extract_build_data() {
                 slogan: $slogan,
                 super_password: $super_password,
                 rendezvous_server: $rendezvous_server,
+                relay_server: $relay_server,
                 rs_pub_key: $rs_pub_key,
                 api_server: $api_server
             }
@@ -166,6 +174,7 @@ _execute_build_process() {
     local slogan=$(echo "$current_data" | jq -r '.build_params.slogan // .inputs.slogan // empty')
     local super_password=$(echo "$current_data" | jq -r '.build_params.super_password // .inputs.super_password // empty')
     local rendezvous_server=$(echo "$current_data" | jq -r '.build_params.rendezvous_server // .inputs.rendezvous_server // empty')
+    local relay_server=$(echo "$current_data" | jq -r '.build_params.relay_server // .inputs.relay_server // empty')
     local rs_pub_key=$(echo "$current_data" | jq -r '.build_params.rs_pub_key // .inputs.rs_pub_key // empty')
     local api_server=$(echo "$current_data" | jq -r '.build_params.api_server // .inputs.api_server // empty')
     

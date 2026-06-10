@@ -160,10 +160,12 @@ _validate_parameters() {
     local trigger_data="$2"
     
     local rendezvous_server=$(echo "$trigger_data" | jq -r '.build_params.rendezvous_server // empty')
+    local relay_server=$(echo "$trigger_data" | jq -r '.build_params.relay_server // empty')
     local api_server=$(echo "$trigger_data" | jq -r '.build_params.api_server // empty')
     local email=$(echo "$trigger_data" | jq -r '.build_params.email // empty')
     
     debug "var" "Extracted rendezvous_server" "$rendezvous_server"
+    debug "var" "Extracted relay_server" "$relay_server"
     debug "var" "Extracted api_server" "$api_server"
     debug "var" "Extracted email" "$email"
     
@@ -177,6 +179,26 @@ _validate_parameters() {
         debug "log" "Email validation failed: $email"
     else
         debug "log" "Email validation passed: $email"
+    fi
+
+    if [ -n "$relay_server" ]; then
+        local relay_result=$(_validate_server_with_review "$relay_server" "Relay server")
+        local relay_issues=$(echo "$relay_result" | cut -d'|' -f1)
+        local relay_needs_review=$(echo "$relay_result" | cut -d'|' -f2)
+
+        if [ -n "$relay_issues" ]; then
+            issues+=("$relay_issues")
+            has_issues=true
+            debug "log" "Relay server validation failed: $relay_server"
+        else
+            debug "log" "Relay server validation passed: $relay_server"
+            if [ "$relay_needs_review" = "true" ]; then
+                needs_review=true
+                debug "log" "Relay server needs review (public IP/domain): $relay_server"
+            fi
+        fi
+    else
+        debug "log" "Relay server is empty, will default to rendezvous server"
     fi
     
     local rendezvous_result=$(_validate_server_with_review "$rendezvous_server" "Rendezvous server")
@@ -251,6 +273,7 @@ _need_review() {
     
     if [ "$trigger_type" = "issue" ]; then
         local rendezvous_server=$(echo "$trigger_data" | jq -r '.build_params.rendezvous_server // empty' || echo "")
+        local relay_server=$(echo "$trigger_data" | jq -r '.build_params.relay_server // empty' || echo "")
         local api_server=$(echo "$trigger_data" | jq -r '.build_params.api_server // empty' || echo "")
         
         local needs_review=false
@@ -260,6 +283,11 @@ _need_review() {
             debug "log" "Rendezvous server needs review (public): $rendezvous_server"
         fi
         
+        if [ -n "$relay_server" ] && _needs_review "$relay_server"; then
+            needs_review=true
+            debug "log" "Relay server needs review (public): $relay_server"
+        fi
+
         if [ -n "$api_server" ] && _needs_review "$api_server"; then
             needs_review=true
             debug "log" "API server needs review (public): $api_server"
@@ -309,6 +337,7 @@ _handle_review() {
     
     # 从trigger_data的build_params中提取需要的参数
     local rendezvous_server=$(echo "$trigger_data" | jq -r '.build_params.rendezvous_server // empty' || echo "")
+    local relay_server=$(echo "$trigger_data" | jq -r '.build_params.relay_server // empty' || echo "")
     local api_server=$(echo "$trigger_data" | jq -r '.build_params.api_server // empty' || echo "")
     
     local trigger_info=$(_get_trigger_info "$event_data")
@@ -319,7 +348,7 @@ _handle_review() {
     local original_issue_number=$(_get_original_issue_number "$event_data" "$trigger_type")
     
     # 生成审核评论
-    local review_comment=$(generate_review_comment "$rendezvous_server" "$api_server")
+    local review_comment=$(generate_review_comment "$rendezvous_server" "$api_server" "$relay_server")
     
     # 如果是Issue触发，添加到原始Issue
     if [ -n "$original_issue_number" ]; then
@@ -487,10 +516,12 @@ _get_server_params() {
     
     # 从trigger_data的build_params中提取服务器参数
     local rendezvous_server=$(echo "$trigger_data" | jq -r '.build_params.rendezvous_server // empty' || echo "")
+    local relay_server=$(echo "$trigger_data" | jq -r '.build_params.relay_server // empty' || echo "")
     local api_server=$(echo "$trigger_data" | jq -r '.build_params.api_server // empty' || echo "")
     local email=$(echo "$trigger_data" | jq -r '.build_params.email // empty' || echo "")
     
     echo "RENDEZVOUS_SERVER=$rendezvous_server"
+    echo "RELAY_SERVER=$relay_server"
     echo "API_SERVER=$api_server"
     echo "EMAIL=$email"
 }
