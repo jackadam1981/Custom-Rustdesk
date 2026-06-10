@@ -53,6 +53,34 @@ _custom_address_host() {
     echo "$address"
 }
 
+_custom_trace_value() {
+    local name="$1"
+    local value="${2:-}"
+
+    if [ -z "$value" ]; then
+        echo "source-patcher-trace: $name=<empty>"
+    else
+        echo "source-patcher-trace: $name=$value"
+    fi
+}
+
+_custom_trace_file_match() {
+    local phase="$1"
+    local file="$2"
+    local label="$3"
+    local pattern="$4"
+
+    echo "source-patcher-trace: [$phase] $file :: $label"
+    if [ ! -f "$file" ]; then
+        echo "source-patcher-trace: [$phase] $file missing"
+        return 0
+    fi
+
+    if ! grep -nE "$pattern" "$file" | head -20; then
+        echo "source-patcher-trace: [$phase] no match for $label"
+    fi
+}
+
 _custom_patch_common_rs() {
     local file="src/common.rs"
 
@@ -65,6 +93,11 @@ _custom_patch_common_rs() {
         echo "source-patcher: Rust core defaults already patched"
         return 0
     fi
+
+    _custom_trace_file_match "before" "$file" "load_custom_client entry" 'pub fn load_custom_client\(\)'
+    _custom_trace_file_match "before" "$file" "get_custom_rendezvous_server entry" 'pub fn get_custom_rendezvous_server\('
+    _custom_trace_file_match "before" "$file" "get_api_server entry" 'pub fn get_api_server\('
+    _custom_trace_file_match "before" "$file" "existing custom/default settings references" 'BUILTIN_SETTINGS|DEFAULT_SETTINGS|OVERWRITE_SETTINGS|RENDEZVOUS|RS_PUB_KEY'
 
     local app_name_json slogan_json customer_link_json rendezvous_json relay_json api_json key_json register_device_json
     app_name_json=$(_custom_json_string "$CUSTOM_APP_NAME")
@@ -179,6 +212,11 @@ EOF
     perl -0pi -e 's/pub fn load_custom_client\(\) \{\n/pub fn load_custom_client() {\n    apply_custom_build_defaults();\n/' "$file"
     perl -0pi -e 's/pub fn get_custom_rendezvous_server\(custom: String\) -> String \{\n/pub fn get_custom_rendezvous_server(custom: String) -> String {\n    apply_custom_build_defaults();\n    let custom = if custom.is_empty() {\n        config::Config::get_option("custom-rendezvous-server")\n    } else {\n        custom\n    };\n/' "$file"
     perl -0pi -e 's/pub fn get_api_server\(api: String, custom: String\) -> String \{\n/pub fn get_api_server(api: String, custom: String) -> String {\n    apply_custom_build_defaults();\n    if api.is_empty()\n        && config::Config::get_option("api-server").is_empty()\n        && config::Config::get_option("register-device") == "N"\n    {\n        return "".to_owned();\n    }\n/' "$file"
+
+    _custom_trace_file_match "after" "$file" "custom patch marker" 'CUSTOM_RUSTDESK_PATCH_START|CUSTOM_RUSTDESK_PATCH_END'
+    _custom_trace_file_match "after" "$file" "custom injected constants" 'const CUSTOM_'
+    _custom_trace_file_match "after" "$file" "apply defaults calls" 'apply_custom_build_defaults\(\);'
+    _custom_trace_file_match "after" "$file" "custom settings keys" '"custom-rendezvous-server"|"relay-server"|"api-server"|"key"'
 }
 
 _custom_patch_hbb_common_config_rs() {
@@ -193,6 +231,11 @@ _custom_patch_hbb_common_config_rs() {
         echo "source-patcher: hbb_common defaults already patched"
         return 0
     fi
+
+    _custom_trace_file_match "before" "$file" "Config::get_rendezvous_servers fallback" 'custom-rendezvous-server|get_rendezvous_servers'
+    _custom_trace_file_match "before" "$file" "Config::get_options entry" 'pub fn get_options\(\)'
+    _custom_trace_file_match "before" "$file" "Config::get_option entry" 'pub fn get_option\('
+    _custom_trace_file_match "before" "$file" "upstream/default option sources" 'RENDEZVOUS_SERVERS|RS_PUB_KEY|DEFAULT_SETTINGS|OVERWRITE_SETTINGS'
 
     local rendezvous_json relay_json api_json key_json register_device_json app_name_json slogan_json customer_link_json
     rendezvous_json=$(_custom_json_string "$CUSTOM_RENDEZVOUS_SERVER")
@@ -277,6 +320,12 @@ EOF
     perl -0pi -e 's/(\s*let s = Self::get_option\("custom-rendezvous-server"\);\n\s*if !s\.is_empty\(\) \{\n\s*return vec!\[s\];\n\s*\})/$1\n        if let Some(s) = custom_build_default_option("custom-rendezvous-server") {\n            return vec![s.to_owned()];\n        }/' "$file"
     perl -0pi -e 's/(\s*pub fn get_options\(\) -> HashMap<String, String> \{\n\s*let mut res = DEFAULT_SETTINGS\.read\(\)\.unwrap\(\)\.clone\(\);\n)/$1        res.extend(custom_build_default_options());\n/' "$file"
     perl -0pi -e 's/get_or\(\n\s*&OVERWRITE_SETTINGS,\n\s*&CONFIG2\.read\(\)\.unwrap\(\)\.options,\n\s*&DEFAULT_SETTINGS,\n\s*k,\n\s*\)\n\s*\.unwrap_or_default\(\)/get_or(\n            \&OVERWRITE_SETTINGS,\n            \&CONFIG2.read().unwrap().options,\n            \&DEFAULT_SETTINGS,\n            k,\n        )\n        .or_else(|| custom_build_default_option(k).map(|v| v.to_owned()))\n        .unwrap_or_default()/' "$file"
+
+    _custom_trace_file_match "after" "$file" "hbb_common patch marker" 'CUSTOM_RUSTDESK_HBB_COMMON_PATCH_START|CUSTOM_RUSTDESK_HBB_COMMON_PATCH_END'
+    _custom_trace_file_match "after" "$file" "custom injected constants" 'const CUSTOM_'
+    _custom_trace_file_match "after" "$file" "custom default option function" 'custom_build_default_option|custom_build_default_options'
+    _custom_trace_file_match "after" "$file" "patched get_options/get_option fallback" 'res\.extend\(custom_build_default_options\(\)\)|or_else\(\|\| custom_build_default_option'
+    _custom_trace_file_match "after" "$file" "patched rendezvous fallback" 'return vec!\[s\.to_owned\(\)\]'
 }
 
 _custom_patch_brand_files() {
@@ -479,6 +528,17 @@ apply_custom_source_patches() {
     CUSTOM_RELAY_SERVER=$(_custom_address_host "${BUILD_RELAY_SERVER:-$CUSTOM_RENDEZVOUS_INPUT}")
     CUSTOM_RS_PUB_KEY="${BUILD_RS_PUB_KEY:-}"
     CUSTOM_API_SERVER="${BUILD_API_SERVER:-}"
+
+    echo "source-patcher-trace: resolved custom build inputs"
+    _custom_trace_value "BUILD_RENDEZVOUS_SERVER(raw)" "${BUILD_RENDEZVOUS_SERVER:-}"
+    _custom_trace_value "CUSTOM_RENDEZVOUS_SERVER(normalized)" "$CUSTOM_RENDEZVOUS_SERVER"
+    _custom_trace_value "BUILD_RELAY_SERVER(raw)" "${BUILD_RELAY_SERVER:-}"
+    _custom_trace_value "CUSTOM_RELAY_SERVER(normalized)" "$CUSTOM_RELAY_SERVER"
+    _custom_trace_value "BUILD_API_SERVER(raw)" "${BUILD_API_SERVER:-}"
+    _custom_trace_value "CUSTOM_API_SERVER" "$CUSTOM_API_SERVER"
+    _custom_trace_value "BUILD_RS_PUB_KEY" "$CUSTOM_RS_PUB_KEY"
+    _custom_trace_value "BUILD_LOCK_NETWORK_SETTINGS(raw)" "${BUILD_LOCK_NETWORK_SETTINGS:-}"
+    _custom_trace_value "CUSTOM_LOCK_SETTINGS(normalized)" "$CUSTOM_LOCK_SETTINGS"
 
     jq -n \
         --arg app_name "$CUSTOM_APP_NAME" \
