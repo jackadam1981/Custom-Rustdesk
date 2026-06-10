@@ -181,6 +181,83 @@ EOF
     perl -0pi -e 's/pub fn get_api_server\(api: String, custom: String\) -> String \{\n/pub fn get_api_server(api: String, custom: String) -> String {\n    apply_custom_build_defaults();\n    if api.is_empty()\n        && config::Config::get_option("api-server").is_empty()\n        && config::Config::get_option("register-device") == "N"\n    {\n        return "".to_owned();\n    }\n/' "$file"
 }
 
+_custom_patch_hbb_common_config_rs() {
+    local file="libs/hbb_common/src/config.rs"
+
+    if [ ! -f "$file" ]; then
+        echo "source-patcher: $file not found, skipping hbb_common defaults"
+        return 0
+    fi
+
+    if grep -q "CUSTOM_RUSTDESK_HBB_COMMON_PATCH_START" "$file"; then
+        echo "source-patcher: hbb_common defaults already patched"
+        return 0
+    fi
+
+    local rendezvous_json relay_json api_json key_json register_device_json app_name_json slogan_json customer_link_json
+    rendezvous_json=$(_custom_json_string "$CUSTOM_RENDEZVOUS_SERVER")
+    relay_json=$(_custom_json_string "$CUSTOM_RELAY_SERVER")
+    api_json=$(_custom_json_string "$CUSTOM_API_SERVER")
+    key_json=$(_custom_json_string "$CUSTOM_RS_PUB_KEY")
+    app_name_json=$(_custom_json_string "$CUSTOM_APP_NAME")
+    slogan_json=$(_custom_json_string "$CUSTOM_SLOGAN")
+    customer_link_json=$(_custom_json_string "$CUSTOM_CUSTOMER_LINK")
+    if [ -z "$CUSTOM_API_SERVER" ]; then
+        register_device_json=$(_custom_json_string "N")
+    else
+        register_device_json=$(_custom_json_string "")
+    fi
+
+    local patch_file
+    patch_file=$(mktemp)
+    cat > "$patch_file" <<EOF
+
+// CUSTOM_RUSTDESK_HBB_COMMON_PATCH_START
+fn custom_build_default_option(k: &str) -> Option<&'static str> {
+    const CUSTOM_APP_NAME: &str = $app_name_json;
+    const CUSTOM_SLOGAN: &str = $slogan_json;
+    const CUSTOM_CUSTOMER_LINK: &str = $customer_link_json;
+    const CUSTOM_RENDEZVOUS_SERVER: &str = $rendezvous_json;
+    const CUSTOM_RELAY_SERVER: &str = $relay_json;
+    const CUSTOM_API_SERVER: &str = $api_json;
+    const CUSTOM_RS_PUB_KEY: &str = $key_json;
+    const CUSTOM_REGISTER_DEVICE: &str = $register_device_json;
+
+    let value = match k {
+        "app-name" => CUSTOM_APP_NAME,
+        "custom-rendezvous-server" | "rendezvous-servers" => CUSTOM_RENDEZVOUS_SERVER,
+        "relay-server" => CUSTOM_RELAY_SERVER,
+        "api-server" => CUSTOM_API_SERVER,
+        "register-device" => CUSTOM_REGISTER_DEVICE,
+        "key" => CUSTOM_RS_PUB_KEY,
+        "custom-slogan" => CUSTOM_SLOGAN,
+        "custom-customer-link" => CUSTOM_CUSTOMER_LINK,
+        _ => "",
+    };
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+// CUSTOM_RUSTDESK_HBB_COMMON_PATCH_END
+EOF
+
+    awk -v patch_file="$patch_file" '
+        /^impl Config \{/ && !inserted {
+            while ((getline line < patch_file) > 0) print line;
+            close(patch_file);
+            inserted=1;
+        }
+        { print }
+    ' "$file" > "${file}.tmp"
+    mv "${file}.tmp" "$file"
+    rm -f "$patch_file"
+
+    perl -0pi -e 's/(\s*let s = Self::get_option\("custom-rendezvous-server"\);\n\s*if !s\.is_empty\(\) \{\n\s*return vec!\[s\];\n\s*\})/$1\n        if let Some(s) = custom_build_default_option("custom-rendezvous-server") {\n            return vec![s.to_owned()];\n        }/' "$file"
+    perl -0pi -e 's/get_or\(\n\s*&OVERWRITE_SETTINGS,\n\s*&CONFIG2\.read\(\)\.unwrap\(\)\.options,\n\s*&DEFAULT_SETTINGS,\n\s*k,\n\s*\)\n\s*\.unwrap_or_default\(\)/get_or(\n            \&OVERWRITE_SETTINGS,\n            \&CONFIG2.read().unwrap().options,\n            \&DEFAULT_SETTINGS,\n            k,\n        )\n        .or_else(|| custom_build_default_option(k).map(|v| v.to_owned()))\n        .unwrap_or_default()/' "$file"
+}
+
 _custom_patch_brand_files() {
     local app_name_xml
     app_name_xml=$(_custom_xml_escape "$CUSTOM_APP_NAME")
@@ -405,6 +482,7 @@ apply_custom_source_patches() {
         }' > custom-build-config.json
 
     _custom_patch_common_rs
+    _custom_patch_hbb_common_config_rs
     _custom_patch_brand_files
     _custom_patch_sciter_ui_text
     _custom_patch_portable_working_dir
