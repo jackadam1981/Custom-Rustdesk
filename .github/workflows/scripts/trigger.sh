@@ -30,6 +30,7 @@ _extract_workflow_dispatch_params() {
     echo "RS_PUB_KEY=\"$(echo "$event_data" | jq -r '.inputs.rs_pub_key // empty')\""
     echo "API_SERVER=\"$(echo "$event_data" | jq -r '.inputs.api_server // empty')\""
     echo "LOCK_NETWORK_SETTINGS=\"$(echo "$event_data" | jq -r '.inputs.lock_network_settings // "false"')\""
+    echo "HIDE_NETWORK_SETTINGS=\"$(echo "$event_data" | jq -r '.inputs.hide_network_settings // "false"')\""
     echo "SOURCE_PATCH_DEBUG=\"$(echo "$event_data" | jq -r '.inputs.source_patch_debug // .inputs.enable_debug // "false"')\""
 }
 
@@ -111,6 +112,8 @@ _extract_issue_params() {
     debug "log" "Extracted api_server: '$api_server'"
     local lock_network_settings=$(_extract_issue_value "$issue_body" "lock_network_settings")
     debug "log" "Extracted lock_network_settings: '$lock_network_settings'"
+    local hide_network_settings=$(_extract_issue_value "$issue_body" "hide_network_settings")
+    debug "log" "Extracted hide_network_settings: '$hide_network_settings'"
     local source_patch_debug=$(_extract_issue_value "$issue_body" "source_patch_debug")
     if [ -z "$source_patch_debug" ]; then
         source_patch_debug=$(_extract_issue_value "$issue_body" "debug_source_patcher")
@@ -131,6 +134,7 @@ _extract_issue_params() {
     echo "RS_PUB_KEY=\"$rs_pub_key\""
     echo "API_SERVER=\"$api_server\""
     echo "LOCK_NETWORK_SETTINGS=\"$lock_network_settings\""
+    echo "HIDE_NETWORK_SETTINGS=\"$hide_network_settings\""
     echo "SOURCE_PATCH_DEBUG=\"$source_patch_debug\""
 }
 
@@ -154,6 +158,7 @@ _apply_default_values() {
         local rs_pub_key=$(echo "$event_data" | jq -r '.inputs.rs_pub_key // empty')
         local api_server=$(echo "$event_data" | jq -r '.inputs.api_server // empty')
         local lock_network_settings=$(echo "$event_data" | jq -r '.inputs.lock_network_settings // "false"')
+        local hide_network_settings=$(echo "$event_data" | jq -r '.inputs.hide_network_settings // "false"')
         local source_patch_debug=$(echo "$event_data" | jq -r '.inputs.source_patch_debug // .inputs.enable_debug // "false"')
     else
         local tag="$TAG"
@@ -169,6 +174,7 @@ _apply_default_values() {
         local rs_pub_key="$RS_PUB_KEY"
         local api_server="$API_SERVER"
         local lock_network_settings="${LOCK_NETWORK_SETTINGS:-false}"
+        local hide_network_settings="${HIDE_NETWORK_SETTINGS:-false}"
         local source_patch_debug="${SOURCE_PATCH_DEBUG:-false}"
     fi
     
@@ -185,6 +191,7 @@ _apply_default_values() {
     echo "RS_PUB_KEY=\"${rs_pub_key:-${DEFAULT_RS_PUB_KEY:-}}\""
     echo "API_SERVER=\"${api_server:-${DEFAULT_API_SERVER:-}}\""
     echo "LOCK_NETWORK_SETTINGS=\"${lock_network_settings:-false}\""
+    echo "HIDE_NETWORK_SETTINGS=\"${hide_network_settings:-false}\""
     echo "SOURCE_PATCH_DEBUG=\"${source_patch_debug:-false}\""
 }
 
@@ -235,6 +242,7 @@ _generate_final_data() {
         local rs_pub_key=$(echo "$event_data" | jq -r '.inputs.rs_pub_key // empty')
         local api_server=$(echo "$event_data" | jq -r '.inputs.api_server // empty')
         local lock_network_settings=$(echo "$event_data" | jq -r '.inputs.lock_network_settings // "false"')
+        local hide_network_settings=$(echo "$event_data" | jq -r '.inputs.hide_network_settings // "false"')
         local source_patch_debug=$(echo "$event_data" | jq -r '.inputs.source_patch_debug // .inputs.enable_debug // "false"')
         local trigger_type="workflow_dispatch"
         local issue_number="null"
@@ -252,6 +260,7 @@ _generate_final_data() {
         local rs_pub_key="$RS_PUB_KEY"
         local api_server="$API_SERVER"
         local lock_network_settings="${LOCK_NETWORK_SETTINGS:-false}"
+        local hide_network_settings="${HIDE_NETWORK_SETTINGS:-false}"
         local source_patch_debug="${SOURCE_PATCH_DEBUG:-false}"
         local trigger_type="issue"
         local issue_number=$(echo "$event_data" | jq -r '.issue.number // empty')
@@ -275,8 +284,9 @@ _generate_final_data() {
         --arg rs_pub_key "$rs_pub_key" \
         --arg api_server "$api_server" \
         --arg lock_network_settings "${lock_network_settings:-false}" \
+        --arg hide_network_settings "${hide_network_settings:-false}" \
         --arg source_patch_debug "${source_patch_debug:-false}" \
-        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, app_name: $app_name, customer: $customer, customer_link: $customer_link, logo_url: $logo_url, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, relay_server: $relay_server, rs_pub_key: $rs_pub_key, api_server: $api_server, lock_network_settings: $lock_network_settings, source_patch_debug: $source_patch_debug}}')
+        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, app_name: $app_name, customer: $customer, customer_link: $customer_link, logo_url: $logo_url, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, relay_server: $relay_server, rs_pub_key: $rs_pub_key, api_server: $api_server, lock_network_settings: $lock_network_settings, hide_network_settings: $hide_network_settings, source_patch_debug: $source_patch_debug}}')
     
     debug "var" "Generated JSON data" "$data"
     echo "$data"

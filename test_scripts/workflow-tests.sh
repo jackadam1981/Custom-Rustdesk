@@ -279,6 +279,50 @@ pub static T: &[(&str, &str)] = &[
 ];
 EOF
     mkdir -p "$tmp_dir/flutter/lib/desktop/pages" "$tmp_dir/flutter/lib" "$tmp_dir/src/ui"
+    cat > "$tmp_dir/flutter/lib/desktop/pages/desktop_home_page.dart" <<'EOF'
+final children = <Widget>[
+  if (bind.isCustomClient())
+    Align(
+      alignment: Alignment.center,
+      child: loadPowered(context),
+    ),
+  Align(
+    alignment: Alignment.center,
+    child: loadLogo(),
+  ),
+  buildTip(context),
+];
+Widget buildTip(BuildContext context) {
+  return Column(
+    children: [
+      Text(
+        translate("desk_tip"),
+        overflow: TextOverflow.clip,
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+    ],
+  );
+}
+EOF
+    cat > "$tmp_dir/flutter/lib/desktop/pages/connection_page.dart" <<'EOF'
+  Widget build(BuildContext context) {
+    final isOutgoingOnly = bind.isOutgoingOnly();
+    return Column(
+      children: [
+        Expanded(
+            child: Column(
+          children: [
+            Row(
+              children: [
+                Flexible(child: _buildRemoteIDTextField(context)),
+              ],
+            ).marginOnly(top: 22),
+          ],
+        ).paddingOnly(left: 12.0)),
+      ],
+    );
+  }
+EOF
     cat > "$tmp_dir/flutter/lib/desktop/pages/desktop_setting_page.dart" <<'EOF'
                         children: [
                           Text(
@@ -313,6 +357,14 @@ Widget loadPowered(BuildContext context) {
 EOF
     cat > "$tmp_dir/src/ui/index.tis" <<'EOF'
 {is_custom_client && handler.get_builtin_option("hide-powered-by-me") != "Y" ? <div .link #powered-by style="opacity:0.5;font-size:0.8em;text-decoration:underline">{translate('powered_by_me')}</div> : ""}
+<div .lighter-text>{outgoing_only ? translate('outgoing_only_desk_tip') : translate('desk_tip')}</div>
+{!incoming_only && <div .right-pane>
+    <div .right-content>
+        <div .card-connect>
+            <div .title>{translate('Control Remote Desktop')}</div>
+        </div>
+    </div>
+</div>}
 event click $(#powered-by) {
     handler.open_url("https://rustdesk.com");
 }
@@ -441,16 +493,37 @@ EOF
         grep -q 'description = "FixtureApp Remote Desktop"' libs/portable/Cargo.toml
         grep -q 'ProductName = "FixtureApp"' libs/portable/Cargo.toml
         grep -q 'FileDescription = "FixtureApp Remote Desktop"' libs/portable/Cargo.toml
-        grep -q '由 RustDesk 提供支持' src/lang/cn.rs
-        grep -q 'Powered by RustDesk' src/lang/en.rs
+        grep -q '由FixtureCustomer提供支持' src/lang/cn.rs
+        grep -q 'Powered by FixtureCustomer' src/lang/en.rs
+        grep -q 'custom-customer-name' src/common.rs
+        grep -q 'custom-customer-name' libs/hbb_common/src/config.rs
         grep -q 'CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION' flutter/lib/desktop/pages/desktop_setting_page.dart
-        grep -q 'FixtureCustomer' flutter/lib/desktop/pages/desktop_setting_page.dart
-        grep -q 'https://fixture.example' flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q "translate('custom_studio_attribution')" flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q 'custom-customer-link' flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q 'studio-about' src/ui/index.tis
-        grep -q 'FixtureCustomer' src/ui/index.tis
-        grep -q 'https://fixture.example' src/ui/index.tis
-        ! grep -q 'FixtureCustomer' flutter/lib/common.dart
-        ! grep -q 'studio-by' src/ui/index.tis
+        grep -q 'translate("custom_studio_attribution")' src/ui/index.tis
+        grep -q 'custom-customer-link' src/ui/index.tis
+        grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'custom-customer-name' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/connection_page.dart
+        grep -q 'CUSTOM_RUSTDESK_POWERED_LINK' flutter/lib/common.dart
+        grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' src/ui/index.tis
+        grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' src/ui/index.tis
+        grep -q 'custom-customer-name' src/ui/index.tis
+        grep -q 'fontSize: bind.isCustomClient() ? 12 : 9' flutter/lib/common.dart
+        grep -q 'font-size:1em' src/ui/index.tis
+        ! grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
+        python3 - src/ui/index.tis <<'PY'
+import sys
+from pathlib import Path
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+marker = "<!-- CUSTOM_RUSTDESK_HOME_POWERED -->"
+card = "<div .card-connect>"
+if text.find(marker) == -1 or text.find(card) == -1 or text.find(marker) > text.find(card):
+    raise SystemExit(1)
+PY
+        ! grep -q 'SizedBox.shrink()' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'else ...\[' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'https://rustdesk.com' flutter/lib/common.dart
         grep -q 'https://rustdesk.com' src/ui/index.tis
         grep -q 'let current_dir = path.parent().map(|dir| dir.to_path_buf());' libs/portable/src/main.rs
@@ -476,6 +549,90 @@ EOF
 
     rm -rf "$tmp_dir"
     record_test_result "source_patcher_applies_to_fixture_tree" "FAIL" "源码 patch 脚本未正确修改 fixture 源码树"
+    return 1
+}
+
+function test_hide_network_settings_is_wired() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local trigger=".github/workflows/scripts/trigger.sh"
+
+    if grep -q 'hide_network_settings:' "$WORKFLOW_FILE" &&
+       grep -q 'BUILD_HIDE_NETWORK_SETTINGS' "$WORKFLOW_FILE" &&
+       grep -q 'hide_network_settings' "$trigger" &&
+       grep -q 'HIDE_NETWORK_SETTINGS' "$trigger" &&
+       grep -q 'BUILD_HIDE_NETWORK_SETTINGS' "$patcher" &&
+       grep -q 'hide-server-settings' "$patcher" &&
+       grep -q 'hide-network-settings' "$patcher"; then
+        record_test_result "hide_network_settings_is_wired" "PASS" "hide_network_settings 从 Issue 变量贯通到源码 patch"
+        return 0
+    fi
+
+    record_test_result "hide_network_settings_is_wired" "FAIL" "hide_network_settings 应贯通 trigger、workflow 与 source-patcher"
+    return 1
+}
+
+function test_source_patcher_hide_network_settings_writes_builtin_flags() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    mkdir -p "$tmp_dir/src" "$tmp_dir/libs/hbb_common/src" "$tmp_dir/.github/workflows/scripts"
+    cat > "$tmp_dir/src/common.rs" <<'EOF'
+pub fn load_custom_client() {
+}
+
+pub fn get_custom_rendezvous_server(custom: String) -> String {
+    custom
+}
+
+pub fn get_api_server(api: String, custom: String) -> String {
+    api
+}
+
+fn read_custom_client_advanced_settings() {}
+EOF
+    cat > "$tmp_dir/libs/hbb_common/src/config.rs" <<'EOF'
+impl Config {
+    pub fn get_options() -> HashMap<String, String> {
+        HashMap::new()
+    }
+
+    pub fn get_option(k: &str) -> String {
+        String::new()
+    }
+
+    pub fn get_rendezvous_servers() -> Vec<String> {
+        vec![]
+    }
+}
+EOF
+    cat > "$tmp_dir/.github/workflows/flutter-build.yml" <<'EOF'
+env:
+  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+EOF
+
+    if (
+        set -e
+        export BUILD_APP_NAME="FixtureApp"
+        export BUILD_CUSTOMER="FixtureCustomer"
+        export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21117"
+        export BUILD_RS_PUB_KEY="fixture-public-key"
+        export BUILD_HIDE_NETWORK_SETTINGS="true"
+        source "$patcher"
+        cd "$tmp_dir"
+        apply_custom_source_patches
+        grep -q 'hide-server-settings' src/common.rs
+        grep -q 'hide-network-settings' src/common.rs
+        grep -q 'const CUSTOM_HIDE_NETWORK_SETTINGS: &str = "Y";' src/common.rs
+        grep -q '"hide-server-settings" | "hide-network-settings"' libs/hbb_common/src/config.rs
+    ); then
+        rm -rf "$tmp_dir"
+        record_test_result "source_patcher_hide_network_settings_writes_builtin_flags" "PASS" "hide_network_settings=true 写入 hide-server/network-settings"
+        return 0
+    fi
+
+    rm -rf "$tmp_dir"
+    record_test_result "source_patcher_hide_network_settings_writes_builtin_flags" "FAIL" "hide_network_settings=true 应写入内置 hide-server/network-settings"
     return 1
 }
 
@@ -545,7 +702,7 @@ EOF
 function test_issue_params_preserve_issue_supplied_patch_variables() {
     local trigger=".github/workflows/scripts/trigger.sh"
     local event_data
-    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloud\napp_name: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nlogo_url: https://assets.example.com/logo.png\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true\nsource_patch_debug: true' '{issue:{number:123, body:$body}}')
+    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloud\napp_name: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nlogo_url: https://assets.example.com/logo.png\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true\nhide_network_settings: true\nsource_patch_debug: true' '{issue:{number:123, body:$body}}')
 
     if (
         set -e
@@ -558,13 +715,14 @@ function test_issue_params_preserve_issue_supplied_patch_variables() {
         echo "$extracted" | grep -q 'RS_PUB_KEY="dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI="'
         echo "$extracted" | grep -q 'SLOGAN="Powered by OneCloud Desk"'
         echo "$extracted" | grep -q 'LOCK_NETWORK_SETTINGS="true"'
+        echo "$extracted" | grep -q 'HIDE_NETWORK_SETTINGS="true"'
         echo "$extracted" | grep -q 'SOURCE_PATCH_DEBUG="true"'
     ); then
         record_test_result "issue_params_preserve_issue_supplied_patch_variables" "PASS" "Issue 变量保留完整 key、空格和网络锁定项"
         return 0
     fi
 
-    record_test_result "issue_params_preserve_issue_supplied_patch_variables" "FAIL" "Issue 参数解析不应截断 rs_pub_key、slogan 或 lock_network_settings"
+    record_test_result "issue_params_preserve_issue_supplied_patch_variables" "FAIL" "Issue 参数解析不应截断 rs_pub_key、slogan、lock_network_settings 或 hide_network_settings"
     return 1
 }
 
@@ -824,7 +982,9 @@ function run_workflow_tests() {
     test_source_patcher_is_invoked || failed=1
     test_source_patcher_covers_server_key_and_brand || failed=1
     test_source_patch_debug_switch_is_wired || failed=1
+    test_hide_network_settings_is_wired || failed=1
     test_source_patcher_applies_to_fixture_tree || failed=1
+    test_source_patcher_hide_network_settings_writes_builtin_flags || failed=1
     test_source_patcher_lock_network_settings_matches_historical_defaults || failed=1
     test_issue_params_preserve_issue_supplied_patch_variables || failed=1
     test_api_server_is_optional_for_plain_hbbs_hbbr || failed=1

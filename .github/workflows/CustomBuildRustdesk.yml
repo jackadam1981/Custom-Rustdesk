@@ -57,7 +57,11 @@ on:
         required: false
         default: ''
       lock_network_settings:
-        description: '锁定网络配置：true=写入硬设置并隐藏设置入口，false=允许显示网络设置'
+        description: '锁定网络配置：true=写入硬设置并禁止修改全部设置项，false=允许用户修改设置'
+        required: false
+        default: 'false'
+      hide_network_settings:
+        description: '隐藏网络设置：true=隐藏 ID/中继 菜单与设置页网络选项，false=显示网络设置'
         required: false
         default: 'false'
       enable_debug:
@@ -510,6 +514,7 @@ jobs:
           export BUILD_RS_PUB_KEY="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rs_pub_key // empty')"
           export BUILD_API_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.api_server // empty')"
           export BUILD_LOCK_NETWORK_SETTINGS="$(echo "$TRIGGER_DATA" | jq -r '.build_params.lock_network_settings // "false"')"
+          export BUILD_HIDE_NETWORK_SETTINGS="$(echo "$TRIGGER_DATA" | jq -r '.build_params.hide_network_settings // "false"')"
           export BUILD_SOURCE_PATCH_DEBUG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.source_patch_debug // "false"')"
           
           # 创建构建配置文件
@@ -529,6 +534,7 @@ jobs:
             "rs_pub_key": "$BUILD_RS_PUB_KEY",
             "api_server": "$BUILD_API_SERVER",
             "lock_network_settings": "$BUILD_LOCK_NETWORK_SETTINGS",
+            "hide_network_settings": "$BUILD_HIDE_NETWORK_SETTINGS",
             "source_patch_debug": "$BUILD_SOURCE_PATCH_DEBUG",
             "build_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }

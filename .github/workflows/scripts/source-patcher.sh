@@ -118,14 +118,20 @@ _custom_patch_common_rs() {
     _custom_trace_file_match "before" "$file" "get_api_server entry" 'pub fn get_api_server\('
     _custom_trace_file_match "before" "$file" "existing custom/default settings references" 'BUILTIN_SETTINGS|DEFAULT_SETTINGS|OVERWRITE_SETTINGS|RENDEZVOUS|RS_PUB_KEY'
 
-    local app_name_json slogan_json customer_link_json rendezvous_json relay_json api_json key_json register_device_json
+    local app_name_json slogan_json customer_link_json customer_name_json rendezvous_json relay_json api_json key_json register_device_json hide_network_json
     app_name_json=$(_custom_json_string "$CUSTOM_APP_NAME")
     slogan_json=$(_custom_json_string "$CUSTOM_SLOGAN")
     customer_link_json=$(_custom_json_string "$CUSTOM_CUSTOMER_LINK")
+    customer_name_json=$(_custom_json_string "${CUSTOM_CUSTOMER:-定制客户}")
     rendezvous_json=$(_custom_json_string "$CUSTOM_RENDEZVOUS_SERVER")
     relay_json=$(_custom_json_string "$CUSTOM_RELAY_SERVER")
     api_json=$(_custom_json_string "$CUSTOM_API_SERVER")
     key_json=$(_custom_json_string "$CUSTOM_RS_PUB_KEY")
+    if [ "${CUSTOM_HIDE_NETWORK_SETTINGS:-false}" = "true" ]; then
+        hide_network_json=$(_custom_json_string "Y")
+    else
+        hide_network_json=$(_custom_json_string "")
+    fi
     if [ -z "$CUSTOM_API_SERVER" ]; then
         register_device_json=$(_custom_json_string "N")
     else
@@ -155,11 +161,13 @@ pub fn apply_custom_build_defaults() {
     const CUSTOM_APP_NAME: &str = $app_name_json;
     const CUSTOM_SLOGAN: &str = $slogan_json;
     const CUSTOM_CUSTOMER_LINK: &str = $customer_link_json;
+    const CUSTOM_CUSTOMER_NAME: &str = $customer_name_json;
     const CUSTOM_RENDEZVOUS_SERVER: &str = $rendezvous_json;
     const CUSTOM_RELAY_SERVER: &str = $relay_json;
     const CUSTOM_API_SERVER: &str = $api_json;
     const CUSTOM_RS_PUB_KEY: &str = $key_json;
     const CUSTOM_REGISTER_DEVICE: &str = $register_device_json;
+    const CUSTOM_HIDE_NETWORK_SETTINGS: &str = $hide_network_json;
 
     if !CUSTOM_APP_NAME.is_empty() {
         *config::APP_NAME.write().unwrap() = CUSTOM_APP_NAME.to_owned();
@@ -175,6 +183,9 @@ pub fn apply_custom_build_defaults() {
         ("key", CUSTOM_RS_PUB_KEY),
         ("custom-slogan", CUSTOM_SLOGAN),
         ("custom-customer-link", CUSTOM_CUSTOMER_LINK),
+        ("custom-customer-name", CUSTOM_CUSTOMER_NAME),
+        ("hide-server-settings", CUSTOM_HIDE_NETWORK_SETTINGS),
+        ("hide-network-settings", CUSTOM_HIDE_NETWORK_SETTINGS),
     ];
 
     {
@@ -256,7 +267,7 @@ _custom_patch_hbb_common_config_rs() {
     _custom_trace_file_match "before" "$file" "Config::get_option entry" 'pub fn get_option\('
     _custom_trace_file_match "before" "$file" "upstream/default option sources" 'RENDEZVOUS_SERVERS|RS_PUB_KEY|DEFAULT_SETTINGS|OVERWRITE_SETTINGS'
 
-    local rendezvous_json relay_json api_json key_json register_device_json app_name_json slogan_json customer_link_json
+    local rendezvous_json relay_json api_json key_json register_device_json app_name_json slogan_json customer_link_json customer_name_json hide_network_json
     rendezvous_json=$(_custom_json_string "$CUSTOM_RENDEZVOUS_SERVER")
     relay_json=$(_custom_json_string "$CUSTOM_RELAY_SERVER")
     api_json=$(_custom_json_string "$CUSTOM_API_SERVER")
@@ -264,6 +275,12 @@ _custom_patch_hbb_common_config_rs() {
     app_name_json=$(_custom_json_string "$CUSTOM_APP_NAME")
     slogan_json=$(_custom_json_string "$CUSTOM_SLOGAN")
     customer_link_json=$(_custom_json_string "$CUSTOM_CUSTOMER_LINK")
+    customer_name_json=$(_custom_json_string "${CUSTOM_CUSTOMER:-定制客户}")
+    if [ "${CUSTOM_HIDE_NETWORK_SETTINGS:-false}" = "true" ]; then
+        hide_network_json=$(_custom_json_string "Y")
+    else
+        hide_network_json=$(_custom_json_string "")
+    fi
     if [ -z "$CUSTOM_API_SERVER" ]; then
         register_device_json=$(_custom_json_string "N")
     else
@@ -279,11 +296,13 @@ fn custom_build_default_option(k: &str) -> Option<&'static str> {
     const CUSTOM_APP_NAME: &str = $app_name_json;
     const CUSTOM_SLOGAN: &str = $slogan_json;
     const CUSTOM_CUSTOMER_LINK: &str = $customer_link_json;
+    const CUSTOM_CUSTOMER_NAME: &str = $customer_name_json;
     const CUSTOM_RENDEZVOUS_SERVER: &str = $rendezvous_json;
     const CUSTOM_RELAY_SERVER: &str = $relay_json;
     const CUSTOM_API_SERVER: &str = $api_json;
     const CUSTOM_RS_PUB_KEY: &str = $key_json;
     const CUSTOM_REGISTER_DEVICE: &str = $register_device_json;
+    const CUSTOM_HIDE_NETWORK_SETTINGS: &str = $hide_network_json;
 
     let value = match k {
         "app-name" => CUSTOM_APP_NAME,
@@ -294,6 +313,8 @@ fn custom_build_default_option(k: &str) -> Option<&'static str> {
         "key" => CUSTOM_RS_PUB_KEY,
         "custom-slogan" => CUSTOM_SLOGAN,
         "custom-customer-link" => CUSTOM_CUSTOMER_LINK,
+        "custom-customer-name" => CUSTOM_CUSTOMER_NAME,
+        "hide-server-settings" | "hide-network-settings" => CUSTOM_HIDE_NETWORK_SETTINGS,
         _ => "",
     };
     if value.is_empty() {
@@ -315,6 +336,9 @@ fn custom_build_default_options() -> HashMap<String, String> {
         ("key", custom_build_default_option("key")),
         ("custom-slogan", custom_build_default_option("custom-slogan")),
         ("custom-customer-link", custom_build_default_option("custom-customer-link")),
+        ("custom-customer-name", custom_build_default_option("custom-customer-name")),
+        ("hide-server-settings", custom_build_default_option("hide-server-settings")),
+        ("hide-network-settings", custom_build_default_option("hide-network-settings")),
     ] {
         if let Some(value) = value {
             options.insert(key.to_owned(), value.to_owned());
@@ -459,6 +483,24 @@ def save_png(path, size):
     path.parent.mkdir(parents=True, exist_ok=True)
     square_canvas(image.copy(), size).save(path)
 
+def save_fit_png(path, max_width, max_height):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    banner = image.copy()
+    banner.thumbnail((max_width, max_height), Image.LANCZOS)
+    banner.save(path)
+
+for target in (
+    Path("flutter/assets/logo.png"),
+    Path("res/logo.png"),
+):
+    save_fit_png(target, 300, 60)
+
+for target in (
+    Path("flutter/assets/icon.png"),
+    Path("res/icon.png"),
+):
+    save_png(target, 256)
+
 windows_icon = Path("flutter/windows/runner/resources/app_icon.ico")
 if windows_icon.exists():
     windows_icon.parent.mkdir(parents=True, exist_ok=True)
@@ -502,56 +544,262 @@ PY
     rm -rf "$work_dir"
 }
 
-_custom_patch_sciter_ui_text() {
-    local studio_text="由郑州熵能科技工作室为${CUSTOM_CUSTOMER:-定制客户}倾情打造。"
+_custom_sciter_logo_img_markup() {
+    if [ ! -f "res/logo.png" ]; then
+        return 0
+    fi
+
+    python3 - <<'PY'
+import base64
+from pathlib import Path
+
+data = base64.b64encode(Path("res/logo.png").read_bytes()).decode("ascii")
+print(
+    '<img src="data:image/png;base64,' + data + '" '
+    'style="max-width:300px;max-height:60px;margin:0 auto 0.25em auto;display:block" /> '
+    '<!-- CUSTOM_RUSTDESK_HOME_LOGO -->'
+)
+PY
+}
+
+_custom_sciter_custom_brand_block() {
+    local logo_markup=""
+
+    if [ -f "res/logo.png" ]; then
+        logo_markup=$(_custom_sciter_logo_img_markup)
+    fi
+
+    if [ -n "$logo_markup" ]; then
+        printf '%s' "{is_custom_client ? <div #custom-brand style=\"text-align:center;margin-bottom:0.35em\">${logo_markup}<div style=\"font-size:1.1em;font-weight:bold\">{handler.get_builtin_option(\"custom-customer-name\")}</div></div> : \"\"} <!-- CUSTOM_RUSTDESK_HOME_HEADER -->"
+    else
+        printf '%s' '{is_custom_client ? <div #custom-brand style="text-align:center;margin-bottom:0.35em;font-size:1.1em;font-weight:bold">{handler.get_builtin_option("custom-customer-name")}</div> : ""} <!-- CUSTOM_RUSTDESK_HOME_HEADER -->'
+    fi
+}
+
+_custom_patch_sciter_home_ui() {
+    local index_file="src/ui/index.tis"
+
+    if [ ! -f "$index_file" ]; then
+        return 0
+    fi
+
+    local brand_file=""
+    brand_file=$(mktemp)
+    _custom_sciter_custom_brand_block > "$brand_file"
+
+    python3 - "$index_file" "$brand_file" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+brand = Path(sys.argv[2]).read_text(encoding="utf-8")
+text = path.read_text(encoding="utf-8")
+
+powered_block = (
+    '{is_custom_client && handler.get_builtin_option("hide-powered-by-me") != "Y" '
+    '? <div .link #powered-by style="opacity:0.85;font-size:1em;text-decoration:underline;'
+    'margin-bottom:0.4em">{translate(\'powered_by_me\')}</div> : ""} '
+    '<!-- CUSTOM_RUSTDESK_HOME_POWERED -->'
+)
+plain_tip = (
+    "<div .lighter-text>{outgoing_only ? translate('outgoing_only_desk_tip') "
+    ": translate('desk_tip')}</div>"
+)
+wrong_tip = plain_tip + (
+    '{is_custom_client && handler.get_builtin_option("hide-powered-by-me") != "Y" '
+    '? <div .link #powered-by style="opacity:0.85;font-size:1em;text-decoration:underline;'
+    'margin-top:0.4em">{translate(\'powered_by_me\')}</div> : ""} '
+    '<!-- CUSTOM_RUSTDESK_HOME_POWERED -->'
+)
+old_header = (
+    '{is_custom_client && handler.get_builtin_option("hide-powered-by-me") != "Y" '
+    '? <div .link #powered-by style="opacity:0.5;font-size:0.8em;text-decoration:underline">'
+    "{translate('powered_by_me')}</div> : \"\"}"
+)
+old_click = 'event click $(#powered-by) {\n    handler.open_url("https://rustdesk.com");\n}'
+new_click = (
+    'event click $(#powered-by) { var link = handler.get_builtin_option("custom-customer-link"); '
+    'handler.open_url(link && link.length ? link : "https://rustdesk.com"); }'
+)
+right_anchor = (
+    "{!incoming_only && <div .right-pane>\n"
+    "                    <div .right-content>\n"
+    "                        <div .card-connect>"
+)
+right_with_powered = (
+    "{!incoming_only && <div .right-pane>\n"
+    "                    <div .right-content>\n"
+    "                        " + powered_block + "\n"
+    "                        <div .card-connect>"
+)
+text_only_brand = (
+    '{is_custom_client ? <div #custom-brand style="text-align:center;margin-bottom:0.35em;'
+    'font-size:1.1em;font-weight:bold">{handler.get_builtin_option("custom-customer-name")}'
+    '</div> : ""} <!-- CUSTOM_RUSTDESK_HOME_HEADER -->'
+)
+
+changed = False
+
+if old_header in text:
+    text = text.replace(old_header, brand, 1)
+    changed = True
+elif text_only_brand in text and brand != text_only_brand:
+    text = text.replace(text_only_brand, brand, 1)
+    changed = True
+
+if wrong_tip in text:
+    text = text.replace(wrong_tip, plain_tip, 1)
+    changed = True
+
+if "<!-- CUSTOM_RUSTDESK_HOME_POWERED -->" not in text:
+    if right_anchor not in text:
+        raise SystemExit("source-patcher: missing sciter right-pane card-connect anchor")
+    text = text.replace(right_anchor, right_with_powered, 1)
+    changed = True
+elif powered_block not in text and "<!-- CUSTOM_RUSTDESK_HOME_POWERED -->" in text:
+    powered_pattern = re.compile(
+        r'\{is_custom_client && handler\.get_builtin_option\("hide-powered-by-me"\) != "Y" '
+        r'\? <div \.link #powered-by style="opacity:[^"]*;font-size:[^"]*;'
+        r'text-decoration:underline;[^"]*">\{translate\(\'powered_by_me\'\)\}</div> : ""\} '
+        r'<!-- CUSTOM_RUSTDESK_HOME_POWERED -->'
+    )
+    if right_anchor in text:
+        text = powered_pattern.sub("", text, count=1)
+        text = text.replace(right_anchor, right_with_powered, 1)
+        changed = True
+
+if old_click in text:
+    text = text.replace(old_click, new_click, 1)
+    changed = True
+
+if not changed and "<!-- CUSTOM_RUSTDESK_HOME_HEADER -->" not in text:
+    raise SystemExit("source-patcher: sciter home UI patch made no changes")
+
+path.write_text(text, encoding="utf-8")
+PY
+    rm -f "$brand_file"
+
+    if grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$index_file" &&
+       grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$index_file"; then
+        if grep -q "card-connect" "$index_file" &&
+           python3 - "$index_file" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+marker = "<!-- CUSTOM_RUSTDESK_HOME_POWERED -->"
+card = "<div .card-connect>"
+idx_powered = text.find(marker)
+idx_card = text.find(card)
+if idx_powered == -1 or idx_card == -1 or idx_powered > idx_card:
+    raise SystemExit(1)
+PY
+        then
+            if [ -f "res/logo.png" ] && grep -q "CUSTOM_RUSTDESK_HOME_LOGO" "$index_file"; then
+                echo "source-patcher: sciter home header with logo injected in $index_file"
+            else
+                echo "source-patcher: sciter home header injected in $index_file"
+            fi
+            echo "source-patcher: customer powered_by injected above Control Remote Desktop in $index_file"
+        else
+            echo "source-patcher: sciter powered_by marker is not above card-connect in $index_file" >&2
+            return 1
+        fi
+    else
+        echo "source-patcher: failed to inject sciter home UI in $index_file" >&2
+        return 1
+    fi
+}
+
+_custom_patch_custom_ui_text() {
+    local customer_name="${CUSTOM_CUSTOMER:-定制客户}"
     local customer_link="${CUSTOM_CUSTOMER_LINK:-https://zzsn.work}"
+    local studio_text="由郑州熵能科技工作室为${customer_name}倾情打造。"
+    local powered_by_cn="由${customer_name}提供支持"
+    local powered_by_en="Powered by ${customer_name}"
+    local studio_text_json powered_by_cn_json powered_by_en_json customer_link_json
     local about_file="flutter/lib/desktop/pages/desktop_setting_page.dart"
+    local home_file="flutter/lib/desktop/pages/desktop_home_page.dart"
+
+    studio_text_json=$(_custom_json_string "$studio_text")
+    powered_by_cn_json=$(_custom_json_string "$powered_by_cn")
+    powered_by_en_json=$(_custom_json_string "$powered_by_en")
+    customer_link_json=$(_custom_json_string "$customer_link")
+
+    if [ -f "src/lang/cn.rs" ]; then
+        perl -0pi -e "s/(\(\"powered_by_me\", )\"[^\"]*\"/\1$powered_by_cn_json/" "src/lang/cn.rs"
+        if ! grep -q 'custom_studio_attribution' "src/lang/cn.rs"; then
+            perl -0pi -e "s{(\(\"powered_by_me\", \"[^\"]*\"\),)}{\1\n        (\"custom_studio_attribution\", $studio_text_json),}" "src/lang/cn.rs"
+        fi
+    fi
+    if [ -f "src/lang/en.rs" ]; then
+        perl -0pi -e "s/(\(\"powered_by_me\", )\"[^\"]*\"/\1$powered_by_en_json/" "src/lang/en.rs"
+        if ! grep -q 'custom_studio_attribution' "src/lang/en.rs"; then
+            perl -0pi -e "s{(\(\"powered_by_me\", \"[^\"]*\"\),)}{\1\n        (\"custom_studio_attribution\", $studio_text_json),}" "src/lang/en.rs"
+        fi
+    fi
 
     if [ -f "$about_file" ] && ! grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file"; then
-        export CUSTOM_STUDIO_TEXT="$studio_text"
-        export CUSTOM_STUDIO_LINK="$customer_link"
-        perl -0pi -e '
-            s{
-                Text\(\n
-                \s*translate\('\''Slogan_tip'\''\),\n
-                \s*style: TextStyle\(\n
-                \s*fontWeight: FontWeight\.w800,\n
-                \s*color: Colors\.white\),\n
-                \s*\)\n
-                \s*\],
-            }{
-                          Text(
-                            translate('\''Slogan_tip'\''),
-                            style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white),
-                          ),
-                          // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION
-                          InkWell(
-                            onTap: () {
-                              launchUrlString('\''$ENV{CUSTOM_STUDIO_LINK}'\'');
-                            },
-                            child: Text(
-                              '\''$ENV{CUSTOM_STUDIO_TEXT}'\'',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  decoration: TextDecoration.underline),
-                            ),
-                          ),
-                        ],
-            }msx' "$about_file"
-        echo "source-patcher: studio attribution injected below Slogan_tip in $about_file"
+        perl -0pi -e "s{(translate\\('Slogan_tip'\\),\\n\\s*style: TextStyle\\(\\n\\s*fontWeight: FontWeight\\.w800,\\n\\s*color: Colors\\.white\\),\\n\\s*\\))}{\$1,\\n                          // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION\\n                          InkWell(\\n                            onTap: () {\\n                              final link = bind.mainGetBuildinOption(key: \"custom-customer-link\");\\n                              if (link.isNotEmpty) launchUrlString(link);\\n                            },\\n                            child: Text(\\n                              translate('custom_studio_attribution'),\\n                              style: const TextStyle(\\n                                  fontWeight: FontWeight.w800,\\n                                  fontSize: 13,\\n                                  color: Colors.white,\\n                                  decoration: TextDecoration.underline),\\n                            ),\\n                          )}" "$about_file"
+        if grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file"; then
+            echo "source-patcher: studio attribution injected below Slogan_tip in $about_file"
+        else
+            echo "source-patcher: failed to inject studio attribution in $about_file" >&2
+            return 1
+        fi
     fi
 
     if [ -f "src/ui/index.tis" ] && ! grep -q "studio-about" "src/ui/index.tis"; then
-        export CUSTOM_STUDIO_TEXT="$studio_text"
-        export CUSTOM_STUDIO_LINK="$customer_link"
-        perl -0pi -e '
-            s#<p style='\''font-weight: bold'\''>" \+ translate\("Slogan_tip"\) \+ "</p>\\#<p style='\''font-weight: bold'\''>" + translate("Slogan_tip") + "</p>\\
-            <p class='\''link custom-event studio-about'\'' style='\''font-weight: bold'\'' url='\''$ENV{CUSTOM_STUDIO_LINK}'\''>$ENV{CUSTOM_STUDIO_TEXT}</p>\\#g' "src/ui/index.tis"
-        echo "source-patcher: studio attribution injected below Slogan_tip in src/ui/index.tis"
+        perl -0pi -e "s#(<p style='font-weight: bold'>\" \\+ translate\\(\"Slogan_tip\"\\) \\+ \"</p>\\\\)#\$1\\n            <p class='link custom-event studio-about' style='font-weight: bold' url='\" + handler.get_builtin_option(\"custom-customer-link\") + \"'>\" + translate(\"custom_studio_attribution\") + \"</p>\\\\#g" "src/ui/index.tis"
+        if grep -q "studio-about" "src/ui/index.tis"; then
+            echo "source-patcher: studio attribution injected below Slogan_tip in src/ui/index.tis"
+        else
+            echo "source-patcher: failed to inject studio attribution in src/ui/index.tis" >&2
+            return 1
+        fi
     fi
+
+    if [ -f "$home_file" ] && ! grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file"; then
+        perl -0pi -e 's/if \(bind\.isCustomClient\(\)\)\s*Align\(\s*alignment: Alignment\.center,\s*child: loadPowered\(context\),\s*\),\s*Align\(\s*alignment: Alignment\.center,\s*child: loadLogo\(\),\s*\),/if (bind.isCustomClient())\n        Align(\n          alignment: Alignment.center,\n          child: Column(\n            mainAxisSize: MainAxisSize.min,\n            children: [\n              loadLogo(),\n              Text(\n                bind.mainGetBuildinOption(key: "custom-customer-name"),\n                style: Theme.of(context).textTheme.titleMedium,\n              ).marginOnly(top: 4),\n            ],\n          ),\n        ) \/\/ CUSTOM_RUSTDESK_HOME_HEADER\n      else ...[\n        Align(\n          alignment: Alignment.center,\n          child: loadPowered(context),\n        ),\n        Align(\n          alignment: Alignment.center,\n          child: loadLogo(),\n        ),\n      ],/s' "$home_file"
+        perl -0pi -e 's/if \(bind\.isCustomClient\(\)\)\s*Align\(\s*alignment: Alignment\.center,\s*child: bind\.isCustomClient\(\) \? SizedBox\.shrink\(\) : loadPowered\(context\),\s*\),\s*Align\(\s*alignment: Alignment\.center,\s*child: loadLogo\(\),\s*\),/if (bind.isCustomClient())\n        Align(\n          alignment: Alignment.center,\n          child: Column(\n            mainAxisSize: MainAxisSize.min,\n            children: [\n              loadLogo(),\n              Text(\n                bind.mainGetBuildinOption(key: "custom-customer-name"),\n                style: Theme.of(context).textTheme.titleMedium,\n              ).marginOnly(top: 4),\n            ],\n          ),\n        ) \/\/ CUSTOM_RUSTDESK_HOME_HEADER\n      else ...[\n        Align(\n          alignment: Alignment.center,\n          child: loadPowered(context),\n        ),\n        Align(\n          alignment: Alignment.center,\n          child: loadLogo(),\n        ),\n      ],/s' "$home_file"
+        if grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file"; then
+            echo "source-patcher: custom home header injected in $home_file"
+        else
+            echo "source-patcher: failed to inject custom home header in $home_file" >&2
+            return 1
+        fi
+    fi
+
+    if [ -f "$home_file" ] && grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$home_file"; then
+        perl -0pi -e 's/\n\s*if \(bind\.isCustomClient\(\) && bind\.mainGetBuildinOption\(key: "hide-powered-by-me"\) != '\''Y'\''\)\n\s*GestureDetector\([\s\S]*?\)\.marginOnly\(top: 4\), \/\/ CUSTOM_RUSTDESK_HOME_POWERED//g' "$home_file"
+        echo "source-patcher: removed misplaced customer powered_by from $home_file"
+    fi
+
+    local connection_file="flutter/lib/desktop/pages/connection_page.dart"
+    if [ -f "$connection_file" ] && ! grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$connection_file"; then
+        perl -0pi -e 's/(child: Column\(\n          children: \[\n)/$1            if (bind.isCustomClient())\n              Align(\n                alignment: Alignment.centerLeft,\n                child: loadPowered(context),\n              ).paddingOnly(left: 12, top: 12), \/\/ CUSTOM_RUSTDESK_HOME_POWERED\n/s' "$connection_file"
+        if grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$connection_file"; then
+            echo "source-patcher: customer powered_by injected above Control Remote Desktop in $connection_file"
+        else
+            echo "source-patcher: failed to inject customer powered_by in $connection_file" >&2
+            return 1
+        fi
+    fi
+
+    local common_file="flutter/lib/common.dart"
+    if [ -f "$common_file" ] && ! grep -q "CUSTOM_RUSTDESK_POWERED_LINK" "$common_file"; then
+        perl -0pi -e 's/onTap: \(\) \{\n          launchUrl\(Uri\.parse\('\''https:\/\/rustdesk\.com'\''\)\);\n        \},/onTap: () {\n          final poweredLink = bind.isCustomClient()\n              ? bind.mainGetBuildinOption(key: "custom-customer-link")\n              : "https:\/\/rustdesk.com";\n          if (poweredLink.isNotEmpty) launchUrl(Uri.parse(poweredLink)); // CUSTOM_RUSTDESK_POWERED_LINK\n        },/' "$common_file"
+        perl -0pi -e 's/\?\.copyWith\(fontSize: 9, decoration: TextDecoration\.underline\)/?.copyWith(\n                  fontSize: bind.isCustomClient() ? 12 : 9,\n                  decoration: TextDecoration.underline)/' "$common_file"
+        if grep -q "CUSTOM_RUSTDESK_POWERED_LINK" "$common_file"; then
+            echo "source-patcher: custom powered_by link wired in $common_file"
+        else
+            echo "source-patcher: failed to patch powered_by link in $common_file" >&2
+            return 1
+        fi
+    fi
+
+    _custom_patch_sciter_home_ui
 }
 
 _custom_patch_portable_working_dir() {
@@ -710,6 +958,19 @@ apply_custom_source_patches() {
             ;;
     esac
 
+    case "${BUILD_HIDE_NETWORK_SETTINGS:-false}" in
+        true|TRUE|True|1|yes|YES|y|Y|on|ON)
+            CUSTOM_HIDE_NETWORK_SETTINGS="true"
+            ;;
+        false|FALSE|False|0|no|NO|n|N|off|OFF|"")
+            CUSTOM_HIDE_NETWORK_SETTINGS="false"
+            ;;
+        *)
+            echo "source-patcher: unsupported hide_network_settings '${BUILD_HIDE_NETWORK_SETTINGS}'" >&2
+            return 1
+            ;;
+    esac
+
     CUSTOM_APP_NAME="${BUILD_APP_NAME:-${BUILD_CUSTOMER:-${BUILD_TAG:-CustomRustDesk}}}"
     CUSTOM_CUSTOMER="${BUILD_CUSTOMER:-定制客户}"
     CUSTOM_CUSTOMER_LINK="${BUILD_CUSTOMER_LINK:-https://zzsn.work}"
@@ -739,6 +1000,8 @@ apply_custom_source_patches() {
     _custom_trace_value "BUILD_RS_PUB_KEY" "$CUSTOM_RS_PUB_KEY"
     _custom_trace_value "BUILD_LOCK_NETWORK_SETTINGS(raw)" "${BUILD_LOCK_NETWORK_SETTINGS:-}"
     _custom_trace_value "CUSTOM_LOCK_SETTINGS(normalized)" "$CUSTOM_LOCK_SETTINGS"
+    _custom_trace_value "BUILD_HIDE_NETWORK_SETTINGS(raw)" "${BUILD_HIDE_NETWORK_SETTINGS:-}"
+    _custom_trace_value "CUSTOM_HIDE_NETWORK_SETTINGS(normalized)" "$CUSTOM_HIDE_NETWORK_SETTINGS"
     _custom_trace_value "BUILD_SOURCE_PATCH_DEBUG(raw)" "${BUILD_SOURCE_PATCH_DEBUG:-}"
     _custom_trace_value "CUSTOM_SOURCE_PATCH_DEBUG(normalized)" "$CUSTOM_SOURCE_PATCH_DEBUG"
     if _custom_patch_debug_enabled; then
@@ -759,6 +1022,7 @@ apply_custom_source_patches() {
         --arg rs_pub_key "$CUSTOM_RS_PUB_KEY" \
         --arg api_server "$CUSTOM_API_SERVER" \
         --arg lock_network_settings "$CUSTOM_LOCK_SETTINGS" \
+        --arg hide_network_settings "$CUSTOM_HIDE_NETWORK_SETTINGS" \
         --arg source_patch_debug "$CUSTOM_SOURCE_PATCH_DEBUG" \
         '{
             app_name: $app_name,
@@ -772,6 +1036,7 @@ apply_custom_source_patches() {
             rs_pub_key: $rs_pub_key,
             api_server: $api_server,
             lock_network_settings: ($lock_network_settings == "true"),
+            hide_network_settings: ($hide_network_settings == "true"),
             source_patch_debug: ($source_patch_debug == "true")
         }' > custom-build-config.json
 
@@ -779,7 +1044,7 @@ apply_custom_source_patches() {
     _custom_patch_hbb_common_config_rs
     _custom_patch_brand_files
     _custom_patch_logo_assets
-    _custom_patch_sciter_ui_text
+    _custom_patch_custom_ui_text
     _custom_patch_portable_working_dir
     _custom_patch_windows_test_signing
     _custom_patch_rust_cache_nonfatal

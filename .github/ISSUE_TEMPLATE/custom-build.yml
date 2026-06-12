@@ -23,6 +23,7 @@ body:
         rs_pub_key: 服务器公钥
         api_server: API 服务器地址（可选，没有 API 服务时留空）
         lock_network_settings: false
+        hide_network_settings: false
         source_patch_debug: false
         ```
 
@@ -45,6 +46,7 @@ body:
         rs_pub_key: xxxxx
         api_server:
         lock_network_settings: false
+        hide_network_settings: false
         source_patch_debug: false
     validations:
       required: false
