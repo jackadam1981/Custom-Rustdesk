@@ -47,15 +47,23 @@ $resolvedExe = Resolve-Path -LiteralPath $ExePath
 $startTime = Get-Date
 Write-Host "Launching $resolvedExe using $LaunchMode"
 if ($LaunchMode -eq "Explorer") {
-    & explorer.exe $resolvedExe
+    Start-Process -FilePath explorer.exe -ArgumentList @($resolvedExe.ProviderPath)
 } else {
     $process = Start-Process -FilePath $resolvedExe -PassThru
 }
 
-Start-Sleep -Seconds $WaitSeconds
+$deadline = (Get-Date).AddSeconds($WaitSeconds)
+$runningProcesses = @()
+do {
+    Start-Sleep -Seconds 1
+    $runningProcesses = @(Get-Process -Name "rustdesk", "RustDesk", "OneCloudDesk", "OneCloudDesk2" -ErrorAction SilentlyContinue)
+    $hasConfig = Test-Path -LiteralPath (Join-Path $env:APPDATA "OneCloudDesk\config\OneCloudDesk2.toml")
+    if ($runningProcesses.Count -gt 0 -or $hasConfig) {
+        break
+    }
+} while ((Get-Date) -lt $deadline)
 
 Write-Host "Processes:"
-$runningProcesses = @(Get-Process -Name "rustdesk", "RustDesk", "OneCloudDesk", "OneCloudDesk2" -ErrorAction SilentlyContinue)
 $runningProcesses |
     Select-Object ProcessName, Id, MainWindowTitle, Responding, Path |
     Format-Table -AutoSize
