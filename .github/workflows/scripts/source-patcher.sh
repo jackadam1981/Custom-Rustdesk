@@ -789,8 +789,8 @@ _custom_patch_custom_ui_text() {
 
     local common_file="flutter/lib/common.dart"
     if [ -f "$common_file" ] && ! grep -q "CUSTOM_RUSTDESK_POWERED_LINK" "$common_file"; then
-        perl -0pi -e 's/onTap: \(\) \{\n          launchUrl\(Uri\.parse\('\''https:\/\/rustdesk\.com'\''\)\);\n        \},/onTap: () {\n          final poweredLink = bind.isCustomClient()\n              ? bind.mainGetBuildinOption(key: "custom-customer-link")\n              : "https:\/\/rustdesk.com";\n          if (poweredLink.isNotEmpty) launchUrl(Uri.parse(poweredLink)); // CUSTOM_RUSTDESK_POWERED_LINK\n        },/' "$common_file"
-        perl -0pi -e 's/\?\.copyWith\(fontSize: 9, decoration: TextDecoration\.underline\)/?.copyWith(\n                  fontSize: bind.isCustomClient() ? 12 : 9,\n                  decoration: TextDecoration.underline)/' "$common_file"
+        perl -0pi -e 's~onTap: \(\) \{\n          launchUrl\(Uri\.parse\('\''https://rustdesk\.com'\''\)\);\n        \},~onTap: () {\n          final poweredLink = bind.isCustomClient()\n              ? bind.mainGetBuildinOption(key: "custom-customer-link")\n              : "https://rustdesk.com";\n          if (poweredLink.isNotEmpty) launchUrl(Uri.parse(poweredLink)); // CUSTOM_RUSTDESK_POWERED_LINK\n        },~' "$common_file"
+        perl -0pi -e 's~\?\.copyWith\(fontSize: 9, decoration: TextDecoration\.underline\)~?.copyWith(\n                  fontSize: bind.isCustomClient() ? 12 : 9,\n                  decoration: TextDecoration.underline)~' "$common_file"
         if grep -q "CUSTOM_RUSTDESK_POWERED_LINK" "$common_file"; then
             echo "source-patcher: custom powered_by link wired in $common_file"
         else
