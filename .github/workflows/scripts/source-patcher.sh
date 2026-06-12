@@ -1072,8 +1072,37 @@ _custom_patch_windows_test_signing() {
     perl -0pi -e 's{(BASE_URL=\$\{\{ env\.SIGN_BASE_URL \}\} SECRET_KEY=\$\{\{ secrets\.SIGN_SECRET_KEY \}\} python3 res/job\.py sign_files \./SignOutput/?\n)}{$1\n      - name: Sign packaged Windows artifacts with OneCloud test certificate\n        if: env.UPLOAD_ARTIFACT == '\''true'\'' && env.SIGN_BASE_URL == '\''-2'\'' && env.ONECLOUD_WINDOWS_SIGNING_ENABLED == '\''true'\''\n        shell: powershell\n        env:\n          ONECLOUD_WINDOWS_PFX_BASE64: \${{ secrets.ONECLOUD_WINDOWS_PFX_BASE64 }}\n          ONECLOUD_WINDOWS_PFX_PASSWORD: \${{ secrets.ONECLOUD_WINDOWS_PFX_PASSWORD }}\n        run: powershell -NoProfile -ExecutionPolicy Bypass -File .github/workflows/scripts/onecloud-windows-sign.ps1 -Path ./SignOutput\n}g' "$file"
 }
 
+_custom_write_msi_preprocess_script() {
+    local file=".github/workflows/scripts/msi-preprocess-prep.py"
+    mkdir -p "$(dirname "$file")"
+    cat > "$file" <<'EOF'
+#!/usr/bin/env python3
+import json
+import pathlib
+import shutil
+
+repo_root = pathlib.Path(__file__).resolve().parents[2]
+app_name = "RustDesk"
+config_path = repo_root / "custom-build-config.json"
+if config_path.exists():
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    app_name = (config.get("app_name") or app_name).strip() or app_name
+
+dist_dir = repo_root / "rustdesk"
+source_exe = dist_dir / "rustdesk.exe"
+target_exe = dist_dir / f"{app_name}.exe"
+if source_exe.exists() and source_exe != target_exe:
+    shutil.copy2(source_exe, target_exe)
+    source_exe.unlink()
+
+(repo_root / "target-msi-app-name.txt").write_text(app_name, encoding="utf-8")
+EOF
+}
+
 _custom_patch_flutter_msi_app_name() {
     local file=".github/workflows/flutter-build.yml"
+
+    _custom_write_msi_preprocess_script
 
     if [ ! -f "$file" ]; then
         echo "source-patcher: $file not found, skipping flutter MSI app-name patch"
@@ -1101,24 +1130,7 @@ old = """          pushd ./res/msi
 """
 new = """          pushd ./res/msi
           # CUSTOM_RUSTDESK_MSI_APP_NAME
-          python3 - <<'MSI_PREP'
-import json
-import pathlib
-import shutil
-
-app_name = "RustDesk"
-config_path = pathlib.Path("../../custom-build-config.json")
-if config_path.exists():
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    app_name = (config.get("app_name") or app_name).strip() or app_name
-dist_dir = pathlib.Path("../../rustdesk")
-source_exe = dist_dir / "rustdesk.exe"
-target_exe = dist_dir / f"{app_name}.exe"
-if source_exe.exists() and source_exe != target_exe:
-    shutil.copy2(source_exe, target_exe)
-    source_exe.unlink()
-pathlib.Path("../../target-msi-app-name.txt").write_text(app_name, encoding="utf-8")
-MSI_PREP
+          python3 ../../.github/workflows/scripts/msi-preprocess-prep.py
           app_name="$(cat ../../target-msi-app-name.txt)"
           rm -f ../../target-msi-app-name.txt
           python preprocess.py --arp -d ../../rustdesk --app-name "$app_name"

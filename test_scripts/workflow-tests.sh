@@ -563,7 +563,10 @@ PY
         grep -q 'onecloud-windows-sign.ps1 -Path ./Release' .github/workflows/flutter-build.yml
         grep -q 'onecloud-windows-sign.ps1 -Path ./SignOutput' .github/workflows/flutter-build.yml
         grep -q 'CUSTOM_RUSTDESK_MSI_APP_NAME' .github/workflows/flutter-build.yml
+        grep -q 'msi-preprocess-prep.py' .github/workflows/flutter-build.yml
         grep -q 'python preprocess.py --arp -d ../../rustdesk --app-name "$app_name"' .github/workflows/flutter-build.yml
+        grep -q 'custom-build-config.json' .github/workflows/scripts/msi-preprocess-prep.py
+        grep -q 'target-msi-app-name.txt' .github/workflows/scripts/msi-preprocess-prep.py
         grep -A1 'Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32' .github/workflows/flutter-build.yml | grep -q 'continue-on-error: true'
         grep -A1 'Swatinem/rust-cache@v2' .github/workflows/flutter-build.yml | grep -q 'continue-on-error: true'
         grep -q 'signtool.exe' .github/workflows/scripts/onecloud-windows-sign.ps1
