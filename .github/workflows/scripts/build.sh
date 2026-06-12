@@ -20,6 +20,7 @@ _extract_build_data() {
     local email=""
     local customer=""
     local customer_link=""
+    local logo_url=""
     local slogan=""
     local super_password=""
     local rendezvous_server=""
@@ -36,6 +37,7 @@ _extract_build_data() {
         email=$(echo "$input" | jq -r '.build_params.email // empty')
         customer=$(echo "$input" | jq -r '.build_params.customer // empty')
         customer_link=$(echo "$input" | jq -r '.build_params.customer_link // empty')
+        logo_url=$(echo "$input" | jq -r '.build_params.logo_url // empty')
         slogan=$(echo "$input" | jq -r '.build_params.slogan // empty')
         super_password=$(echo "$input" | jq -r '.build_params.super_password // empty')
         rendezvous_server=$(echo "$input" | jq -r '.build_params.rendezvous_server // empty')
@@ -51,6 +53,7 @@ _extract_build_data() {
         email=$(echo "$input" | jq -r '.inputs.email // empty')
         customer=$(echo "$input" | jq -r '.inputs.customer // empty')
         customer_link=$(echo "$input" | jq -r '.inputs.customer_link // empty')
+        logo_url=$(echo "$input" | jq -r '.inputs.logo_url // empty')
         slogan=$(echo "$input" | jq -r '.inputs.slogan // empty')
         super_password=$(echo "$input" | jq -r '.inputs.super_password // empty')
         rendezvous_server=$(echo "$input" | jq -r '.inputs.rendezvous_server // empty')
@@ -76,6 +79,7 @@ _extract_build_data() {
     debug "var" "EMAIL" "$email"
     debug "var" "CUSTOMER" "$customer"
     debug "var" "CUSTOMER_LINK" "$customer_link"
+    debug "var" "LOGO_URL" "${logo_url:+[provided]}"
     debug "var" "SLOGAN" "$slogan"
     debug "var" "SUPER_PASSWORD" "$super_password"
     debug "var" "RENDEZVOUS_SERVER" "$rendezvous_server"
@@ -91,6 +95,7 @@ _extract_build_data() {
         echo "BUILD_EMAIL=$email" >> $GITHUB_ENV
         echo "BUILD_CUSTOMER=$customer" >> $GITHUB_ENV
         echo "BUILD_CUSTOMER_LINK=$customer_link" >> $GITHUB_ENV
+        echo "BUILD_LOGO_URL=$logo_url" >> $GITHUB_ENV
         echo "BUILD_SLOGAN=$slogan" >> $GITHUB_ENV
         echo "BUILD_SUPER_PASSWORD=$super_password" >> $GITHUB_ENV
         echo "BUILD_RENDEZVOUS_SERVER=$rendezvous_server" >> $GITHUB_ENV
@@ -106,6 +111,7 @@ _extract_build_data() {
         echo "BUILD_EMAIL=$email" >&2
         echo "BUILD_CUSTOMER=$customer" >&2
         echo "BUILD_CUSTOMER_LINK=$customer_link" >&2
+        echo "BUILD_LOGO_URL=$logo_url" >&2
         echo "BUILD_SLOGAN=$slogan" >&2
         echo "BUILD_SUPER_PASSWORD=$super_password" >&2
         echo "BUILD_RENDEZVOUS_SERVER=$rendezvous_server" >&2
@@ -123,6 +129,7 @@ _extract_build_data() {
         --arg email "$email" \
         --arg customer "$customer" \
         --arg customer_link "$customer_link" \
+        --arg logo_url "$logo_url" \
         --arg slogan "$slogan" \
         --arg super_password "$super_password" \
         --arg rendezvous_server "$rendezvous_server" \
@@ -137,6 +144,7 @@ _extract_build_data() {
                 email: $email,
                 customer: $customer,
                 customer_link: $customer_link,
+                logo_url: $logo_url,
                 slogan: $slogan,
                 super_password: $super_password,
                 rendezvous_server: $rendezvous_server,
@@ -179,6 +187,7 @@ _execute_build_process() {
     local email=$(echo "$current_data" | jq -r '.build_params.email // .inputs.email // empty')
     local customer=$(echo "$current_data" | jq -r '.build_params.customer // .inputs.customer // empty')
     local customer_link=$(echo "$current_data" | jq -r '.build_params.customer_link // .inputs.customer_link // empty')
+    local logo_url=$(echo "$current_data" | jq -r '.build_params.logo_url // .inputs.logo_url // empty')
     local slogan=$(echo "$current_data" | jq -r '.build_params.slogan // .inputs.slogan // empty')
     local super_password=$(echo "$current_data" | jq -r '.build_params.super_password // .inputs.super_password // empty')
     local rendezvous_server=$(echo "$current_data" | jq -r '.build_params.rendezvous_server // .inputs.rendezvous_server // empty')
@@ -191,6 +200,7 @@ _execute_build_process() {
     debug "var" "TAG" "$tag"
     debug "var" "EMAIL" "$email"
     debug "var" "CUSTOMER" "$customer"
+    debug "var" "LOGO_URL" "${logo_url:+[provided]}"
     debug "var" "SOURCE_PATCH_DEBUG" "$source_patch_debug"
     
     # 构建开始时间

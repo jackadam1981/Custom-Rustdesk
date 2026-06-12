@@ -278,7 +278,17 @@ pub static T: &[(&str, &str)] = &[
     ("powered_by_me", "Powered by RustDesk"),
 ];
 EOF
-    mkdir -p "$tmp_dir/flutter/lib" "$tmp_dir/src/ui"
+    mkdir -p "$tmp_dir/flutter/lib/desktop/pages" "$tmp_dir/flutter/lib" "$tmp_dir/src/ui"
+    cat > "$tmp_dir/flutter/lib/desktop/pages/desktop_setting_page.dart" <<'EOF'
+                        children: [
+                          Text(
+                            translate('Slogan_tip'),
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white),
+                          )
+                        ],
+EOF
     cat > "$tmp_dir/flutter/lib/common.dart" <<'EOF'
 Widget loadPowered(BuildContext context) {
   return MouseRegion(
@@ -305,6 +315,10 @@ EOF
 {is_custom_client && handler.get_builtin_option("hide-powered-by-me") != "Y" ? <div .link #powered-by style="opacity:0.5;font-size:0.8em;text-decoration:underline">{translate('powered_by_me')}</div> : ""}
 event click $(#powered-by) {
     handler.open_url("https://rustdesk.com");
+}
+function showAbout() {
+    msgbox("about", "About", "<div><p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
+            </div>", "", function(el) {}, 400, 400);
 }
 EOF
     cat > "$tmp_dir/libs/portable/src/main.rs" <<'EOF'
@@ -340,6 +354,9 @@ env:
 jobs:
   build-for-windows-flutter:
     steps:
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: fixture-windows-flutter
       - name: Sign rustdesk files
         if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
         shell: bash
@@ -352,6 +369,9 @@ jobs:
           BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput
   build-for-windows-sciter:
     steps:
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: fixture-windows-sciter
       - name: Sign rustdesk files
         if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
         shell: bash
@@ -379,6 +399,7 @@ EOF
         apply_custom_source_patches
         grep -q '"app_name": "FixtureApp"' custom-build-config.json
         grep -q '"customer": "FixtureCustomer"' custom-build-config.json
+        grep -q '"logo_url": ""' custom-build-config.json
         grep -q '"rendezvous_server": "192.168.2.22:21117"' custom-build-config.json
         grep -q '"custom_rendezvous_server": "192.168.2.22"' custom-build-config.json
         grep -q '"relay_server": "192.168.2.22"' custom-build-config.json
@@ -422,12 +443,16 @@ EOF
         grep -q 'FileDescription = "FixtureApp Remote Desktop"' libs/portable/Cargo.toml
         grep -q '由 RustDesk 提供支持' src/lang/cn.rs
         grep -q 'Powered by RustDesk' src/lang/en.rs
-        grep -q 'FixtureCustomer' flutter/lib/common.dart
+        grep -q 'CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION' flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q 'FixtureCustomer' flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q 'https://fixture.example' flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q 'studio-about' src/ui/index.tis
         grep -q 'FixtureCustomer' src/ui/index.tis
+        grep -q 'https://fixture.example' src/ui/index.tis
+        ! grep -q 'FixtureCustomer' flutter/lib/common.dart
+        ! grep -q 'studio-by' src/ui/index.tis
         grep -q 'https://rustdesk.com' flutter/lib/common.dart
         grep -q 'https://rustdesk.com' src/ui/index.tis
-        grep -q 'https://zzsn.work' flutter/lib/common.dart
-        grep -q 'https://zzsn.work' src/ui/index.tis
         grep -q 'let current_dir = path.parent().map(|dir| dir.to_path_buf());' libs/portable/src/main.rs
         grep -q 'cmd.current_dir' libs/portable/src/main.rs
         ! grep -q 'cmd.args(args);.*path.parent' libs/portable/src/main.rs
@@ -438,6 +463,8 @@ EOF
         grep -q 'onecloud-windows-sign.ps1 -Path ./rustdesk' .github/workflows/flutter-build.yml
         grep -q 'onecloud-windows-sign.ps1 -Path ./Release' .github/workflows/flutter-build.yml
         grep -q 'onecloud-windows-sign.ps1 -Path ./SignOutput' .github/workflows/flutter-build.yml
+        grep -A1 'Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32' .github/workflows/flutter-build.yml | grep -q 'continue-on-error: true'
+        grep -A1 'Swatinem/rust-cache@v2' .github/workflows/flutter-build.yml | grep -q 'continue-on-error: true'
         grep -q 'signtool.exe' .github/workflows/scripts/onecloud-windows-sign.ps1
         grep -q 'Code Signing' .github/workflows/scripts/onecloud-windows-sign.ps1
         grep -q '/sha1 $cert.Thumbprint' .github/workflows/scripts/onecloud-windows-sign.ps1
@@ -518,7 +545,7 @@ EOF
 function test_issue_params_preserve_issue_supplied_patch_variables() {
     local trigger=".github/workflows/scripts/trigger.sh"
     local event_data
-    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloud\napp_name: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true\nsource_patch_debug: true' '{issue:{number:123, body:$body}}')
+    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloud\napp_name: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nlogo_url: https://assets.example.com/logo.png\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true\nsource_patch_debug: true' '{issue:{number:123, body:$body}}')
 
     if (
         set -e
@@ -526,6 +553,7 @@ function test_issue_params_preserve_issue_supplied_patch_variables() {
         extracted="$(trigger_manager extract-issue "$event_data")"
         echo "$extracted" | grep -q 'APP_NAME="OneCloudDesk"'
         echo "$extracted" | grep -q 'CUSTOMER="OneCloud"'
+        echo "$extracted" | grep -q 'LOGO_URL="https://assets.example.com/logo.png"'
         echo "$extracted" | grep -q 'RELAY_SERVER="rustdesk.jackadam.top:21117"'
         echo "$extracted" | grep -q 'RS_PUB_KEY="dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI="'
         echo "$extracted" | grep -q 'SLOGAN="Powered by OneCloud Desk"'

@@ -397,20 +397,160 @@ _custom_patch_brand_files() {
         "FileDescription = \"$CUSTOM_APP_NAME Remote Desktop\""
 }
 
-_custom_patch_sciter_ui_text() {
-    local studio_text="由郑州熵能科技工作室为${CUSTOM_CUSTOMER:-定制客户}倾情打造。"
+_custom_patch_logo_assets() {
+    local logo_source="${CUSTOM_LOGO_URL:-}"
 
-    if [ -f "flutter/lib/common.dart" ] && ! grep -q "zzsn.work" "flutter/lib/common.dart"; then
-        perl -0pi -e "s{return MouseRegion\\(\\n    cursor: SystemMouseCursors\\.click,\\n    child: GestureDetector\\(\\n      onTap: \\(\\) \\{\\n        launchUrl\\(Uri\\.parse\\('https://rustdesk\\.com'\\)\\);\\n      \\},\\n      child: Opacity\\(\\n          opacity: 0\\.5,\\n          child: Text\\(\\n            translate\\(\"powered_by_me\"\\),\\n            overflow: TextOverflow\\.clip,\\n            style: Theme\\.of\\(context\\)\\n                \\.textTheme\\n                \\.bodySmall\\n                \\?\\.copyWith\\(fontSize: 9, decoration: TextDecoration\\.underline\\),\\n          \\)\\),\\n    \\),\\n  \\)\\.marginOnly\\(top: 6\\);}{return Column(mainAxisSize: MainAxisSize.min, children: [\\n    MouseRegion(\\n      cursor: SystemMouseCursors.click,\\n      child: GestureDetector(\\n        onTap: () {\\n          launchUrl(Uri.parse('https://rustdesk.com'));\\n        },\\n        child: Opacity(\\n            opacity: 0.5,\\n            child: Text(\\n              translate(\"powered_by_me\"),\\n              overflow: TextOverflow.clip,\\n              style: Theme.of(context)\\n                  .textTheme\\n                  .bodySmall\\n                  ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),\\n            )),\\n      ),\\n    ).marginOnly(top: 6),\\n    MouseRegion(\\n      cursor: SystemMouseCursors.click,\\n      child: GestureDetector(\\n        onTap: () {\\n          launchUrl(Uri.parse('https://zzsn.work'));\\n        },\\n        child: Opacity(\\n            opacity: 0.5,\\n            child: Text(\\n              '$studio_text',\\n              overflow: TextOverflow.clip,\\n              style: Theme.of(context)\\n                  .textTheme\\n                  .bodySmall\\n                  ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),\\n            )),\\n      ),\\n    ).marginOnly(top: 2),\\n  ]);}" "flutter/lib/common.dart"
+    if [ -z "$logo_source" ]; then
+        echo "source-patcher: no custom logo configured, skipping icon assets"
+        return 0
     fi
 
-    if [ -f "src/ui/index.tis" ] && ! grep -q "studio-by" "src/ui/index.tis"; then
-        _custom_replace_file "src/ui/index.tis" \
-            "<div \\.link #powered-by style=\"opacity:0\\.5;font-size:0\\.8em;text-decoration:underline\">\\{translate\\('powered_by_me'\\)\\}</div>" \
-            "<div .link #powered-by style=\"opacity:0.5;font-size:0.8em;text-decoration:underline\">{translate('powered_by_me')}</div><div .link #studio-by style=\"opacity:0.5;font-size:0.8em;text-decoration:underline\">$studio_text</div>"
-        _custom_replace_file "src/ui/index.tis" \
-            'event click \$\(#powered-by\) \{[[:space:]]*handler\.open_url\("https://rustdesk\.com"\);[[:space:]]*\}' \
-            'event click $(#powered-by) { handler.open_url("https://rustdesk.com"); } event click $(#studio-by) { handler.open_url("https://zzsn.work"); }'
+    local work_dir
+    work_dir=$(mktemp -d)
+    local input_image="$work_dir/custom-logo"
+
+    echo "source-patcher: custom logo configured"
+    if [[ "$logo_source" =~ ^https?:// ]]; then
+        if ! curl -fsSL "$logo_source" -o "$input_image"; then
+            echo "source-patcher: failed to download logo_url" >&2
+            rm -rf "$work_dir"
+            return 1
+        fi
+    elif [ -f "$logo_source" ]; then
+        cp "$logo_source" "$input_image"
+    elif [ -f "../$logo_source" ]; then
+        cp "../$logo_source" "$input_image"
+    else
+        echo "source-patcher: logo_url is neither a downloadable URL nor an existing file: $logo_source" >&2
+        rm -rf "$work_dir"
+        return 1
+    fi
+
+    if ! python3 - <<'PY' >/dev/null 2>&1
+import PIL
+PY
+    then
+        echo "source-patcher: installing Pillow for logo asset generation"
+        python3 -m pip install --user pillow
+    fi
+
+    python3 - "$input_image" <<'PY'
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+from PIL import Image
+
+source = Path(sys.argv[1])
+try:
+    image = Image.open(source).convert("RGBA")
+except Exception as exc:
+    raise SystemExit(f"source-patcher: logo image cannot be opened by Pillow: {exc}")
+
+def square_canvas(img, size):
+    img.thumbnail((size, size), Image.LANCZOS)
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    canvas.alpha_composite(img, ((size - img.width) // 2, (size - img.height) // 2))
+    return canvas
+
+def save_png(path, size):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    square_canvas(image.copy(), size).save(path)
+
+windows_icon = Path("flutter/windows/runner/resources/app_icon.ico")
+if windows_icon.exists():
+    windows_icon.parent.mkdir(parents=True, exist_ok=True)
+    sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+    square_canvas(image.copy(), 256).save(windows_icon, sizes=sizes)
+
+android_sizes = {
+    "mipmap-mdpi": 48,
+    "mipmap-hdpi": 72,
+    "mipmap-xhdpi": 96,
+    "mipmap-xxhdpi": 144,
+    "mipmap-xxxhdpi": 192,
+}
+for folder, size in android_sizes.items():
+    base = Path("flutter/android/app/src/main/res") / folder
+    for name in ("ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"):
+        target = base / name
+        if target.exists():
+            save_png(target, size)
+    stat_logo = base / "ic_stat_logo.png"
+    if stat_logo.exists():
+        save_png(stat_logo, max(24, size // 2))
+
+appicon_dir = Path("flutter/ios/Runner/Assets.xcassets/AppIcon.appiconset")
+contents = appicon_dir / "Contents.json"
+if contents.exists():
+    data = json.loads(contents.read_text(encoding="utf-8"))
+    for entry in data.get("images", []):
+        filename = entry.get("filename")
+        size_text = entry.get("size", "")
+        scale_text = entry.get("scale", "1x")
+        if not filename or "x" not in size_text:
+            continue
+        points = float(size_text.split("x", 1)[0])
+        scale = int(re.sub(r"\D", "", scale_text) or "1")
+        save_png(appicon_dir / filename, int(round(points * scale)))
+
+print("source-patcher: custom logo assets generated")
+PY
+
+    rm -rf "$work_dir"
+}
+
+_custom_patch_sciter_ui_text() {
+    local studio_text="由郑州熵能科技工作室为${CUSTOM_CUSTOMER:-定制客户}倾情打造。"
+    local customer_link="${CUSTOM_CUSTOMER_LINK:-https://zzsn.work}"
+    local about_file="flutter/lib/desktop/pages/desktop_setting_page.dart"
+
+    if [ -f "$about_file" ] && ! grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file"; then
+        export CUSTOM_STUDIO_TEXT="$studio_text"
+        export CUSTOM_STUDIO_LINK="$customer_link"
+        perl -0pi -e '
+            s{
+                Text\(\n
+                \s*translate\('\''Slogan_tip'\''\),\n
+                \s*style: TextStyle\(\n
+                \s*fontWeight: FontWeight\.w800,\n
+                \s*color: Colors\.white\),\n
+                \s*\)\n
+                \s*\],
+            }{
+                          Text(
+                            translate('\''Slogan_tip'\''),
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white),
+                          ),
+                          // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION
+                          InkWell(
+                            onTap: () {
+                              launchUrlString('\''$ENV{CUSTOM_STUDIO_LINK}'\'');
+                            },
+                            child: Text(
+                              '\''$ENV{CUSTOM_STUDIO_TEXT}'\'',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  decoration: TextDecoration.underline),
+                            ),
+                          ),
+                        ],
+            }msx' "$about_file"
+        echo "source-patcher: studio attribution injected below Slogan_tip in $about_file"
+    fi
+
+    if [ -f "src/ui/index.tis" ] && ! grep -q "studio-about" "src/ui/index.tis"; then
+        export CUSTOM_STUDIO_TEXT="$studio_text"
+        export CUSTOM_STUDIO_LINK="$customer_link"
+        perl -0pi -e '
+            s#<p style='\''font-weight: bold'\''>" \+ translate\("Slogan_tip"\) \+ "</p>\\#<p style='\''font-weight: bold'\''>" + translate("Slogan_tip") + "</p>\\
+            <p class='\''link custom-event studio-about'\'' style='\''font-weight: bold'\'' url='\''$ENV{CUSTOM_STUDIO_LINK}'\''>$ENV{CUSTOM_STUDIO_TEXT}</p>\\#g' "src/ui/index.tis"
+        echo "source-patcher: studio attribution injected below Slogan_tip in src/ui/index.tis"
     fi
 }
 
@@ -524,6 +664,38 @@ _custom_patch_windows_test_signing() {
     perl -0pi -e 's{(BASE_URL=\$\{\{ env\.SIGN_BASE_URL \}\} SECRET_KEY=\$\{\{ secrets\.SIGN_SECRET_KEY \}\} python3 res/job\.py sign_files \./SignOutput/?\n)}{$1\n      - name: Sign packaged Windows artifacts with OneCloud test certificate\n        if: env.UPLOAD_ARTIFACT == '\''true'\'' && env.SIGN_BASE_URL == '\''-2'\'' && env.ONECLOUD_WINDOWS_SIGNING_ENABLED == '\''true'\''\n        shell: powershell\n        env:\n          ONECLOUD_WINDOWS_PFX_BASE64: \${{ secrets.ONECLOUD_WINDOWS_PFX_BASE64 }}\n          ONECLOUD_WINDOWS_PFX_PASSWORD: \${{ secrets.ONECLOUD_WINDOWS_PFX_PASSWORD }}\n        run: powershell -NoProfile -ExecutionPolicy Bypass -File .github/workflows/scripts/onecloud-windows-sign.ps1 -Path ./SignOutput\n}g' "$file"
 }
 
+_custom_patch_rust_cache_nonfatal() {
+    local file=".github/workflows/flutter-build.yml"
+
+    if [ ! -f "$file" ]; then
+        echo "source-patcher: $file not found, skipping rust-cache nonfatal patch"
+        return 0
+    fi
+
+    if ! grep -q 'Swatinem/rust-cache' "$file"; then
+        echo "source-patcher: no Swatinem/rust-cache step found, skipping rust-cache nonfatal patch"
+        return 0
+    fi
+
+    local cache_steps patched_steps
+    cache_steps="$(grep -c 'Swatinem/rust-cache' "$file" || true)"
+    patched_steps="$(awk '
+        /Swatinem\/rust-cache/ { saw_cache=1; next }
+        saw_cache && /continue-on-error: true/ { count++; saw_cache=0; next }
+        saw_cache { saw_cache=0 }
+        END { print count+0 }
+    ' "$file")"
+
+    if [ "$cache_steps" -eq "$patched_steps" ]; then
+        echo "source-patcher: rust-cache nonfatal patch already applied"
+        return 0
+    fi
+
+    perl -0pi -e 's/^(\s*- uses: Swatinem\/rust-cache@[^\n]*\n)(?!\s+continue-on-error:)/$1        continue-on-error: true\n/gm' "$file"
+
+    echo "source-patcher: marked Swatinem/rust-cache steps as continue-on-error"
+}
+
 apply_custom_source_patches() {
     case "${BUILD_LOCK_NETWORK_SETTINGS:-false}" in
         true|TRUE|True|1|yes|YES|y|Y|on|ON)
@@ -541,6 +713,7 @@ apply_custom_source_patches() {
     CUSTOM_APP_NAME="${BUILD_APP_NAME:-${BUILD_CUSTOMER:-${BUILD_TAG:-CustomRustDesk}}}"
     CUSTOM_CUSTOMER="${BUILD_CUSTOMER:-定制客户}"
     CUSTOM_CUSTOMER_LINK="${BUILD_CUSTOMER_LINK:-https://zzsn.work}"
+    CUSTOM_LOGO_URL="${BUILD_LOGO_URL:-}"
     CUSTOM_SLOGAN="${BUILD_SLOGAN:-}"
     CUSTOM_RENDEZVOUS_INPUT="${BUILD_RENDEZVOUS_SERVER:-}"
     CUSTOM_RENDEZVOUS_SERVER=$(_custom_address_host "$CUSTOM_RENDEZVOUS_INPUT")
@@ -556,6 +729,7 @@ apply_custom_source_patches() {
     echo "source-patcher-trace: resolved custom build inputs"
     _custom_trace_value "BUILD_APP_NAME" "${BUILD_APP_NAME:-}"
     _custom_trace_value "CUSTOM_APP_NAME(resolved)" "$CUSTOM_APP_NAME"
+    _custom_trace_value "BUILD_LOGO_URL" "${BUILD_LOGO_URL:+[provided]}"
     _custom_trace_value "BUILD_RENDEZVOUS_SERVER(raw)" "${BUILD_RENDEZVOUS_SERVER:-}"
     _custom_trace_value "CUSTOM_RENDEZVOUS_SERVER(normalized)" "$CUSTOM_RENDEZVOUS_SERVER"
     _custom_trace_value "BUILD_RELAY_SERVER(raw)" "${BUILD_RELAY_SERVER:-}"
@@ -577,6 +751,7 @@ apply_custom_source_patches() {
         --arg app_name "$CUSTOM_APP_NAME" \
         --arg customer "$BUILD_CUSTOMER" \
         --arg customer_link "$CUSTOM_CUSTOMER_LINK" \
+        --arg logo_url "$CUSTOM_LOGO_URL" \
         --arg slogan "$CUSTOM_SLOGAN" \
         --arg rendezvous_server "$CUSTOM_RENDEZVOUS_INPUT" \
         --arg custom_rendezvous_server "$CUSTOM_RENDEZVOUS_SERVER" \
@@ -589,6 +764,7 @@ apply_custom_source_patches() {
             app_name: $app_name,
             customer: $customer,
             customer_link: $customer_link,
+            logo_url: $logo_url,
             slogan: $slogan,
             rendezvous_server: $rendezvous_server,
             custom_rendezvous_server: $custom_rendezvous_server,
@@ -602,9 +778,11 @@ apply_custom_source_patches() {
     _custom_patch_common_rs
     _custom_patch_hbb_common_config_rs
     _custom_patch_brand_files
+    _custom_patch_logo_assets
     _custom_patch_sciter_ui_text
     _custom_patch_portable_working_dir
     _custom_patch_windows_test_signing
+    _custom_patch_rust_cache_nonfatal
 
     echo "source-patcher: custom source patches applied"
 }

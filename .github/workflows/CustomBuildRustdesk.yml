@@ -24,6 +24,10 @@ on:
         description: '客户链接'
         required: false
         default: ''
+      logo_url:
+        description: 'Customer logo image URL or repository path, optional'
+        required: false
+        default: ''
       slogan:
         description: '标语'
         required: false
@@ -412,6 +416,7 @@ jobs:
           app_name=$(echo "$TRIGGER_DATA" | jq -r '.build_params.app_name // empty')
           customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
           customer_link=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer_link // empty')
+          logo_url=$(echo "$TRIGGER_DATA" | jq -r '.build_params.logo_url // empty')
           slogan=$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')
           email=$(echo "$TRIGGER_DATA" | jq -r '.build_params.email // empty')
           super_password=$(echo "$TRIGGER_DATA" | jq -r '.build_params.super_password // empty')
@@ -426,6 +431,7 @@ jobs:
           echo "  - app_name: ${app_name:-$customer}"
           echo "  - customer: $customer"
           echo "  - customer_link: $customer_link"
+          echo "  - logo_url: ${logo_url:+[provided]}"
           echo "  - slogan: $slogan"
           echo "  - email: $email"
           echo "  - rendezvous_server: $rendezvous_server"
@@ -497,6 +503,7 @@ jobs:
           export BUILD_APP_NAME="$(echo "$TRIGGER_DATA" | jq -r '.build_params.app_name // empty')"
           export BUILD_CUSTOMER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')"
           export BUILD_CUSTOMER_LINK="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer_link // empty')"
+          export BUILD_LOGO_URL="$(echo "$TRIGGER_DATA" | jq -r '.build_params.logo_url // empty')"
           export BUILD_SLOGAN="$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')"
           export BUILD_RENDEZVOUS_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rendezvous_server // empty')"
           export BUILD_RELAY_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.relay_server // empty')"
@@ -513,6 +520,7 @@ jobs:
             "app_name": "$BUILD_APP_NAME",
             "customer": "$BUILD_CUSTOMER",
             "customer_link": "$BUILD_CUSTOMER_LINK",
+            "logo_url": "$BUILD_LOGO_URL",
             "slogan": "$BUILD_SLOGAN",
             "email": "$(echo "$TRIGGER_DATA" | jq -r '.build_params.email // empty')",
             "super_password": "$(echo "$TRIGGER_DATA" | jq -r '.build_params.super_password // empty')",
