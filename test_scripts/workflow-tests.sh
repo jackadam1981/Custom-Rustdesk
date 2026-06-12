@@ -335,6 +335,9 @@ EOF
 EOF
     cat > "$tmp_dir/flutter/lib/common.dart" <<'EOF'
 Widget loadPowered(BuildContext context) {
+  if (bind.mainGetBuildinOption(key: "hide-powered-by-me") == 'Y') {
+    return SizedBox.shrink();
+  }
   return MouseRegion(
     cursor: SystemMouseCursors.click,
     child: GestureDetector(
