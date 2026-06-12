@@ -278,6 +278,35 @@ pub static T: &[(&str, &str)] = &[
     ("powered_by_me", "Powered by RustDesk"),
 ];
 EOF
+    mkdir -p "$tmp_dir/flutter/lib" "$tmp_dir/src/ui"
+    cat > "$tmp_dir/flutter/lib/common.dart" <<'EOF'
+Widget loadPowered(BuildContext context) {
+  return MouseRegion(
+    cursor: SystemMouseCursors.click,
+    child: GestureDetector(
+      onTap: () {
+        launchUrl(Uri.parse('https://rustdesk.com'));
+      },
+      child: Opacity(
+          opacity: 0.5,
+          child: Text(
+            translate("powered_by_me"),
+            overflow: TextOverflow.clip,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),
+          )),
+    ),
+  ).marginOnly(top: 6);
+}
+EOF
+    cat > "$tmp_dir/src/ui/index.tis" <<'EOF'
+{is_custom_client && handler.get_builtin_option("hide-powered-by-me") != "Y" ? <div .link #powered-by style="opacity:0.5;font-size:0.8em;text-decoration:underline">{translate('powered_by_me')}</div> : ""}
+event click $(#powered-by) {
+    handler.open_url("https://rustdesk.com");
+}
+EOF
     cat > "$tmp_dir/libs/portable/src/main.rs" <<'EOF'
 use std::{path::PathBuf, process::Command};
 
@@ -337,7 +366,8 @@ EOF
 
     if (
         set -e
-        export BUILD_CUSTOMER="FixtureDesk"
+        export BUILD_APP_NAME="FixtureApp"
+        export BUILD_CUSTOMER="FixtureCustomer"
         export BUILD_CUSTOMER_LINK="https://fixture.example"
         export BUILD_SLOGAN="Fixture Slogan"
         export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21117"
@@ -347,7 +377,8 @@ EOF
         source "$patcher"
         cd "$tmp_dir"
         apply_custom_source_patches
-        grep -q 'FixtureDesk' custom-build-config.json
+        grep -q '"app_name": "FixtureApp"' custom-build-config.json
+        grep -q '"customer": "FixtureCustomer"' custom-build-config.json
         grep -q '"rendezvous_server": "192.168.2.22:21117"' custom-build-config.json
         grep -q '"custom_rendezvous_server": "192.168.2.22"' custom-build-config.json
         grep -q '"relay_server": "192.168.2.22"' custom-build-config.json
@@ -378,18 +409,25 @@ EOF
         grep -q 'res.extend(custom_build_default_options());' libs/hbb_common/src/config.rs
         grep -q 'or_else(|| custom_build_default_option(k).map(|v| v.to_owned()))' libs/hbb_common/src/config.rs
         grep -q 'custom_build_default_option("custom-rendezvous-server")' libs/hbb_common/src/config.rs
-        grep -q '<string name="app_name">FixtureDesk</string>' flutter/android/app/src/main/res/values/strings.xml
-        grep -q '<string>FixtureDesk</string>' flutter/ios/Runner/Info.plist
-        grep -q 'Name=FixtureDesk' res/rustdesk.desktop
+        grep -q '<string name="app_name">FixtureApp</string>' flutter/android/app/src/main/res/values/strings.xml
+        grep -q '<string>FixtureApp</string>' flutter/ios/Runner/Info.plist
+        grep -q 'Name=FixtureApp' res/rustdesk.desktop
         grep -q 'Name=Open a New Window' res/rustdesk.desktop
-        grep -q 'description = "FixtureDesk Remote Desktop"' Cargo.toml
-        grep -q 'ProductName = "FixtureDesk"' Cargo.toml
-        grep -q 'FileDescription = "FixtureDesk Remote Desktop"' Cargo.toml
-        grep -q 'description = "FixtureDesk Remote Desktop"' libs/portable/Cargo.toml
-        grep -q 'ProductName = "FixtureDesk"' libs/portable/Cargo.toml
-        grep -q 'FileDescription = "FixtureDesk Remote Desktop"' libs/portable/Cargo.toml
-        grep -q '由 FixtureDesk 提供支持' src/lang/cn.rs
-        grep -q 'Powered by FixtureDesk' src/lang/en.rs
+        grep -q '"customer_link": "https://fixture.example"' custom-build-config.json
+        grep -q 'description = "FixtureApp Remote Desktop"' Cargo.toml
+        grep -q 'ProductName = "FixtureApp"' Cargo.toml
+        grep -q 'FileDescription = "FixtureApp Remote Desktop"' Cargo.toml
+        grep -q 'description = "FixtureApp Remote Desktop"' libs/portable/Cargo.toml
+        grep -q 'ProductName = "FixtureApp"' libs/portable/Cargo.toml
+        grep -q 'FileDescription = "FixtureApp Remote Desktop"' libs/portable/Cargo.toml
+        grep -q '由 RustDesk 提供支持' src/lang/cn.rs
+        grep -q 'Powered by RustDesk' src/lang/en.rs
+        grep -q 'FixtureCustomer' flutter/lib/common.dart
+        grep -q 'FixtureCustomer' src/ui/index.tis
+        grep -q 'https://rustdesk.com' flutter/lib/common.dart
+        grep -q 'https://rustdesk.com' src/ui/index.tis
+        grep -q 'https://zzsn.work' flutter/lib/common.dart
+        grep -q 'https://zzsn.work' src/ui/index.tis
         grep -q 'let current_dir = path.parent().map(|dir| dir.to_path_buf());' libs/portable/src/main.rs
         grep -q 'cmd.current_dir' libs/portable/src/main.rs
         ! grep -q 'cmd.args(args);.*path.parent' libs/portable/src/main.rs
@@ -480,12 +518,14 @@ EOF
 function test_issue_params_preserve_issue_supplied_patch_variables() {
     local trigger=".github/workflows/scripts/trigger.sh"
     local event_data
-    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true\nsource_patch_debug: true' '{issue:{number:123, body:$body}}')
+    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloud\napp_name: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true\nsource_patch_debug: true' '{issue:{number:123, body:$body}}')
 
     if (
         set -e
         source "$trigger"
         extracted="$(trigger_manager extract-issue "$event_data")"
+        echo "$extracted" | grep -q 'APP_NAME="OneCloudDesk"'
+        echo "$extracted" | grep -q 'CUSTOMER="OneCloud"'
         echo "$extracted" | grep -q 'RELAY_SERVER="rustdesk.jackadam.top:21117"'
         echo "$extracted" | grep -q 'RS_PUB_KEY="dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI="'
         echo "$extracted" | grep -q 'SLOGAN="Powered by OneCloud Desk"'

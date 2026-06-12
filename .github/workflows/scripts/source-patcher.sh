@@ -398,20 +398,19 @@ _custom_patch_brand_files() {
 }
 
 _custom_patch_sciter_ui_text() {
-    if [ ! -d "src/lang" ]; then
-        return 0
+    local studio_text="由郑州熵能科技工作室为${CUSTOM_CUSTOMER:-定制客户}倾情打造。"
+
+    if [ -f "flutter/lib/common.dart" ] && ! grep -q "zzsn.work" "flutter/lib/common.dart"; then
+        perl -0pi -e "s{return MouseRegion\\(\\n    cursor: SystemMouseCursors\\.click,\\n    child: GestureDetector\\(\\n      onTap: \\(\\) \\{\\n        launchUrl\\(Uri\\.parse\\('https://rustdesk\\.com'\\)\\);\\n      \\},\\n      child: Opacity\\(\\n          opacity: 0\\.5,\\n          child: Text\\(\\n            translate\\(\"powered_by_me\"\\),\\n            overflow: TextOverflow\\.clip,\\n            style: Theme\\.of\\(context\\)\\n                \\.textTheme\\n                \\.bodySmall\\n                \\?\\.copyWith\\(fontSize: 9, decoration: TextDecoration\\.underline\\),\\n          \\)\\),\\n    \\),\\n  \\)\\.marginOnly\\(top: 6\\);}{return Column(mainAxisSize: MainAxisSize.min, children: [\\n    MouseRegion(\\n      cursor: SystemMouseCursors.click,\\n      child: GestureDetector(\\n        onTap: () {\\n          launchUrl(Uri.parse('https://rustdesk.com'));\\n        },\\n        child: Opacity(\\n            opacity: 0.5,\\n            child: Text(\\n              translate(\"powered_by_me\"),\\n              overflow: TextOverflow.clip,\\n              style: Theme.of(context)\\n                  .textTheme\\n                  .bodySmall\\n                  ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),\\n            )),\\n      ),\\n    ).marginOnly(top: 6),\\n    MouseRegion(\\n      cursor: SystemMouseCursors.click,\\n      child: GestureDetector(\\n        onTap: () {\\n          launchUrl(Uri.parse('https://zzsn.work'));\\n        },\\n        child: Opacity(\\n            opacity: 0.5,\\n            child: Text(\\n              '$studio_text',\\n              overflow: TextOverflow.clip,\\n              style: Theme.of(context)\\n                  .textTheme\\n                  .bodySmall\\n                  ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),\\n            )),\\n      ),\\n    ).marginOnly(top: 2),\\n  ]);}" "flutter/lib/common.dart"
     fi
 
-    if [ -f "src/lang/cn.rs" ]; then
-        _custom_replace_file "src/lang/cn.rs" \
-            '\("powered_by_me",[[:space:]]*"[^"]*"\)' \
-            "(\"powered_by_me\", \"由 $CUSTOM_APP_NAME 提供支持\")"
-    fi
-
-    if [ -f "src/lang/en.rs" ]; then
-        _custom_replace_file "src/lang/en.rs" \
-            '\("powered_by_me",[[:space:]]*"[^"]*"\)' \
-            "(\"powered_by_me\", \"Powered by $CUSTOM_APP_NAME\")"
+    if [ -f "src/ui/index.tis" ] && ! grep -q "studio-by" "src/ui/index.tis"; then
+        _custom_replace_file "src/ui/index.tis" \
+            "<div \\.link #powered-by style=\"opacity:0\\.5;font-size:0\\.8em;text-decoration:underline\">\\{translate\\('powered_by_me'\\)\\}</div>" \
+            "<div .link #powered-by style=\"opacity:0.5;font-size:0.8em;text-decoration:underline\">{translate('powered_by_me')}</div><div .link #studio-by style=\"opacity:0.5;font-size:0.8em;text-decoration:underline\">$studio_text</div>"
+        _custom_replace_file "src/ui/index.tis" \
+            'event click \$\(#powered-by\) \{[[:space:]]*handler\.open_url\("https://rustdesk\.com"\);[[:space:]]*\}' \
+            'event click $(#powered-by) { handler.open_url("https://rustdesk.com"); } event click $(#studio-by) { handler.open_url("https://zzsn.work"); }'
     fi
 }
 
@@ -539,8 +538,9 @@ apply_custom_source_patches() {
             ;;
     esac
 
-    CUSTOM_APP_NAME="${BUILD_CUSTOMER:-${BUILD_TAG:-CustomRustDesk}}"
-    CUSTOM_CUSTOMER_LINK="${BUILD_CUSTOMER_LINK:-}"
+    CUSTOM_APP_NAME="${BUILD_APP_NAME:-${BUILD_CUSTOMER:-${BUILD_TAG:-CustomRustDesk}}}"
+    CUSTOM_CUSTOMER="${BUILD_CUSTOMER:-定制客户}"
+    CUSTOM_CUSTOMER_LINK="${BUILD_CUSTOMER_LINK:-https://zzsn.work}"
     CUSTOM_SLOGAN="${BUILD_SLOGAN:-}"
     CUSTOM_RENDEZVOUS_INPUT="${BUILD_RENDEZVOUS_SERVER:-}"
     CUSTOM_RENDEZVOUS_SERVER=$(_custom_address_host "$CUSTOM_RENDEZVOUS_INPUT")
@@ -554,6 +554,8 @@ apply_custom_source_patches() {
     fi
 
     echo "source-patcher-trace: resolved custom build inputs"
+    _custom_trace_value "BUILD_APP_NAME" "${BUILD_APP_NAME:-}"
+    _custom_trace_value "CUSTOM_APP_NAME(resolved)" "$CUSTOM_APP_NAME"
     _custom_trace_value "BUILD_RENDEZVOUS_SERVER(raw)" "${BUILD_RENDEZVOUS_SERVER:-}"
     _custom_trace_value "CUSTOM_RENDEZVOUS_SERVER(normalized)" "$CUSTOM_RENDEZVOUS_SERVER"
     _custom_trace_value "BUILD_RELAY_SERVER(raw)" "${BUILD_RELAY_SERVER:-}"
@@ -573,6 +575,7 @@ apply_custom_source_patches() {
 
     jq -n \
         --arg app_name "$CUSTOM_APP_NAME" \
+        --arg customer "$BUILD_CUSTOMER" \
         --arg customer_link "$CUSTOM_CUSTOMER_LINK" \
         --arg slogan "$CUSTOM_SLOGAN" \
         --arg rendezvous_server "$CUSTOM_RENDEZVOUS_INPUT" \
@@ -584,6 +587,7 @@ apply_custom_source_patches() {
         --arg source_patch_debug "$CUSTOM_SOURCE_PATCH_DEBUG" \
         '{
             app_name: $app_name,
+            customer: $customer,
             customer_link: $customer_link,
             slogan: $slogan,
             rendezvous_server: $rendezvous_server,

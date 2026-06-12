@@ -22,9 +22,14 @@ build/
 dist/
 target/
 *.exe
+*.msi
 *.dmg
 *.deb
 *.rpm
+*.apk
+*.AppImage
+*.flatpak
+*.zst
 *.zip
 *.tar.gz
 

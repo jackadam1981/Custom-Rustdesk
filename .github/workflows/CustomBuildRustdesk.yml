@@ -16,6 +16,10 @@ on:
         description: '客户名称'
         required: true
         default: 'test'
+      app_name:
+        description: 'App display name, optional; defaults to customer'
+        required: false
+        default: ''
       customer_link:
         description: '客户链接'
         required: false
@@ -87,6 +91,7 @@ env:
   # 默认值配置
   DEFAULT_TAG: ${{ secrets.DEFAULT_TAG }}
   DEFAULT_EMAIL: ${{ secrets.DEFAULT_EMAIL }}
+  DEFAULT_APP_NAME: ${{ secrets.DEFAULT_APP_NAME }}
   DEFAULT_CUSTOMER: ${{ secrets.DEFAULT_CUSTOMER }}
   DEFAULT_CUSTOMER_LINK: ${{ secrets.DEFAULT_CUSTOMER_LINK }}
   DEFAULT_SUPER_PASSWORD: ${{ secrets.DEFAULT_SUPER_PASSWORD }}
@@ -404,6 +409,7 @@ jobs:
 
           # 从标准化 trigger_data 中提取构建参数
           tag=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
+          app_name=$(echo "$TRIGGER_DATA" | jq -r '.build_params.app_name // empty')
           customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
           customer_link=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer_link // empty')
           slogan=$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')
@@ -417,6 +423,7 @@ jobs:
 
           echo "🔍 提取的构建参数:"
           echo "  - tag: $tag"
+          echo "  - app_name: ${app_name:-$customer}"
           echo "  - customer: $customer"
           echo "  - customer_link: $customer_link"
           echo "  - slogan: $slogan"
@@ -487,6 +494,7 @@ jobs:
           TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           cd rustdesk-source
           export BUILD_TAG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')"
+          export BUILD_APP_NAME="$(echo "$TRIGGER_DATA" | jq -r '.build_params.app_name // empty')"
           export BUILD_CUSTOMER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')"
           export BUILD_CUSTOMER_LINK="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer_link // empty')"
           export BUILD_SLOGAN="$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')"
@@ -502,6 +510,7 @@ jobs:
           cat > build-config.json << EOF
           {
             "tag": "$BUILD_TAG",
+            "app_name": "$BUILD_APP_NAME",
             "customer": "$BUILD_CUSTOMER",
             "customer_link": "$BUILD_CUSTOMER_LINK",
             "slogan": "$BUILD_SLOGAN",

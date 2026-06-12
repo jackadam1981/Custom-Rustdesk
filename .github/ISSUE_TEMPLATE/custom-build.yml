@@ -6,34 +6,43 @@ body:
   - type: markdown
     attributes:
       value: |
-        请根据需要填写下方参数，未填写的将使用默认值或 secrets。
-        请使用以下格式填写参数（每行一个参数，冒号后面有空格）：
-        ```
-        tag: 标签名称
-        email: 邮件地址
-        customer: 客户名称
-        customer_link: 客户链接
+        请按下面的 `key: value` 格式填写构建参数，每行一个参数。
+        未填写的参数将使用 workflow 默认值或仓库 secrets。
+
+        ```yaml
+        tag: 构建标签
+        email: 邮箱地址
+        customer: 客户或品牌名称
+        app_name: 应用显示名称（可选，默认使用 customer）
+        customer_link: 客户或支持链接
         super_password: 超级密码
         slogan: 标语
-        rendezvous_server: 服务器地址
-        rs_pub_key: 公钥
-        api_server: API服务器地址（可选，没有 API 服务时留空）
+        rendezvous_server: ID 服务器地址
+        relay_server: 中继服务器地址（可选，默认使用 rendezvous_server）
+        rs_pub_key: 服务器公钥
+        api_server: API 服务器地址（可选，没有 API 服务时留空）
+        lock_network_settings: false
+        source_patch_debug: false
         ```
 
   - type: textarea
     id: params
     attributes:
       label: 构建参数
-      description: 请按照上述格式填写参数，每行一个参数
+      description: 请按照上面的格式填写参数，每行一个。
       placeholder: |
         tag: vCustom
         email: rustdesk@example.com
-        customer: 自由工作室
-        customer_link: https://rustdesk.com
+        customer: OneCloud
+        app_name: OneCloudDesk
+        customer_link: https://rustdesk.example.com
         super_password: 123456
         slogan: 安全可靠的远程桌面解决方案
         rendezvous_server: rustdesk.example.com
+        relay_server:
         rs_pub_key: xxxxx
         api_server:
+        lock_network_settings: false
+        source_patch_debug: false
     validations:
       required: false

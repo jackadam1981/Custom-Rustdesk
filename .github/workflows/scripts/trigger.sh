@@ -19,6 +19,7 @@ _extract_workflow_dispatch_params() {
     
     echo "TAG=\"$(echo "$event_data" | jq -r '.inputs.tag // empty')\""
     echo "EMAIL=\"$(echo "$event_data" | jq -r '.inputs.email // empty')\""
+    echo "APP_NAME=\"$(echo "$event_data" | jq -r '.inputs.app_name // empty')\""
     echo "CUSTOMER=\"$(echo "$event_data" | jq -r '.inputs.customer // empty')\""
     echo "CUSTOMER_LINK=\"$(echo "$event_data" | jq -r '.inputs.customer_link // empty')\""
     echo "SUPER_PASSWORD=\"$(echo "$event_data" | jq -r '.inputs.super_password // empty')\""
@@ -81,6 +82,9 @@ _extract_issue_params() {
     local customer=$(_extract_issue_value "$issue_body" "customer")
     debug "log" "Extracted customer: '$customer'"
 
+    local app_name=$(_extract_issue_value "$issue_body" "app_name")
+    debug "log" "Extracted app_name: '$app_name'"
+
     local customer_link=$(_extract_issue_value "$issue_body" "customer_link")
     debug "log" "Extracted customer_link: '$customer_link'"
 
@@ -112,6 +116,7 @@ _extract_issue_params() {
     echo "BUILD_ID=\"$build_id\""
     echo "TAG=\"$tag\""
     echo "EMAIL=\"$email\""
+    echo "APP_NAME=\"$app_name\""
     echo "CUSTOMER=\"$customer\""
     echo "CUSTOMER_LINK=\"$customer_link\""
     echo "SUPER_PASSWORD=\"$super_password\""
@@ -133,6 +138,7 @@ _apply_default_values() {
     if echo "$event_data" | jq -e '.inputs' > /dev/null 2>&1; then
         local tag=$(echo "$event_data" | jq -r '.inputs.tag // empty')
         local email=$(echo "$event_data" | jq -r '.inputs.email // empty')
+        local app_name=$(echo "$event_data" | jq -r '.inputs.app_name // empty')
         local customer=$(echo "$event_data" | jq -r '.inputs.customer // empty')
         local customer_link=$(echo "$event_data" | jq -r '.inputs.customer_link // empty')
         local super_password=$(echo "$event_data" | jq -r '.inputs.super_password // empty')
@@ -146,6 +152,7 @@ _apply_default_values() {
     else
         local tag="$TAG"
         local email="$EMAIL"
+        local app_name="$APP_NAME"
         local customer="$CUSTOMER"
         local customer_link="$CUSTOMER_LINK"
         local super_password="$SUPER_PASSWORD"
@@ -160,6 +167,7 @@ _apply_default_values() {
     
     echo "TAG=\"${tag:-${DEFAULT_TAG:-}}\""
     echo "EMAIL=\"${email:-${DEFAULT_EMAIL:-}}\""
+    echo "APP_NAME=\"${app_name:-${DEFAULT_APP_NAME:-}}\""
     echo "CUSTOMER=\"${customer:-${DEFAULT_CUSTOMER:-}}\""
     echo "CUSTOMER_LINK=\"${customer_link:-${DEFAULT_CUSTOMER_LINK:-}}\""
     echo "SUPER_PASSWORD=\"${super_password:-${DEFAULT_SUPER_PASSWORD:-}}\""
@@ -208,6 +216,7 @@ _generate_final_data() {
     if echo "$event_data" | jq -e '.inputs' > /dev/null 2>&1; then
         local tag=$(echo "$event_data" | jq -r '.inputs.tag // empty')
         local email=$(echo "$event_data" | jq -r '.inputs.email // empty')
+        local app_name=$(echo "$event_data" | jq -r '.inputs.app_name // empty')
         local customer=$(echo "$event_data" | jq -r '.inputs.customer // empty')
         local customer_link=$(echo "$event_data" | jq -r '.inputs.customer_link // empty')
         local super_password=$(echo "$event_data" | jq -r '.inputs.super_password // empty')
@@ -223,6 +232,7 @@ _generate_final_data() {
     else
         local tag="$TAG"
         local email="$EMAIL"
+        local app_name="$APP_NAME"
         local customer="$CUSTOMER"
         local customer_link="$CUSTOMER_LINK"
         local super_password="$SUPER_PASSWORD"
@@ -244,6 +254,7 @@ _generate_final_data() {
         --arg tag "$final_tag" \
         --arg original_tag "$tag" \
         --arg email "$email" \
+        --arg app_name "$app_name" \
         --arg customer "$customer" \
         --arg customer_link "$customer_link" \
         --arg super_password "$super_password" \
@@ -254,7 +265,7 @@ _generate_final_data() {
         --arg api_server "$api_server" \
         --arg lock_network_settings "${lock_network_settings:-false}" \
         --arg source_patch_debug "${source_patch_debug:-false}" \
-        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, relay_server: $relay_server, rs_pub_key: $rs_pub_key, api_server: $api_server, lock_network_settings: $lock_network_settings, source_patch_debug: $source_patch_debug}}')
+        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, app_name: $app_name, customer: $customer, customer_link: $customer_link, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, relay_server: $relay_server, rs_pub_key: $rs_pub_key, api_server: $api_server, lock_network_settings: $lock_network_settings, source_patch_debug: $source_patch_debug}}')
     
     debug "var" "Generated JSON data" "$data"
     echo "$data"
