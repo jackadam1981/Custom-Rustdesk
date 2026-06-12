@@ -152,6 +152,7 @@ function test_source_patcher_covers_server_key_and_brand() {
        grep -q 'ProductName = "RustDesk"' "$patcher" &&
        grep -q 'libs/portable/Cargo.toml' "$patcher" &&
        grep -q 'libs/portable/src/main.rs' "$patcher" &&
+       grep -q '_custom_patch_flutter_msi_app_name' "$patcher" &&
        grep -q 'current_dir' "$patcher"; then
         record_test_result "source_patcher_covers_server_key_and_brand" "PASS" "源码 patch 覆盖服务器、密钥和主要品牌外观"
         return 0
@@ -422,6 +423,13 @@ jobs:
         shell: bash
         run: |
           BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput
+      - name: Build msi
+        if: env.UPLOAD_ARTIFACT == 'true'
+        run: |
+          pushd ./res/msi
+          python preprocess.py --arp -d ../../rustdesk
+          nuget restore msi.sln
+          msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
   build-for-windows-sciter:
     steps:
       - uses: Swatinem/rust-cache@v2
@@ -510,19 +518,34 @@ EOF
         grep -q 'custom-customer-name' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/connection_page.dart
         grep -q 'CUSTOM_RUSTDESK_POWERED_LINK' flutter/lib/common.dart
-        grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' src/ui/index.tis
-        grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' src/ui/index.tis
+        grep -q 'custom-rd-home-header' src/ui/index.tis
+        grep -q 'custom-rd-home-powered' src/ui/index.tis
         grep -q 'custom-customer-name' src/ui/index.tis
-        grep -q 'fontSize: bind.isCustomClient() ? 12 : 9' flutter/lib/common.dart
-        grep -q 'font-size:1em' src/ui/index.tis
+        grep -q 'fontSize: 14' flutter/lib/common.dart
+        grep -q 'Colors.black' flutter/lib/common.dart
+        grep -q 'color:#000;font-size:1.15em' src/ui/index.tis
+        grep -q 'SizedBox(height: 12)' flutter/lib/desktop/pages/desktop_setting_page.dart
         ! grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
         python3 - src/ui/index.tis <<'PY'
 import sys
 from pathlib import Path
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-marker = "<!-- CUSTOM_RUSTDESK_HOME_POWERED -->"
+marker = "custom-rd-home-powered"
 card = "<div .card-connect>"
 if text.find(marker) == -1 or text.find(card) == -1 or text.find(marker) > text.find(card):
+    raise SystemExit(1)
+PY
+        python3 - src/ui/index.tis <<'PY'
+import re
+import sys
+from pathlib import Path
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+if "studio-about" not in text:
+    raise SystemExit(1)
+if not re.search(
+    r"Slogan_tip\"\) \+ \"</p>\\\\\s*\n\s*<br />\\\\\s*\n\s*<p class='link custom-event studio-about'",
+    text,
+):
     raise SystemExit(1)
 PY
         ! grep -q 'SizedBox.shrink()' flutter/lib/desktop/pages/desktop_home_page.dart
@@ -539,6 +562,8 @@ PY
         grep -q 'onecloud-windows-sign.ps1 -Path ./rustdesk' .github/workflows/flutter-build.yml
         grep -q 'onecloud-windows-sign.ps1 -Path ./Release' .github/workflows/flutter-build.yml
         grep -q 'onecloud-windows-sign.ps1 -Path ./SignOutput' .github/workflows/flutter-build.yml
+        grep -q 'CUSTOM_RUSTDESK_MSI_APP_NAME' .github/workflows/flutter-build.yml
+        grep -q 'python preprocess.py --arp -d ../../rustdesk --app-name "$app_name"' .github/workflows/flutter-build.yml
         grep -A1 'Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32' .github/workflows/flutter-build.yml | grep -q 'continue-on-error: true'
         grep -A1 'Swatinem/rust-cache@v2' .github/workflows/flutter-build.yml | grep -q 'continue-on-error: true'
         grep -q 'signtool.exe' .github/workflows/scripts/onecloud-windows-sign.ps1

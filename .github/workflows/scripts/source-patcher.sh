@@ -555,9 +555,8 @@ from pathlib import Path
 
 data = base64.b64encode(Path("res/logo.png").read_bytes()).decode("ascii")
 print(
-    '<img src="data:image/png;base64,' + data + '" '
-    'style="max-width:300px;max-height:60px;margin:0 auto 0.25em auto;display:block" /> '
-    '<!-- CUSTOM_RUSTDESK_HOME_LOGO -->'
+    '<img.custom-rd-home-logo src="data:image/png;base64,' + data + '" '
+    'style="max-width:300px;max-height:60px;margin:0 auto 0.25em auto;display:block" />'
 )
 PY
 }
@@ -570,9 +569,9 @@ _custom_sciter_custom_brand_block() {
     fi
 
     if [ -n "$logo_markup" ]; then
-        printf '%s' "{is_custom_client ? <div #custom-brand style=\"text-align:center;margin-bottom:0.35em\">${logo_markup}<div style=\"font-size:1.1em;font-weight:bold\">{handler.get_builtin_option(\"custom-customer-name\")}</div></div> : \"\"} <!-- CUSTOM_RUSTDESK_HOME_HEADER -->"
+        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\">${logo_markup}<div style=\"font-size:1.1em;font-weight:bold\">{handler.get_builtin_option(\"custom-customer-name\")}</div></div> : \"\"}"
     else
-        printf '%s' '{is_custom_client ? <div #custom-brand style="text-align:center;margin-bottom:0.35em;font-size:1.1em;font-weight:bold">{handler.get_builtin_option("custom-customer-name")}</div> : ""} <!-- CUSTOM_RUSTDESK_HOME_HEADER -->'
+        printf '%s' '{is_custom_client ? <div #custom-brand.custom-rd-home-header style="text-align:center;margin-bottom:0.35em;font-size:1.1em;font-weight:bold">{handler.get_builtin_option("custom-customer-name")}</div> : ""}'
     fi
 }
 
@@ -598,9 +597,8 @@ text = path.read_text(encoding="utf-8")
 
 powered_block = (
     '{is_custom_client && handler.get_builtin_option("hide-powered-by-me") != "Y" '
-    '? <div .link #powered-by style="opacity:0.85;font-size:1em;text-decoration:underline;'
-    'margin-bottom:0.4em">{translate(\'powered_by_me\')}</div> : ""} '
-    '<!-- CUSTOM_RUSTDESK_HOME_POWERED -->'
+    '? <div .link .custom-rd-home-powered #powered-by style="color:#000;font-size:1.15em;'
+    'text-decoration:underline;margin-bottom:0.4em">{translate(\'powered_by_me\')}</div> : ""}'
 )
 plain_tip = (
     "<div .lighter-text>{outgoing_only ? translate('outgoing_only_desk_tip') "
@@ -636,8 +634,24 @@ right_with_powered = (
 text_only_brand = (
     '{is_custom_client ? <div #custom-brand style="text-align:center;margin-bottom:0.35em;'
     'font-size:1.1em;font-weight:bold">{handler.get_builtin_option("custom-customer-name")}'
-    '</div> : ""} <!-- CUSTOM_RUSTDESK_HOME_HEADER -->'
+    '</div> : ""}'
 )
+legacy_brand = re.compile(
+    r"\{is_custom_client \? <div #custom-brand(?:\.custom-rd-home-header)?[^>]*>.*?"
+    r"\{handler\.get_builtin_option\(\"custom-customer-name\"\)\}.*?</div> : \"\"\}",
+    re.DOTALL,
+)
+legacy_powered = re.compile(
+    r'\{is_custom_client && handler\.get_builtin_option\("hide-powered-by-me"\) != "Y" '
+    r'\? <div \.link(?: \.custom-rd-home-powered)? #powered-by style="[^"]*">'
+    r"\{translate\('powered_by_me'\)\}</div> : ""\}\s*'
+    r'(?:<!-- CUSTOM_RUSTDESK_HOME_POWERED -->)?'
+)
+
+text = text.replace(" <!-- CUSTOM_RUSTDESK_HOME_POWERED -->", "")
+text = text.replace(" <!-- CUSTOM_RUSTDESK_HOME_HEADER -->", "")
+text = re.sub(r"\s*<!-- CUSTOM_RUSTDESK_HOME_LOGO -->", "", text)
+text = legacy_powered.sub("", text)
 
 changed = False
 
@@ -647,25 +661,24 @@ if old_header in text:
 elif text_only_brand in text and brand != text_only_brand:
     text = text.replace(text_only_brand, brand, 1)
     changed = True
+elif "custom-rd-home-header" not in text and "#custom-brand" in text:
+    match = legacy_brand.search(text)
+    if match and match.group(0) != brand:
+        text = legacy_brand.sub(brand, text, count=1)
+        changed = True
 
 if wrong_tip in text:
     text = text.replace(wrong_tip, plain_tip, 1)
     changed = True
 
-if "<!-- CUSTOM_RUSTDESK_HOME_POWERED -->" not in text:
+if "custom-rd-home-powered" not in text:
     if right_anchor not in text:
         raise SystemExit("source-patcher: missing sciter right-pane card-connect anchor")
     text = text.replace(right_anchor, right_with_powered, 1)
     changed = True
-elif powered_block not in text and "<!-- CUSTOM_RUSTDESK_HOME_POWERED -->" in text:
-    powered_pattern = re.compile(
-        r'\{is_custom_client && handler\.get_builtin_option\("hide-powered-by-me"\) != "Y" '
-        r'\? <div \.link #powered-by style="opacity:[^"]*;font-size:[^"]*;'
-        r'text-decoration:underline;[^"]*">\{translate\(\'powered_by_me\'\)\}</div> : ""\} '
-        r'<!-- CUSTOM_RUSTDESK_HOME_POWERED -->'
-    )
+elif powered_block not in text:
     if right_anchor in text:
-        text = powered_pattern.sub("", text, count=1)
+        text = legacy_powered.sub("", text)
         text = text.replace(right_anchor, right_with_powered, 1)
         changed = True
 
@@ -673,22 +686,22 @@ if old_click in text:
     text = text.replace(old_click, new_click, 1)
     changed = True
 
-if not changed and "<!-- CUSTOM_RUSTDESK_HOME_HEADER -->" not in text:
+if not changed and "custom-rd-home-header" not in text and "custom-rd-home-powered" not in text:
     raise SystemExit("source-patcher: sciter home UI patch made no changes")
 
 path.write_text(text, encoding="utf-8")
 PY
     rm -f "$brand_file"
 
-    if grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$index_file" &&
-       grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$index_file"; then
+    if grep -q "custom-rd-home-header" "$index_file" &&
+       grep -q "custom-rd-home-powered" "$index_file"; then
         if grep -q "card-connect" "$index_file" &&
            python3 - "$index_file" <<'PY'
 import sys
 from pathlib import Path
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-marker = "<!-- CUSTOM_RUSTDESK_HOME_POWERED -->"
+marker = "custom-rd-home-powered"
 card = "<div .card-connect>"
 idx_powered = text.find(marker)
 idx_card = text.find(card)
@@ -696,7 +709,7 @@ if idx_powered == -1 or idx_card == -1 or idx_powered > idx_card:
     raise SystemExit(1)
 PY
         then
-            if [ -f "res/logo.png" ] && grep -q "CUSTOM_RUSTDESK_HOME_LOGO" "$index_file"; then
+            if grep -q "custom-rd-home-logo" "$index_file"; then
                 echo "source-patcher: sciter home header with logo injected in $index_file"
             else
                 echo "source-patcher: sciter home header injected in $index_file"
@@ -741,22 +754,58 @@ _custom_patch_custom_ui_text() {
     fi
 
     if [ -f "$about_file" ] && ! grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file"; then
-        perl -0pi -e "s{(translate\\('Slogan_tip'\\),\\n\\s*style: TextStyle\\(\\n\\s*fontWeight: FontWeight\\.w800,\\n\\s*color: Colors\\.white\\),\\n\\s*\\))}{\$1,\\n                          // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION\\n                          InkWell(\\n                            onTap: () {\\n                              final link = bind.mainGetBuildinOption(key: \"custom-customer-link\");\\n                              if (link.isNotEmpty) launchUrlString(link);\\n                            },\\n                            child: Text(\\n                              translate('custom_studio_attribution'),\\n                              style: const TextStyle(\\n                                  fontWeight: FontWeight.w800,\\n                                  fontSize: 13,\\n                                  color: Colors.white,\\n                                  decoration: TextDecoration.underline),\\n                            ),\\n                          )}" "$about_file"
+        perl -0pi -e "s{(translate\\('Slogan_tip'\\),\\n\\s*style: TextStyle\\(\\n\\s*fontWeight: FontWeight\\.w800,\\n\\s*color: Colors\\.white\\),\\n\\s*\\))}{\$1,\\n                          const SizedBox(height: 12),\\n                          // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION\\n                          InkWell(\\n                            onTap: () {\\n                              final link = bind.mainGetBuildinOption(key: \"custom-customer-link\");\\n                              if (link.isNotEmpty) launchUrlString(link);\\n                            },\\n                            child: Text(\\n                              translate('custom_studio_attribution'),\\n                              style: const TextStyle(\\n                                  fontWeight: FontWeight.w800,\\n                                  fontSize: 13,\\n                                  color: Colors.white,\\n                                  decoration: TextDecoration.underline),\\n                            ),\\n                          )}" "$about_file"
         if grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file"; then
             echo "source-patcher: studio attribution injected below Slogan_tip in $about_file"
         else
             echo "source-patcher: failed to inject studio attribution in $about_file" >&2
             return 1
         fi
+    elif [ -f "$about_file" ] && grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file" &&
+        ! grep -q "SizedBox(height: 12)" "$about_file"; then
+        perl -0pi -e "s{(// CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION)}{const SizedBox(height: 12),\\n                          \$1}" "$about_file"
+        echo "source-patcher: studio attribution spacing added in $about_file"
     fi
 
     if [ -f "src/ui/index.tis" ] && ! grep -q "studio-about" "src/ui/index.tis"; then
-        perl -0pi -e "s#(<p style='font-weight: bold'>\" \\+ translate\\(\"Slogan_tip\"\\) \\+ \"</p>\\\\)#\$1\\n            <p class='link custom-event studio-about' style='font-weight: bold' url='\" + handler.get_builtin_option(\"custom-customer-link\") + \"'>\" + translate(\"custom_studio_attribution\") + \"</p>\\\\#g" "src/ui/index.tis"
+        perl -0pi -e "s#(<p style='font-weight: bold'>\" \\+ translate\\(\"Slogan_tip\"\\) \\+ \"</p>\\\\)#\$1\\n            <br />\\\\\\n            <p class='link custom-event studio-about' style='font-weight: bold' url='\" + handler.get_builtin_option(\"custom-customer-link\") + \"'>\" + translate(\"custom_studio_attribution\") + \"</p>\\\\#g" "src/ui/index.tis"
         if grep -q "studio-about" "src/ui/index.tis"; then
             echo "source-patcher: studio attribution injected below Slogan_tip in src/ui/index.tis"
         else
             echo "source-patcher: failed to inject studio attribution in src/ui/index.tis" >&2
             return 1
+        fi
+    elif [ -f "src/ui/index.tis" ] && grep -q "studio-about" "src/ui/index.tis"; then
+        if python3 - "src/ui/index.tis" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+if "studio-about" not in text:
+    raise SystemExit(0)
+pattern = (
+    r"(<p style='font-weight: bold'>\" \+ translate\(\"Slogan_tip\"\) \+ \"</p>\\\\)\s*"
+    r"(<p class='link custom-event studio-about')"
+)
+if re.search(
+    r"Slogan_tip\"\) \+ \"</p>\\\\\s*\n\s*<br />\\\\\s*\n\s*<p class='link custom-event studio-about'",
+    text,
+):
+    raise SystemExit(0)
+new_text, count = re.subn(
+    pattern,
+    r"\1\n            <br />\\\n            \2",
+    text,
+)
+if count == 0:
+    raise SystemExit("source-patcher: failed to add studio attribution spacing in index.tis")
+path.write_text(new_text, encoding="utf-8")
+print("updated")
+PY
+        then
+            echo "source-patcher: studio attribution spacing added in src/ui/index.tis"
         fi
     fi
 
@@ -788,13 +837,65 @@ _custom_patch_custom_ui_text() {
     fi
 
     local common_file="flutter/lib/common.dart"
-    if [ -f "$common_file" ] && ! grep -q "CUSTOM_RUSTDESK_POWERED_LINK" "$common_file"; then
+    if [ -f "$common_file" ]; then
         python3 - "$common_file" <<'PY'
 import re
 import sys
 from pathlib import Path
 
 SIGNATURE = "Widget loadPowered(BuildContext context)"
+OLD_CHILD = """      child: Opacity(
+          opacity: 0.5,
+          child: Text(
+            translate("powered_by_me"),
+            overflow: TextOverflow.clip,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),
+          )),"""
+NEW_CHILD = """      child: bind.isCustomClient()
+          ? Text(
+              translate("powered_by_me"),
+              overflow: TextOverflow.clip,
+              style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black,
+                  decoration: TextDecoration.underline),
+            )
+          : Opacity(
+              opacity: 0.5,
+              child: Text(
+                translate("powered_by_me"),
+                overflow: TextOverflow.clip,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),
+              )),"""
+PARTIAL_CHILD = """      child: Opacity(
+          opacity: 0.5,
+          child: Text(
+            translate("powered_by_me"),
+            overflow: TextOverflow.clip,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(fontSize: bind.isCustomClient() ? 12 : 9,
+                    decoration: TextDecoration.underline),
+          )),"""
+LAUNCH_PATTERNS = (
+    "launchUrl(Uri.parse('https://rustdesk.com'));",
+    'launchUrl(Uri.parse("https://rustdesk.com"));',
+    "launchUrlString('https://rustdesk.com');",
+    'launchUrlString("https://rustdesk.com");',
+)
+NEW_LAUNCH = (
+    "final poweredLink = bind.isCustomClient()\n"
+    '              ? bind.mainGetBuildinOption(key: "custom-customer-link")\n'
+    '              : "https://rustdesk.com";\n'
+    "          if (poweredLink.isNotEmpty) launchUrl(Uri.parse(poweredLink)); // CUSTOM_RUSTDESK_POWERED_LINK"
+)
 
 
 def extract_function(text, signature):
@@ -818,50 +919,42 @@ def extract_function(text, signature):
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-if "CUSTOM_RUSTDESK_POWERED_LINK" in text:
-    raise SystemExit(0)
-
 span = extract_function(text, SIGNATURE)
 if span is None:
     raise SystemExit("source-patcher: loadPowered function not found in common.dart")
 
 start, end = span
 function_text = text[start:end]
-if "CUSTOM_RUSTDESK_POWERED_LINK" in function_text:
-    raise SystemExit(0)
+changed = False
 
-launch_patterns = (
-    "launchUrl(Uri.parse('https://rustdesk.com'));",
-    'launchUrl(Uri.parse("https://rustdesk.com"));',
-    "launchUrlString('https://rustdesk.com');",
-    'launchUrlString("https://rustdesk.com");',
-)
-old_launch = next((item for item in launch_patterns if item in function_text), None)
-if old_launch is None:
-    raise SystemExit("source-patcher: loadPowered launchUrl pattern not found in common.dart")
+if "CUSTOM_RUSTDESK_POWERED_LINK" not in function_text:
+    old_launch = next((item for item in LAUNCH_PATTERNS if item in function_text), None)
+    if old_launch is None:
+        raise SystemExit("source-patcher: loadPowered launchUrl pattern not found in common.dart")
+    function_text = function_text.replace(old_launch, NEW_LAUNCH, 1)
+    changed = True
 
-new_launch = (
-    "final poweredLink = bind.isCustomClient()\n"
-    '              ? bind.mainGetBuildinOption(key: "custom-customer-link")\n'
-    '              : "https://rustdesk.com";\n'
-    "          if (poweredLink.isNotEmpty) launchUrl(Uri.parse(poweredLink)); // CUSTOM_RUSTDESK_POWERED_LINK"
-)
-function_text = function_text.replace(old_launch, new_launch, 1)
-function_text, count = re.subn(
-    r"fontSize: 9, decoration: TextDecoration\.underline",
-    "fontSize: bind.isCustomClient() ? 12 : 9,\n                  decoration: TextDecoration.underline",
-    function_text,
-    count=1,
-)
-if count != 1:
-    raise SystemExit("source-patcher: loadPowered fontSize pattern not found in common.dart")
+if NEW_CHILD not in function_text:
+    if OLD_CHILD in function_text:
+        function_text = function_text.replace(OLD_CHILD, NEW_CHILD, 1)
+        changed = True
+    elif PARTIAL_CHILD in function_text:
+        function_text = function_text.replace(PARTIAL_CHILD, NEW_CHILD, 1)
+        changed = True
+    elif "fontSize: bind.isCustomClient() ? 14 : 9" in function_text:
+        pass
+    else:
+        raise SystemExit("source-patcher: loadPowered style pattern not found in common.dart")
 
-path.write_text(text[:start] + function_text + text[end:], encoding="utf-8")
+if changed:
+    path.write_text(text[:start] + function_text + text[end:], encoding="utf-8")
 PY
-        if grep -q "CUSTOM_RUSTDESK_POWERED_LINK" "$common_file"; then
-            echo "source-patcher: custom powered_by link wired in $common_file"
+        if grep -q "CUSTOM_RUSTDESK_POWERED_LINK" "$common_file" &&
+           grep -q "fontSize: 14" "$common_file" &&
+           grep -q "Colors.black" "$common_file"; then
+            echo "source-patcher: custom powered_by link and style wired in $common_file"
         else
-            echo "source-patcher: failed to patch powered_by link in $common_file" >&2
+            echo "source-patcher: failed to patch powered_by in $common_file" >&2
             return 1
         fi
     fi
@@ -977,6 +1070,71 @@ _custom_patch_windows_test_signing() {
     perl -0pi -e 's{(BASE_URL=\$\{\{ env\.SIGN_BASE_URL \}\} SECRET_KEY=\$\{\{ secrets\.SIGN_SECRET_KEY \}\} python3 res/job\.py sign_files \./Release/\n)}{$1\n      - name: Sign sciter files with OneCloud test certificate\n        if: env.UPLOAD_ARTIFACT == '\''true'\'' && env.SIGN_BASE_URL == '\''-2'\'' && env.ONECLOUD_WINDOWS_SIGNING_ENABLED == '\''true'\''\n        shell: powershell\n        env:\n          ONECLOUD_WINDOWS_PFX_BASE64: \${{ secrets.ONECLOUD_WINDOWS_PFX_BASE64 }}\n          ONECLOUD_WINDOWS_PFX_PASSWORD: \${{ secrets.ONECLOUD_WINDOWS_PFX_PASSWORD }}\n        run: powershell -NoProfile -ExecutionPolicy Bypass -File .github/workflows/scripts/onecloud-windows-sign.ps1 -Path ./Release\n}' "$file"
 
     perl -0pi -e 's{(BASE_URL=\$\{\{ env\.SIGN_BASE_URL \}\} SECRET_KEY=\$\{\{ secrets\.SIGN_SECRET_KEY \}\} python3 res/job\.py sign_files \./SignOutput/?\n)}{$1\n      - name: Sign packaged Windows artifacts with OneCloud test certificate\n        if: env.UPLOAD_ARTIFACT == '\''true'\'' && env.SIGN_BASE_URL == '\''-2'\'' && env.ONECLOUD_WINDOWS_SIGNING_ENABLED == '\''true'\''\n        shell: powershell\n        env:\n          ONECLOUD_WINDOWS_PFX_BASE64: \${{ secrets.ONECLOUD_WINDOWS_PFX_BASE64 }}\n          ONECLOUD_WINDOWS_PFX_PASSWORD: \${{ secrets.ONECLOUD_WINDOWS_PFX_PASSWORD }}\n        run: powershell -NoProfile -ExecutionPolicy Bypass -File .github/workflows/scripts/onecloud-windows-sign.ps1 -Path ./SignOutput\n}g' "$file"
+}
+
+_custom_patch_flutter_msi_app_name() {
+    local file=".github/workflows/flutter-build.yml"
+
+    if [ ! -f "$file" ]; then
+        echo "source-patcher: $file not found, skipping flutter MSI app-name patch"
+        return 0
+    fi
+
+    if grep -q "CUSTOM_RUSTDESK_MSI_APP_NAME" "$file"; then
+        echo "source-patcher: flutter MSI app-name patch already applied"
+        return 0
+    fi
+
+    if ! grep -q 'python preprocess.py --arp -d ../../rustdesk' "$file"; then
+        echo "source-patcher: flutter MSI preprocess anchor not found in $file, skipping MSI app-name patch"
+        return 0
+    fi
+
+    python3 - "$file" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+old = """          pushd ./res/msi
+          python preprocess.py --arp -d ../../rustdesk
+"""
+new = """          pushd ./res/msi
+          # CUSTOM_RUSTDESK_MSI_APP_NAME
+          python3 - <<'MSI_PREP'
+import json
+import pathlib
+import shutil
+
+app_name = "RustDesk"
+config_path = pathlib.Path("../../custom-build-config.json")
+if config_path.exists():
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    app_name = (config.get("app_name") or app_name).strip() or app_name
+dist_dir = pathlib.Path("../../rustdesk")
+source_exe = dist_dir / "rustdesk.exe"
+target_exe = dist_dir / f"{app_name}.exe"
+if source_exe.exists() and source_exe != target_exe:
+    shutil.copy2(source_exe, target_exe)
+    source_exe.unlink()
+pathlib.Path("../../target-msi-app-name.txt").write_text(app_name, encoding="utf-8")
+MSI_PREP
+          app_name="$(cat ../../target-msi-app-name.txt)"
+          rm -f ../../target-msi-app-name.txt
+          python preprocess.py --arp -d ../../rustdesk --app-name "$app_name"
+          # END CUSTOM_RUSTDESK_MSI_APP_NAME
+"""
+if old not in text:
+    raise SystemExit(f"source-patcher: flutter MSI preprocess anchor not found in {path}")
+path.write_text(text.replace(old, new, 1), encoding="utf-8")
+PY
+
+    if grep -q "CUSTOM_RUSTDESK_MSI_APP_NAME" "$file"; then
+        echo "source-patcher: flutter MSI app-name patch applied in $file"
+    else
+        echo "source-patcher: failed to patch flutter MSI app-name in $file" >&2
+        return 1
+    fi
 }
 
 _custom_patch_rust_cache_nonfatal() {
@@ -1114,6 +1272,7 @@ apply_custom_source_patches() {
     _custom_patch_custom_ui_text
     _custom_patch_portable_working_dir
     _custom_patch_windows_test_signing
+    _custom_patch_flutter_msi_app_name
     _custom_patch_rust_cache_nonfatal
 
     echo "source-patcher: custom source patches applied"
