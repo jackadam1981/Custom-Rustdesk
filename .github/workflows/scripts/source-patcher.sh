@@ -651,7 +651,6 @@ legacy_powered = re.compile(
 text = text.replace(" <!-- CUSTOM_RUSTDESK_HOME_POWERED -->", "")
 text = text.replace(" <!-- CUSTOM_RUSTDESK_HOME_HEADER -->", "")
 text = re.sub(r"\s*<!-- CUSTOM_RUSTDESK_HOME_LOGO -->", "", text)
-text = legacy_powered.sub("", text)
 
 changed = False
 
@@ -672,6 +671,7 @@ if wrong_tip in text:
     changed = True
 
 if "custom-rd-home-powered" not in text:
+    text = legacy_powered.sub("", text)
     if right_anchor not in text:
         raise SystemExit("source-patcher: missing sciter right-pane card-connect anchor")
     text = text.replace(right_anchor, right_with_powered, 1)
