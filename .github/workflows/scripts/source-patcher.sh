@@ -644,7 +644,7 @@ legacy_brand = re.compile(
 legacy_powered = re.compile(
     r'\{is_custom_client && handler\.get_builtin_option\("hide-powered-by-me"\) != "Y" '
     r'\? <div \.link(?: \.custom-rd-home-powered)? #powered-by style="[^"]*">'
-    r"\{translate\('powered_by_me'\)\}</div> : ""\}\s*'
+    r"\{translate\('powered_by_me'\)\}</div> : \"\"\}\s*"
     r'(?:<!-- CUSTOM_RUSTDESK_HOME_POWERED -->)?'
 )
 
