@@ -794,40 +794,69 @@ import re
 import sys
 from pathlib import Path
 
+SIGNATURE = "Widget loadPowered(BuildContext context)"
+
+
+def extract_function(text, signature):
+    start = text.find(signature)
+    if start == -1:
+        return None
+    brace = text.find("{", start + len(signature))
+    if brace == -1:
+        return None
+    depth = 0
+    for index in range(brace, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return start, index + 1
+    return None
+
+
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-pattern = re.compile(r"Widget loadPowered\(BuildContext context\) \{(.*?)^  \}", re.S | re.M)
-match = pattern.search(text)
-if not match:
-    raise SystemExit("source-patcher: loadPowered function not found in common.dart")
-
-body = match.group(1)
-if "CUSTOM_RUSTDESK_POWERED_LINK" in body:
-    path.write_text(text, encoding="utf-8")
+if "CUSTOM_RUSTDESK_POWERED_LINK" in text:
     raise SystemExit(0)
 
-old_launch = "launchUrl(Uri.parse('https://rustdesk.com'));"
+span = extract_function(text, SIGNATURE)
+if span is None:
+    raise SystemExit("source-patcher: loadPowered function not found in common.dart")
+
+start, end = span
+function_text = text[start:end]
+if "CUSTOM_RUSTDESK_POWERED_LINK" in function_text:
+    raise SystemExit(0)
+
+launch_patterns = (
+    "launchUrl(Uri.parse('https://rustdesk.com'));",
+    'launchUrl(Uri.parse("https://rustdesk.com"));',
+    "launchUrlString('https://rustdesk.com');",
+    'launchUrlString("https://rustdesk.com");',
+)
+old_launch = next((item for item in launch_patterns if item in function_text), None)
+if old_launch is None:
+    raise SystemExit("source-patcher: loadPowered launchUrl pattern not found in common.dart")
+
 new_launch = (
     "final poweredLink = bind.isCustomClient()\n"
     '              ? bind.mainGetBuildinOption(key: "custom-customer-link")\n'
     '              : "https://rustdesk.com";\n'
     "          if (poweredLink.isNotEmpty) launchUrl(Uri.parse(poweredLink)); // CUSTOM_RUSTDESK_POWERED_LINK"
 )
-if old_launch not in body:
-    raise SystemExit("source-patcher: loadPowered launchUrl pattern not found in common.dart")
-
-body = body.replace(old_launch, new_launch, 1)
-body, count = re.subn(
+function_text = function_text.replace(old_launch, new_launch, 1)
+function_text, count = re.subn(
     r"fontSize: 9, decoration: TextDecoration\.underline",
     "fontSize: bind.isCustomClient() ? 12 : 9,\n                  decoration: TextDecoration.underline",
-    body,
+    function_text,
     count=1,
 )
 if count != 1:
     raise SystemExit("source-patcher: loadPowered fontSize pattern not found in common.dart")
 
-updated = pattern.sub(f"Widget loadPowered(BuildContext context) {{{body}  }}", text, count=1)
-path.write_text(updated, encoding="utf-8")
+path.write_text(text[:start] + function_text + text[end:], encoding="utf-8")
 PY
         if grep -q "CUSTOM_RUSTDESK_POWERED_LINK" "$common_file"; then
             echo "source-patcher: custom powered_by link wired in $common_file"
