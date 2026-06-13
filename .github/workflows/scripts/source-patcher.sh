@@ -1072,50 +1072,16 @@ _custom_patch_windows_test_signing() {
     perl -0pi -e 's{(BASE_URL=\$\{\{ env\.SIGN_BASE_URL \}\} SECRET_KEY=\$\{\{ secrets\.SIGN_SECRET_KEY \}\} python3 res/job\.py sign_files \./SignOutput/?\n)}{$1\n      - name: Sign packaged Windows artifacts with OneCloud test certificate\n        if: env.UPLOAD_ARTIFACT == '\''true'\'' && env.SIGN_BASE_URL == '\''-2'\'' && env.ONECLOUD_WINDOWS_SIGNING_ENABLED == '\''true'\''\n        shell: powershell\n        env:\n          ONECLOUD_WINDOWS_PFX_BASE64: \${{ secrets.ONECLOUD_WINDOWS_PFX_BASE64 }}\n          ONECLOUD_WINDOWS_PFX_PASSWORD: \${{ secrets.ONECLOUD_WINDOWS_PFX_PASSWORD }}\n        run: powershell -NoProfile -ExecutionPolicy Bypass -File .github/workflows/scripts/onecloud-windows-sign.ps1 -Path ./SignOutput\n}g' "$file"
 }
 
-_custom_write_msi_preprocess_script() {
-    local file=".github/workflows/scripts/msi-preprocess-prep.py"
-    mkdir -p "$(dirname "$file")"
-    cat > "$file" <<'EOF'
-#!/usr/bin/env python3
-import json
-import pathlib
-import shutil
-
-repo_root = pathlib.Path(__file__).resolve().parents[2]
-app_name = "RustDesk"
-config_path = repo_root / "custom-build-config.json"
-if config_path.exists():
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    app_name = (config.get("app_name") or app_name).strip() or app_name
-
-dist_dir = repo_root / "rustdesk"
-source_exe = dist_dir / "rustdesk.exe"
-target_exe = dist_dir / f"{app_name}.exe"
-if source_exe.exists() and source_exe != target_exe:
-    shutil.copy2(source_exe, target_exe)
-    source_exe.unlink()
-
-(repo_root / "target-msi-app-name.txt").write_text(app_name, encoding="utf-8")
-EOF
-}
-
-_custom_patch_flutter_msi_app_name() {
-    local file=".github/workflows/flutter-build.yml"
-
-    _custom_write_msi_preprocess_script
+_custom_patch_msi_preprocess_app_name() {
+    local file="res/msi/preprocess.py"
 
     if [ ! -f "$file" ]; then
-        echo "source-patcher: $file not found, skipping flutter MSI app-name patch"
+        echo "source-patcher: $file not found, skipping MSI app-name source patch"
         return 0
     fi
 
     if grep -q "CUSTOM_RUSTDESK_MSI_APP_NAME" "$file"; then
-        echo "source-patcher: flutter MSI app-name patch already applied"
-        return 0
-    fi
-
-    if ! grep -q 'python preprocess.py --arp -d ../../rustdesk' "$file"; then
-        echo "source-patcher: flutter MSI preprocess anchor not found in $file, skipping MSI app-name patch"
+        echo "source-patcher: MSI app-name source patch already applied in $file"
         return 0
     fi
 
@@ -1125,26 +1091,58 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-old = """          pushd ./res/msi
-          python preprocess.py --arp -d ../../rustdesk
+helpers = '''
+def _custom_rustdesk_repo_root():
+    return Path(__file__).resolve().parents[2]
+
+
+def _custom_rustdesk_build_app_name():
+    config_path = _custom_rustdesk_repo_root() / "custom-build-config.json"
+    if not config_path.exists():
+        return ""
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    return (config.get("app_name") or "").strip()
+
+
+def _custom_rustdesk_prepare_dist_exe(dist_dir, app_name):
+    if not app_name or app_name == "RustDesk":
+        return
+    source_exe = dist_dir / "rustdesk.exe"
+    target_exe = dist_dir / f"{app_name}.exe"
+    if source_exe.exists() and source_exe != target_exe:
+        shutil.copy2(source_exe, target_exe)
+        source_exe.unlink()
+'''
+anchor = "def make_parser():"
+main_old = """    app_name = args.app_name
+    dist_dir = Path(sys.argv[0]).parent.joinpath(args.dist_dir).resolve()
 """
-new = """          pushd ./res/msi
-          # CUSTOM_RUSTDESK_MSI_APP_NAME
-          python3 ../../.github/workflows/scripts/msi-preprocess-prep.py
-          app_name="$(cat ../../target-msi-app-name.txt)"
-          rm -f ../../target-msi-app-name.txt
-          python preprocess.py --arp -d ../../rustdesk --app-name "$app_name"
-          # END CUSTOM_RUSTDESK_MSI_APP_NAME
+main_new = """    app_name = args.app_name
+    # CUSTOM_RUSTDESK_MSI_APP_NAME
+    if app_name == "RustDesk":
+        custom_name = _custom_rustdesk_build_app_name()
+        if custom_name:
+            args.app_name = custom_name
+            app_name = args.app_name
+    dist_dir = Path(sys.argv[0]).parent.joinpath(args.dist_dir).resolve()
+    _custom_rustdesk_prepare_dist_exe(dist_dir, app_name)
 """
-if old not in text:
-    raise SystemExit(f"source-patcher: flutter MSI preprocess anchor not found in {path}")
-path.write_text(text.replace(old, new, 1), encoding="utf-8")
+if anchor not in text:
+    raise SystemExit(f"source-patcher: make_parser anchor not found in {path}")
+if main_old not in text:
+    raise SystemExit(f"source-patcher: preprocess main block anchor not found in {path}")
+text = text.replace(anchor, helpers + anchor, 1)
+text = text.replace(main_old, main_new, 1)
+path.write_text(text, encoding="utf-8")
 PY
 
     if grep -q "CUSTOM_RUSTDESK_MSI_APP_NAME" "$file"; then
-        echo "source-patcher: flutter MSI app-name patch applied in $file"
+        echo "source-patcher: MSI app-name source patch applied in $file"
     else
-        echo "source-patcher: failed to patch flutter MSI app-name in $file" >&2
+        echo "source-patcher: failed to patch MSI app-name in $file" >&2
         return 1
     fi
 }
@@ -1284,7 +1282,7 @@ apply_custom_source_patches() {
     _custom_patch_custom_ui_text
     _custom_patch_portable_working_dir
     _custom_patch_windows_test_signing
-    _custom_patch_flutter_msi_app_name
+    _custom_patch_msi_preprocess_app_name
     _custom_patch_rust_cache_nonfatal
 
     echo "source-patcher: custom source patches applied"

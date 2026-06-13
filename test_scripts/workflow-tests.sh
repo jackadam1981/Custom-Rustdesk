@@ -152,7 +152,7 @@ function test_source_patcher_covers_server_key_and_brand() {
        grep -q 'ProductName = "RustDesk"' "$patcher" &&
        grep -q 'libs/portable/Cargo.toml' "$patcher" &&
        grep -q 'libs/portable/src/main.rs' "$patcher" &&
-       grep -q '_custom_patch_flutter_msi_app_name' "$patcher" &&
+       grep -q '_custom_patch_msi_preprocess_app_name' "$patcher" &&
        grep -q 'current_dir' "$patcher"; then
         record_test_result "source_patcher_covers_server_key_and_brand" "PASS" "源码 patch 覆盖服务器、密钥和主要品牌外观"
         return 0
@@ -402,6 +402,44 @@ description = "RustDesk Remote Desktop"
 ProductName = "RustDesk"
 FileDescription = "RustDesk Remote Desktop"
 EOF
+    mkdir -p "$tmp_dir/res/msi"
+    cat > "$tmp_dir/res/msi/preprocess.py" <<'EOF'
+#!/usr/bin/env python3
+import json
+import sys
+import shutil
+from pathlib import Path
+
+
+def make_parser():
+    import argparse
+    parser = argparse.ArgumentParser(description="Msi preprocess script.")
+    parser.add_argument(
+        "-d",
+        "--dist-dir",
+        type=str,
+        default="../../rustdesk",
+        help="The dist directory to install.",
+    )
+    parser.add_argument(
+        "--arp",
+        action="store_true",
+        help="Is ARPSYSTEMCOMPONENT",
+        default=False,
+    )
+    parser.add_argument(
+        "--app-name", type=str, default="RustDesk", help="The app name."
+    )
+    return parser
+
+
+if __name__ == "__main__":
+    parser = make_parser()
+    args = parser.parse_args()
+
+    app_name = args.app_name
+    dist_dir = Path(sys.argv[0]).parent.joinpath(args.dist_dir).resolve()
+EOF
     cat > "$tmp_dir/.github/workflows/flutter-build.yml" <<'EOF'
 env:
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
@@ -562,11 +600,13 @@ PY
         grep -q 'onecloud-windows-sign.ps1 -Path ./rustdesk' .github/workflows/flutter-build.yml
         grep -q 'onecloud-windows-sign.ps1 -Path ./Release' .github/workflows/flutter-build.yml
         grep -q 'onecloud-windows-sign.ps1 -Path ./SignOutput' .github/workflows/flutter-build.yml
-        grep -q 'CUSTOM_RUSTDESK_MSI_APP_NAME' .github/workflows/flutter-build.yml
-        grep -q 'msi-preprocess-prep.py' .github/workflows/flutter-build.yml
-        grep -q 'python preprocess.py --arp -d ../../rustdesk --app-name "$app_name"' .github/workflows/flutter-build.yml
-        grep -q 'custom-build-config.json' .github/workflows/scripts/msi-preprocess-prep.py
-        grep -q 'target-msi-app-name.txt' .github/workflows/scripts/msi-preprocess-prep.py
+        grep -q 'CUSTOM_RUSTDESK_MSI_APP_NAME' res/msi/preprocess.py
+        grep -q '_custom_rustdesk_build_app_name' res/msi/preprocess.py
+        grep -q '_custom_rustdesk_prepare_dist_exe' res/msi/preprocess.py
+        grep -q 'custom-build-config.json' res/msi/preprocess.py
+        grep -q 'python preprocess.py --arp -d ../../rustdesk' .github/workflows/flutter-build.yml
+        ! grep -q 'msi-preprocess-prep.py' .github/workflows/flutter-build.yml
+        ! grep -q 'target-msi-app-name.txt' .github/workflows/flutter-build.yml
         grep -A1 'Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32' .github/workflows/flutter-build.yml | grep -q 'continue-on-error: true'
         grep -A1 'Swatinem/rust-cache@v2' .github/workflows/flutter-build.yml | grep -q 'continue-on-error: true'
         grep -q 'signtool.exe' .github/workflows/scripts/onecloud-windows-sign.ps1
