@@ -18,6 +18,8 @@
 
 定制逻辑集中在 `source-patcher.sh`：改 `.rs` / `.dart` / `.tis` / `preprocess.py` 等源码，尽量不改上游 workflow。
 
+编译由 `upstream-build` job 触发内层 `custom-rustdesk-upstream-build.yml`（RustDesk 原版 `flutter-build.yml`）完成，本仓库不再维护自编 compile job。
+
 ## 触发构建
 
 **手动**：Actions → Custom Rustdesk Build Workflow → Run workflow
