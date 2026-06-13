@@ -3,9 +3,10 @@
 Thumbs.db
 desktop.ini
 
-# 编辑器文件
+# 编辑器 / IDE
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
@@ -67,12 +68,8 @@ config.local.*
 .github/workflows/.cache/
 .github/workflows/temp/
 
-# Local test code-signing CA material. Public .cer files may be committed;
-# private keys and PFX bundles must stay local or in GitHub Secrets.
-CA/private/
-CA/*.pfx
-CA/*.pvk
-CA/*.key
+# 本地测试 CA（已移出仓库；私钥仅放 Secrets）
+CA/
 
 # 自定义构建文件
 rustdesk-source/
