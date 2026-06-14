@@ -835,7 +835,13 @@ else:
     matched = False
     for anchor in anchors:
         if anchor.search(text):
-            text = anchor.sub(r"\1" + studio_block, text, count=1)
+            def _inject_studio(match, block=studio_block):
+                chunk = match.group(1).rstrip()
+                if not chunk.endswith(","):
+                    chunk += ","
+                return chunk + block
+
+            text = anchor.sub(_inject_studio, text, count=1)
             matched = True
             break
     if not matched:
