@@ -54,3 +54,15 @@ powershell -ExecutionPolicy Bypass -File .\scripts\clean-rustdesk-windows.ps1 -F
 在仓库 Settings → Secrets 中配置 `BUILD_TOKEN`、`ENCRYPTION_KEY` 及默认构建参数（见 workflow `env` 段）。
 
 Windows 测试签名（可选）：`ONECLOUD_WINDOWS_PFX_BASE64`、`ONECLOUD_WINDOWS_PFX_PASSWORD`。
+
+## 测试
+
+| 环境 | 命令 | 说明 |
+|------|------|------|
+| 开发机 | `bash scripts/health-check.sh` | `bash -n` + workflow 结构轻量 grep，不调用 `gh`、不跑 fixture |
+| 编译机 2.18 | `bash run-tests.sh workflow-tests` | workflow 结构 + source-patcher fixture 回归（需 `jq`） |
+| 编译机 2.18（可选） | `bash run-tests.sh test-queue-reset && bash run-tests.sh test-manual-trigger` | 需 Janee/gh secrets 与 `BUILD_TOKEN` |
+
+完整 `run-tests.sh all` 含真实 workflow 触发，**不要在 Windows 开发机运行**。
+
+Health Stack 详情见 [CLAUDE.md](CLAUDE.md)。
