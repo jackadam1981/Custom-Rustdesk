@@ -170,7 +170,7 @@ pub fn apply_custom_build_defaults() {
     const CUSTOM_HIDE_NETWORK_SETTINGS: &str = $hide_network_json;
 
     if !CUSTOM_APP_NAME.is_empty() {
-        *config::APP_NAME.write().unwrap() = CUSTOM_APP_NAME.to_owned();
+        // UI-only: keep config::APP_NAME as RustDesk for MSI/install/registry paths.
     }
 
     let custom_settings = [
@@ -375,6 +375,7 @@ _custom_patch_brand_files() {
     local app_name_xml
     app_name_xml=$(_custom_xml_escape "$CUSTOM_APP_NAME")
 
+    # UI labels on mobile/desktop shells only. Windows exe/MSI identity stays RustDesk.
     _custom_replace_file "flutter/android/app/src/main/res/values/strings.xml" \
         '<string name="app_name">[^<]*</string>' \
         "<string name=\"app_name\">$app_name_xml</string>"
@@ -392,33 +393,51 @@ _custom_patch_brand_files() {
 
     _custom_replace_file_once "res/rustdesk.desktop" '(?m)^Name=.*$' "Name=$CUSTOM_APP_NAME"
     _custom_replace_file_once "res/rustdesk-link.desktop" '(?m)^Name=.*$' "Name=$CUSTOM_APP_NAME"
+}
 
-    _custom_replace_file "flutter/windows/runner/Runner.rc" \
-        'VALUE "ProductName", "RustDesk"' \
-        "VALUE \"ProductName\", \"$CUSTOM_APP_NAME\""
-    _custom_replace_file "flutter/windows/runner/Runner.rc" \
-        'VALUE "FileDescription", "RustDesk Remote Desktop"' \
-        "VALUE \"FileDescription\", \"$CUSTOM_APP_NAME Remote Desktop\""
+_custom_patch_flutter_ui_app_name() {
+    local common_file="flutter/lib/common.dart"
 
-    _custom_replace_file "Cargo.toml" \
-        'description = "RustDesk Remote Desktop"' \
-        "description = \"$CUSTOM_APP_NAME Remote Desktop\""
-    _custom_replace_file "Cargo.toml" \
-        'ProductName = "RustDesk"' \
-        "ProductName = \"$CUSTOM_APP_NAME\""
-    _custom_replace_file "Cargo.toml" \
-        'FileDescription = "RustDesk Remote Desktop"' \
-        "FileDescription = \"$CUSTOM_APP_NAME Remote Desktop\""
+    if [ ! -f "$common_file" ]; then
+        echo "source-patcher: $common_file not found, skipping UI app-name patch"
+        return 0
+    fi
 
-    _custom_replace_file "libs/portable/Cargo.toml" \
-        'description = "RustDesk Remote Desktop"' \
-        "description = \"$CUSTOM_APP_NAME Remote Desktop\""
-    _custom_replace_file "libs/portable/Cargo.toml" \
-        'ProductName = "RustDesk"' \
-        "ProductName = \"$CUSTOM_APP_NAME\""
-    _custom_replace_file "libs/portable/Cargo.toml" \
-        'FileDescription = "RustDesk Remote Desktop"' \
-        "FileDescription = \"$CUSTOM_APP_NAME Remote Desktop\""
+    if grep -q "CUSTOM_RUSTDESK_UI_APP_NAME" "$common_file"; then
+        echo "source-patcher: UI app-name patch already applied in $common_file"
+        return 0
+    fi
+
+    python3 - "$common_file" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+old = """String getWindowName({WindowType? overrideType}) {
+  final name = bind.mainGetAppNameSync();
+"""
+new = """String getWindowName({WindowType? overrideType}) {
+  // CUSTOM_RUSTDESK_UI_APP_NAME
+  var name = bind.mainGetAppNameSync();
+  if (bind.isCustomClient()) {
+    final customAppName = bind.mainGetBuildinOption(key: "app-name");
+    if (customAppName.isNotEmpty) {
+      name = customAppName;
+    }
+  }
+"""
+if old not in text:
+    raise SystemExit(f"source-patcher: getWindowName anchor not found in {path}")
+path.write_text(text.replace(old, new, 1), encoding="utf-8")
+PY
+
+    if grep -q "CUSTOM_RUSTDESK_UI_APP_NAME" "$common_file"; then
+        echo "source-patcher: UI app-name patch applied in $common_file"
+    else
+        echo "source-patcher: failed to patch UI app-name in $common_file" >&2
+        return 1
+    fi
 }
 
 _custom_patch_logo_assets() {
@@ -435,7 +454,7 @@ _custom_patch_logo_assets() {
 
     echo "source-patcher: custom logo configured"
     if [[ "$logo_source" =~ ^https?:// ]]; then
-        if ! curl -fsSL "$logo_source" -o "$input_image"; then
+        if ! curl -fsSL -A "Custom-RustDesk-Build/1.0" "$logo_source" -o "$input_image"; then
             echo "source-patcher: failed to download logo_url" >&2
             rm -rf "$work_dir"
             return 1
@@ -569,9 +588,9 @@ _custom_sciter_custom_brand_block() {
     fi
 
     if [ -n "$logo_markup" ]; then
-        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\">${logo_markup}<div style=\"font-size:1.1em;font-weight:bold\">{handler.get_builtin_option(\"custom-customer-name\")}</div></div> : \"\"}"
+        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\">${logo_markup}<div style=\"font-size:1.1em;font-weight:bold\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div></div> : \"\"}"
     else
-        printf '%s' '{is_custom_client ? <div #custom-brand.custom-rd-home-header style="text-align:center;margin-bottom:0.35em;font-size:1.1em;font-weight:bold">{handler.get_builtin_option("custom-customer-name")}</div> : ""}'
+        printf '%s' '{is_custom_client ? <div #custom-brand.custom-rd-home-header style="text-align:center;margin-bottom:0.35em;font-size:1.1em;font-weight:bold">{handler.get_builtin_option("app-name") || handler.get_builtin_option("custom-customer-name")}</div> : ""}'
     fi
 }
 
@@ -633,12 +652,12 @@ right_with_powered = (
 )
 text_only_brand = (
     '{is_custom_client ? <div #custom-brand style="text-align:center;margin-bottom:0.35em;'
-    'font-size:1.1em;font-weight:bold">{handler.get_builtin_option("custom-customer-name")}'
+    'font-size:1.1em;font-weight:bold">{handler.get_builtin_option("app-name") || handler.get_builtin_option("custom-customer-name")}'
     '</div> : ""}'
 )
 legacy_brand = re.compile(
     r"\{is_custom_client \? <div #custom-brand(?:\.custom-rd-home-header)?[^>]*>.*?"
-    r"\{handler\.get_builtin_option\(\"custom-customer-name\"\)\}.*?</div> : \"\"\}",
+    r"\{handler\.get_builtin_option\([^)]+\)(?: \|\| handler\.get_builtin_option\([^)]+\))?.*?</div> : \"\"\}",
     re.DOTALL,
 )
 legacy_powered = re.compile(
@@ -688,6 +707,12 @@ if old_click in text:
 
 if not changed and "custom-rd-home-header" not in text and "custom-rd-home-powered" not in text:
     raise SystemExit("source-patcher: sciter home UI patch made no changes")
+
+if Path("res/logo.png").exists() and "custom-rd-home-logo" not in text:
+    match = legacy_brand.search(text)
+    if match and match.group(0) != brand:
+        text = legacy_brand.sub(brand, text, count=1)
+        changed = True
 
 path.write_text(text, encoding="utf-8")
 PY
@@ -753,65 +778,113 @@ _custom_patch_custom_ui_text() {
         fi
     fi
 
-    if [ -f "$about_file" ] && ! grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file"; then
-        perl -0pi -e "s{(translate\\('Slogan_tip'\\),\\n\\s*style: TextStyle\\(\\n\\s*fontWeight: FontWeight\\.w800,\\n\\s*color: Colors\\.white\\),\\n\\s*\\))}{\$1,\\n                          const SizedBox(height: 12),\\n                          // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION\\n                          InkWell(\\n                            onTap: () {\\n                              final link = bind.mainGetBuildinOption(key: \"custom-customer-link\");\\n                              if (link.isNotEmpty) launchUrlString(link);\\n                            },\\n                            child: Text(\\n                              translate('custom_studio_attribution'),\\n                              style: const TextStyle(\\n                                  fontWeight: FontWeight.w800,\\n                                  fontSize: 13,\\n                                  color: Colors.white,\\n                                  decoration: TextDecoration.underline),\\n                            ),\\n                          )}" "$about_file"
-        if grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file"; then
-            echo "source-patcher: studio attribution injected below Slogan_tip in $about_file"
-        else
-            echo "source-patcher: failed to inject studio attribution in $about_file" >&2
-            return 1
-        fi
-    elif [ -f "$about_file" ] && grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file" &&
-        ! grep -q "SizedBox(height: 12)" "$about_file"; then
-        perl -0pi -e "s{(// CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION)}{const SizedBox(height: 12),\\n                          \$1}" "$about_file"
-        echo "source-patcher: studio attribution spacing added in $about_file"
-    fi
-
-    if [ -f "src/ui/index.tis" ] && ! grep -q "studio-about" "src/ui/index.tis"; then
-        perl -0pi -e "s#(<p style='font-weight: bold'>\" \\+ translate\\(\"Slogan_tip\"\\) \\+ \"</p>\\\\)#\$1\\n            <br />\\\\\\n            <p class='link custom-event studio-about' style='font-weight: bold' url='\" + handler.get_builtin_option(\"custom-customer-link\") + \"'>\" + translate(\"custom_studio_attribution\") + \"</p>\\\\#g" "src/ui/index.tis"
-        if grep -q "studio-about" "src/ui/index.tis"; then
-            echo "source-patcher: studio attribution injected below Slogan_tip in src/ui/index.tis"
-        else
-            echo "source-patcher: failed to inject studio attribution in src/ui/index.tis" >&2
-            return 1
-        fi
-    elif [ -f "src/ui/index.tis" ] && grep -q "studio-about" "src/ui/index.tis"; then
-        if python3 - "src/ui/index.tis" <<'PY'
+    if [ -f "$about_file" ]; then
+        python3 - "$about_file" <<'PY'
 import re
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-if "studio-about" not in text:
-    raise SystemExit(0)
-pattern = (
-    r"(<p style='font-weight: bold'>\" \+ translate\(\"Slogan_tip\"\) \+ \"</p>\\\\)\s*"
-    r"(<p class='link custom-event studio-about')"
-)
-if re.search(
-    r"Slogan_tip\"\) \+ \"</p>\\\\\s*\n\s*<br />\\\\\s*\n\s*<p class='link custom-event studio-about'",
-    text,
-):
-    raise SystemExit(0)
-new_text, count = re.subn(
-    pattern,
-    r"\1\n            <br />\\\n            \2",
-    text,
-)
-if count == 0:
-    raise SystemExit("source-patcher: failed to add studio attribution spacing in index.tis")
-path.write_text(new_text, encoding="utf-8")
-print("updated")
+marker = "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION"
+studio_block = """
+                          // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION
+                          InkWell(
+                            onTap: () {
+                              final link = bind.mainGetBuildinOption(key: "custom-customer-link");
+                              if (link.isNotEmpty) launchUrlString(link);
+                            },
+                            child: Text(
+                              translate('custom_studio_attribution'),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  decoration: TextDecoration.underline),
+                            ),
+                          ),"""
+
+if marker in text:
+    text = re.sub(
+        r"\s*const SizedBox\(height: 12\),\s*// CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION",
+        "\n                          // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION",
+        text,
+        count=1,
+    )
+    text = re.sub(
+        r"fontWeight: FontWeight\.w800,\s*fontSize: 13,\s*color: Colors\.white,",
+        "fontWeight: FontWeight.w800,\n                                  color: Colors.white,",
+        text,
+        count=1,
+    )
+else:
+    anchor = re.compile(
+        r"(translate\('Slogan_tip'\),\s*"
+        r"style: TextStyle\(\s*"
+        r"fontWeight: FontWeight\.w800,\s*"
+        r"color: Colors\.white\),\s*"
+        r"\),)"
+    )
+    if not anchor.search(text):
+        raise SystemExit("source-patcher: Slogan_tip anchor not found in desktop_setting_page.dart")
+    text = anchor.sub(r"\1" + studio_block, text, count=1)
+
+path.write_text(text, encoding="utf-8")
 PY
-        then
-            echo "source-patcher: studio attribution spacing added in src/ui/index.tis"
+        if grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file"; then
+            echo "source-patcher: studio attribution aligned below Slogan_tip in $about_file"
+        else
+            echo "source-patcher: failed to inject studio attribution in $about_file" >&2
+            return 1
+        fi
+    fi
+
+    if [ -f "src/ui/index.tis" ]; then
+        python3 - "src/ui/index.tis" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+studio_line = (
+    "<p class='link custom-event studio-about' style='font-weight: bold' url='\" "
+    "+ handler.get_builtin_option(\"custom-customer-link\") + \"'>\" "
+    "+ translate(\"custom_studio_attribution\") + \"</p> \\"
+)
+slogan_plain = '" + translate("Slogan_tip") + " \\'
+slogan_with_studio = '" + translate("Slogan_tip") + " \\\n            ' + studio_line
+
+text = re.sub(
+    r'(" \+ translate\("Slogan_tip"\) \+ " \\\s*)<br />\\\\\s*\n\s*'
+    r"(<p class='link custom-event studio-about'[^>]*>)",
+    r"\1\2",
+    text,
+)
+text = text.replace(
+    "<p style='font-weight: bold'>\" + translate(\"Slogan_tip\") + \"</p>\\\\",
+    '" + translate("Slogan_tip") + " \\',
+)
+
+if "studio-about" not in text:
+    if slogan_plain not in text:
+        raise SystemExit("source-patcher: Slogan_tip anchor not found in src/ui/index.tis")
+    text = text.replace(slogan_plain, slogan_with_studio, 1)
+
+if "studio-about" not in text:
+    raise SystemExit("source-patcher: failed to inject studio attribution in src/ui/index.tis")
+path.write_text(text, encoding="utf-8")
+PY
+        if grep -q "studio-about" "src/ui/index.tis"; then
+            echo "source-patcher: studio attribution aligned below Slogan_tip in src/ui/index.tis"
+        else
+            echo "source-patcher: failed to inject studio attribution in src/ui/index.tis" >&2
+            return 1
         fi
     fi
 
     if [ -f "$home_file" ] && ! grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file"; then
-        perl -0pi -e 's/if \(bind\.isCustomClient\(\)\)\s*Align\(\s*alignment: Alignment\.center,\s*child: loadPowered\(context\),\s*\),\s*Align\(\s*alignment: Alignment\.center,\s*child: loadLogo\(\),\s*\),/if (bind.isCustomClient())\n        Align(\n          alignment: Alignment.center,\n          child: Column(\n            mainAxisSize: MainAxisSize.min,\n            children: [\n              loadLogo(),\n              Text(\n                bind.mainGetBuildinOption(key: "custom-customer-name"),\n                style: Theme.of(context).textTheme.titleMedium,\n              ).marginOnly(top: 4),\n            ],\n          ),\n        ) \/\/ CUSTOM_RUSTDESK_HOME_HEADER\n      else ...[\n        Align(\n          alignment: Alignment.center,\n          child: loadPowered(context),\n        ),\n        Align(\n          alignment: Alignment.center,\n          child: loadLogo(),\n        ),\n      ],/s' "$home_file"
-        perl -0pi -e 's/if \(bind\.isCustomClient\(\)\)\s*Align\(\s*alignment: Alignment\.center,\s*child: bind\.isCustomClient\(\) \? SizedBox\.shrink\(\) : loadPowered\(context\),\s*\),\s*Align\(\s*alignment: Alignment\.center,\s*child: loadLogo\(\),\s*\),/if (bind.isCustomClient())\n        Align(\n          alignment: Alignment.center,\n          child: Column(\n            mainAxisSize: MainAxisSize.min,\n            children: [\n              loadLogo(),\n              Text(\n                bind.mainGetBuildinOption(key: "custom-customer-name"),\n                style: Theme.of(context).textTheme.titleMedium,\n              ).marginOnly(top: 4),\n            ],\n          ),\n        ) \/\/ CUSTOM_RUSTDESK_HOME_HEADER\n      else ...[\n        Align(\n          alignment: Alignment.center,\n          child: loadPowered(context),\n        ),\n        Align(\n          alignment: Alignment.center,\n          child: loadLogo(),\n        ),\n      ],/s' "$home_file"
+        perl -0pi -e 's/if \(bind\.isCustomClient\(\)\)\s*Align\(\s*alignment: Alignment\.center,\s*child: loadPowered\(context\),\s*\),\s*Align\(\s*alignment: Alignment\.center,\s*child: loadLogo\(\),\s*\),/if (bind.isCustomClient())\n        Align(\n          alignment: Alignment.center,\n          child: Column(\n            mainAxisSize: MainAxisSize.min,\n            children: [\n              loadLogo(),\n              Text(\n                bind.mainGetBuildinOption(key: "app-name"),\n                style: Theme.of(context).textTheme.titleMedium,\n              ).marginOnly(top: 4),\n            ],\n          ),\n        ) \/\/ CUSTOM_RUSTDESK_HOME_HEADER\n      else ...[\n        Align(\n          alignment: Alignment.center,\n          child: loadPowered(context),\n        ),\n        Align(\n          alignment: Alignment.center,\n          child: loadLogo(),\n        ),\n      ],/s' "$home_file"
+        perl -0pi -e 's/if \(bind\.isCustomClient\(\)\)\s*Align\(\s*alignment: Alignment\.center,\s*child: bind\.isCustomClient\(\) \? SizedBox\.shrink\(\) : loadPowered\(context\),\s*\),\s*Align\(\s*alignment: Alignment\.center,\s*child: loadLogo\(\),\s*\),/if (bind.isCustomClient())\n        Align(\n          alignment: Alignment.center,\n          child: Column(\n            mainAxisSize: MainAxisSize.min,\n            children: [\n              loadLogo(),\n              Text(\n                bind.mainGetBuildinOption(key: "app-name"),\n                style: Theme.of(context).textTheme.titleMedium,\n              ).marginOnly(top: 4),\n            ],\n          ),\n        ) \/\/ CUSTOM_RUSTDESK_HOME_HEADER\n      else ...[\n        Align(\n          alignment: Alignment.center,\n          child: loadPowered(context),\n        ),\n        Align(\n          alignment: Alignment.center,\n          child: loadLogo(),\n        ),\n      ],/s' "$home_file"
         if grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file"; then
             echo "source-patcher: custom home header injected in $home_file"
         else
@@ -1073,78 +1146,8 @@ _custom_patch_windows_test_signing() {
 }
 
 _custom_patch_msi_preprocess_app_name() {
-    local file="res/msi/preprocess.py"
-
-    if [ ! -f "$file" ]; then
-        echo "source-patcher: $file not found, skipping MSI app-name source patch"
-        return 0
-    fi
-
-    if grep -q "CUSTOM_RUSTDESK_MSI_APP_NAME" "$file"; then
-        echo "source-patcher: MSI app-name source patch already applied in $file"
-        return 0
-    fi
-
-    python3 - "$file" <<'PY'
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8")
-helpers = '''
-def _custom_rustdesk_repo_root():
-    return Path(__file__).resolve().parents[2]
-
-
-def _custom_rustdesk_build_app_name():
-    config_path = _custom_rustdesk_repo_root() / "custom-build-config.json"
-    if not config_path.exists():
-        return ""
-    try:
-        config = json.loads(config_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return ""
-    return (config.get("app_name") or "").strip()
-
-
-def _custom_rustdesk_prepare_dist_exe(dist_dir, app_name):
-    if not app_name or app_name == "RustDesk":
-        return
-    source_exe = dist_dir / "rustdesk.exe"
-    target_exe = dist_dir / f"{app_name}.exe"
-    if source_exe.exists() and source_exe != target_exe:
-        shutil.copy2(source_exe, target_exe)
-        source_exe.unlink()
-'''
-anchor = "def make_parser():"
-main_old = """    app_name = args.app_name
-    dist_dir = Path(sys.argv[0]).parent.joinpath(args.dist_dir).resolve()
-"""
-main_new = """    app_name = args.app_name
-    # CUSTOM_RUSTDESK_MSI_APP_NAME
-    if app_name == "RustDesk":
-        custom_name = _custom_rustdesk_build_app_name()
-        if custom_name:
-            args.app_name = custom_name
-            app_name = args.app_name
-    dist_dir = Path(sys.argv[0]).parent.joinpath(args.dist_dir).resolve()
-    _custom_rustdesk_prepare_dist_exe(dist_dir, app_name)
-"""
-if anchor not in text:
-    raise SystemExit(f"source-patcher: make_parser anchor not found in {path}")
-if main_old not in text:
-    raise SystemExit(f"source-patcher: preprocess main block anchor not found in {path}")
-text = text.replace(anchor, helpers + anchor, 1)
-text = text.replace(main_old, main_new, 1)
-path.write_text(text, encoding="utf-8")
-PY
-
-    if grep -q "CUSTOM_RUSTDESK_MSI_APP_NAME" "$file"; then
-        echo "source-patcher: MSI app-name source patch applied in $file"
-    else
-        echo "source-patcher: failed to patch MSI app-name in $file" >&2
-        return 1
-    fi
+    echo "source-patcher: skipping MSI app-name patch (app_name is UI-only; MSI keeps RustDesk)"
+    return 0
 }
 
 _custom_patch_rust_cache_nonfatal() {
@@ -1278,6 +1281,7 @@ apply_custom_source_patches() {
     _custom_patch_common_rs
     _custom_patch_hbb_common_config_rs
     _custom_patch_brand_files
+    _custom_patch_flutter_ui_app_name
     _custom_patch_logo_assets
     _custom_patch_custom_ui_text
     _custom_patch_portable_working_dir

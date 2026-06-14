@@ -31,11 +31,23 @@
 | 字段 | 示例 |
 |------|------|
 | customer | OneCloud |
-| app_name | OneCloudDesk |
+| app_name | OneCloudDesk（**仅 UI 显示名**；MSI/安装路径/注册表仍为 RustDesk） |
 | rendezvous_server | host:21116 |
 | relay_server | host:21117 |
 | rs_pub_key | （hbbs 公钥） |
 | hide_network_settings | true |
+| logo_url | 客户 Logo 图片 URL（留空则用默认 RustDesk logo） |
+
+## Windows 测试清理
+
+便携版/MSI 混装时，MSI 可能提示 *self-installation method*。先以管理员运行：
+
+```powershell
+# 或双击 scripts/clean-rustdesk-windows.cmd
+powershell -ExecutionPolicy Bypass -File .\scripts\clean-rustdesk-windows.ps1 -Force
+```
+
+脚本会清理 `--install` 自解压残留（`Uninstall` 注册表 `WindowsInstaller=0`）、服务、用户数据与便携目录，再装 MSI。安装身份始终为 **RustDesk**（`C:\Program Files\RustDesk\`、`rustdesk.exe`）；`app_name` 只影响界面显示，不改变 MSI 产品名。
 
 ## Secrets
 
