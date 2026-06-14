@@ -865,8 +865,10 @@ studio_line = (
     "+ translate(\"custom_studio_attribution\") + \"</p> \\"
 )
 slogan_plain = '" + translate("Slogan_tip") + " \\'
-slogan_p_tag = "<p style='font-weight: bold'>\" + translate(\"Slogan_tip\") + \"</p>\\"
 slogan_with_studio = '" + translate("Slogan_tip") + " \\\n            ' + studio_line
+p_tag_pattern = re.compile(
+    r"(\s*)<p style='font-weight: bold'>\" \+ translate\(\"Slogan_tip\"\) \+ \"</p>\\"
+)
 
 text = re.sub(
     r'(" \+ translate\("Slogan_tip"\) \+ " \\\s*)<br />\\\\\s*\n\s*'
@@ -876,8 +878,9 @@ text = re.sub(
 )
 
 if "studio-about" not in text:
-    if slogan_p_tag in text:
-        text = text.replace(slogan_p_tag, slogan_with_studio, 1)
+    p_match = p_tag_pattern.search(text)
+    if p_match:
+        text = p_tag_pattern.sub(lambda m: m.group(1) + slogan_with_studio, text, count=1)
     elif slogan_plain in text:
         text = text.replace(slogan_plain, slogan_with_studio, 1)
     else:
