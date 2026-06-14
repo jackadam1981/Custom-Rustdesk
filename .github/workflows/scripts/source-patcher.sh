@@ -821,15 +821,13 @@ else:
         re.compile(
             r"(Text\(\s*"
             r"translate\('Slogan_tip'\),\s*"
-            r"style: TextStyle\(\s*"
-            r"fontWeight: FontWeight\.w800,\s*"
+            r"style: TextStyle\([\s\S]*?"
             r"color: Colors\.white\),\s*"
-            r"\),)"
+            r"\)\s*)"
         ),
         re.compile(
             r"(translate\('Slogan_tip'\),\s*"
-            r"style: TextStyle\(\s*"
-            r"fontWeight: FontWeight\.w800,\s*"
+            r"style: TextStyle\([\s\S]*?"
             r"color: Colors\.white\),\s*"
             r"\),)"
         ),
