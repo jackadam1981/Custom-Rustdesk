@@ -817,16 +817,31 @@ if marker in text:
         count=1,
     )
 else:
-    anchor = re.compile(
-        r"(translate\('Slogan_tip'\),\s*"
-        r"style: TextStyle\(\s*"
-        r"fontWeight: FontWeight\.w800,\s*"
-        r"color: Colors\.white\),\s*"
-        r"\),)"
-    )
-    if not anchor.search(text):
+    anchors = [
+        re.compile(
+            r"(Text\(\s*"
+            r"translate\('Slogan_tip'\),\s*"
+            r"style: TextStyle\(\s*"
+            r"fontWeight: FontWeight\.w800,\s*"
+            r"color: Colors\.white\),\s*"
+            r"\),)"
+        ),
+        re.compile(
+            r"(translate\('Slogan_tip'\),\s*"
+            r"style: TextStyle\(\s*"
+            r"fontWeight: FontWeight\.w800,\s*"
+            r"color: Colors\.white\),\s*"
+            r"\),)"
+        ),
+    ]
+    matched = False
+    for anchor in anchors:
+        if anchor.search(text):
+            text = anchor.sub(r"\1" + studio_block, text, count=1)
+            matched = True
+            break
+    if not matched:
         raise SystemExit("source-patcher: Slogan_tip anchor not found in desktop_setting_page.dart")
-    text = anchor.sub(r"\1" + studio_block, text, count=1)
 
 path.write_text(text, encoding="utf-8")
 PY
