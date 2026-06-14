@@ -85,6 +85,9 @@ test_*.sh
 docs/_build/
 site/
 
+# Agent / 本地临时目录
+tmp/
+
 # 其他
 *.pid
 *.seed
