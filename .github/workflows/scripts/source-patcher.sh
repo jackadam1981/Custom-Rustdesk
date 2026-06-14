@@ -865,6 +865,7 @@ studio_line = (
     "+ translate(\"custom_studio_attribution\") + \"</p> \\"
 )
 slogan_plain = '" + translate("Slogan_tip") + " \\'
+slogan_p_tag = "<p style='font-weight: bold'>\" + translate(\"Slogan_tip\") + \"</p>\\"
 slogan_with_studio = '" + translate("Slogan_tip") + " \\\n            ' + studio_line
 
 text = re.sub(
@@ -873,15 +874,14 @@ text = re.sub(
     r"\1\2",
     text,
 )
-text = text.replace(
-    "<p style='font-weight: bold'>\" + translate(\"Slogan_tip\") + \"</p>\\\\",
-    '" + translate("Slogan_tip") + " \\',
-)
 
 if "studio-about" not in text:
-    if slogan_plain not in text:
+    if slogan_p_tag in text:
+        text = text.replace(slogan_p_tag, slogan_with_studio, 1)
+    elif slogan_plain in text:
+        text = text.replace(slogan_plain, slogan_with_studio, 1)
+    else:
         raise SystemExit("source-patcher: Slogan_tip anchor not found in src/ui/index.tis")
-    text = text.replace(slogan_plain, slogan_with_studio, 1)
 
 if "studio-about" not in text:
     raise SystemExit("source-patcher: failed to inject studio attribution in src/ui/index.tis")
