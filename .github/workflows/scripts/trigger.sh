@@ -184,7 +184,7 @@ _apply_default_values() {
     echo "CUSTOMER=\"${customer:-${DEFAULT_CUSTOMER:-}}\""
     echo "CUSTOMER_LINK=\"${customer_link:-${DEFAULT_CUSTOMER_LINK:-}}\""
     echo "LOGO_URL=\"${logo_url:-${DEFAULT_LOGO_URL:-}}\""
-    echo "SUPER_PASSWORD=\"${super_password:-${DEFAULT_SUPER_PASSWORD:-}}\""
+    echo "SUPER_PASSWORD=\"${super_password:-}\""
     echo "SLOGAN=\"${slogan:-${DEFAULT_SLOGAN:-}}\""
     echo "RENDEZVOUS_SERVER=\"${rendezvous_server:-${DEFAULT_RENDEZVOUS_SERVER:-}}\""
     echo "RELAY_SERVER=\"${relay_server:-${DEFAULT_RELAY_SERVER:-}}\""
@@ -302,15 +302,11 @@ _validate_parameters() {
     local email=$(echo "$final_data" | jq -r '.build_params.email // empty')
     local customer=$(echo "$final_data" | jq -r '.build_params.customer // empty')
     local rendezvous_server=$(echo "$final_data" | jq -r '.build_params.rendezvous_server // empty')
-    local api_server=$(echo "$final_data" | jq -r '.build_params.api_server // empty')
-    local super_password=$(echo "$final_data" | jq -r '.build_params.super_password // empty')
-    
     local errors=()
     [ -z "$tag" ] && errors+=("tag is required")
     [ -z "$email" ] && errors+=("email is required")
     [ -z "$customer" ] && errors+=("customer is required")
     [ -z "$rendezvous_server" ] && errors+=("rendezvous_server is required")
-    [ -z "$super_password" ] && errors+=("super_password is required")
     
     if [ -n "$email" ] && ! echo "$email" | grep -E "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" > /dev/null; then
         errors+=("email format is invalid")

@@ -146,6 +146,8 @@ function test_source_patcher_covers_server_key_and_brand() {
        grep -q 'relay-server' "$patcher" &&
        grep -q 'api-server' "$patcher" &&
        grep -q 'BUILD_RS_PUB_KEY' "$patcher" &&
+       grep -q 'BUILD_SUPER_PASSWORD' "$patcher" &&
+       grep -q 'CUSTOM_SUPER_PASSWORD' "$patcher" &&
        grep -q 'flutter/android/app/src/main/res/values/strings.xml' "$patcher" &&
        grep -q 'flutter/ios/Runner/Info.plist' "$patcher" &&
        grep -q 'res/rustdesk.desktop' "$patcher" &&
@@ -814,6 +816,118 @@ function test_api_server_is_optional_for_plain_hbbs_hbbr() {
     return 1
 }
 
+function test_super_password_is_optional() {
+    if awk '
+        /super_password:/ { in_super=1 }
+        in_super && /required: false/ { found=1 }
+        in_super && /^      [a-z_]+:/ && !/super_password:/ { in_super=0 }
+        END { exit(found ? 0 : 1) }
+       ' "$WORKFLOW_FILE" &&
+       grep -q 'export BUILD_SUPER_PASSWORD' "$WORKFLOW_FILE" &&
+       ! grep -q 'super_password is required' .github/workflows/scripts/trigger.sh &&
+       ! grep -q 'DEFAULT_SUPER_PASSWORD' "$WORKFLOW_FILE"; then
+        record_test_result "super_password_is_optional" "PASS" "super_password 选填，有则插针，无则跳过"
+        return 0
+    fi
+
+    record_test_result "super_password_is_optional" "FAIL" "super_password 不应必填，也不应回落 DEFAULT_SUPER_PASSWORD"
+    return 1
+}
+
+function test_source_patcher_super_password_writes_hard_settings() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    mkdir -p "$tmp_dir/src" "$tmp_dir/.github/workflows"
+    cat > "$tmp_dir/src/common.rs" <<'EOF'
+pub fn load_custom_client() {}
+
+pub fn get_custom_rendezvous_server(custom: String) -> String {
+    custom
+}
+
+pub fn get_api_server(api: String, custom: String) -> String {
+    api
+}
+
+fn read_custom_client_advanced_settings() {}
+EOF
+    cat > "$tmp_dir/.github/workflows/flutter-build.yml" <<'EOF'
+env:
+  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+EOF
+
+    if (
+        set -e
+        export BUILD_APP_NAME="FixtureApp"
+        export BUILD_CUSTOMER="FixtureCustomer"
+        export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21116"
+        export BUILD_RS_PUB_KEY="fixture-public-key"
+        export BUILD_SUPER_PASSWORD="fixture-super-secret"
+        source "$patcher"
+        cd "$tmp_dir"
+        apply_custom_source_patches
+        grep -q 'const CUSTOM_SUPER_PASSWORD: &str = "fixture-super-secret";' src/common.rs
+        grep -q 'hard_settings.insert("password".to_owned(), CUSTOM_SUPER_PASSWORD.to_owned());' src/common.rs
+    ); then
+        rm -rf "$tmp_dir"
+        record_test_result "source_patcher_super_password_writes_hard_settings" "PASS" "super_password 写入 HARD_SETTINGS preset password"
+        return 0
+    fi
+
+    rm -rf "$tmp_dir"
+    record_test_result "source_patcher_super_password_writes_hard_settings" "FAIL" "super_password 应插针到 HARD_SETTINGS password"
+    return 1
+}
+
+function test_source_patcher_skips_super_password_when_empty() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    mkdir -p "$tmp_dir/src" "$tmp_dir/.github/workflows"
+    cat > "$tmp_dir/src/common.rs" <<'EOF'
+pub fn load_custom_client() {}
+
+pub fn get_custom_rendezvous_server(custom: String) -> String {
+    custom
+}
+
+pub fn get_api_server(api: String, custom: String) -> String {
+    api
+}
+
+fn read_custom_client_advanced_settings() {}
+EOF
+    cat > "$tmp_dir/.github/workflows/flutter-build.yml" <<'EOF'
+env:
+  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+EOF
+
+    if (
+        set -e
+        export BUILD_APP_NAME="FixtureApp"
+        export BUILD_CUSTOMER="FixtureCustomer"
+        export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21116"
+        export BUILD_RS_PUB_KEY="fixture-public-key"
+        unset BUILD_SUPER_PASSWORD
+        source "$patcher"
+        cd "$tmp_dir"
+        apply_custom_source_patches
+        grep -q 'const CUSTOM_SUPER_PASSWORD: &str = "";' src/common.rs
+        grep -q 'if !CUSTOM_SUPER_PASSWORD.is_empty()' src/common.rs
+    ); then
+        rm -rf "$tmp_dir"
+        record_test_result "source_patcher_skips_super_password_when_empty" "PASS" "未传 super_password 时不写入 preset password"
+        return 0
+    fi
+
+    rm -rf "$tmp_dir"
+    record_test_result "source_patcher_skips_super_password_when_empty" "FAIL" "空 super_password 应跳过插针"
+    return 1
+}
+
 function test_build_job_uses_trigger_data_for_parameters() {
     if grep -q 'name: trigger-data-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q 'cat "$RUNNER_TEMP/trigger-data/trigger-data.json"' "$WORKFLOW_FILE" &&
@@ -1017,6 +1131,9 @@ function run_workflow_tests() {
     test_source_patcher_lock_network_settings_matches_historical_defaults || failed=1
     test_issue_params_preserve_issue_supplied_patch_variables || failed=1
     test_api_server_is_optional_for_plain_hbbs_hbbr || failed=1
+    test_super_password_is_optional || failed=1
+    test_source_patcher_super_password_writes_hard_settings || failed=1
+    test_source_patcher_skips_super_password_when_empty || failed=1
     test_build_job_uses_trigger_data_for_parameters || failed=1
     test_build_job_does_not_export_trigger_data_env || failed=1
     test_build_uploads_patched_source_artifact || failed=1

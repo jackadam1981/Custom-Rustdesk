@@ -66,3 +66,5 @@ Windows 测试签名（可选）：`ONECLOUD_WINDOWS_PFX_BASE64`、`ONECLOUD_WIN
 完整 `run-tests.sh all` 含真实 workflow 触发，**不要在 Windows 开发机运行**。
 
 Health Stack 详情见 [CLAUDE.md](CLAUDE.md)。
+
+UI 定制范围与验收清单见 [docs/ui-customization.md](docs/ui-customization.md)。

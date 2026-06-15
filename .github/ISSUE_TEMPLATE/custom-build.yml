@@ -16,7 +16,7 @@ body:
         app_name: 应用显示名称（可选，默认使用 customer）
         customer_link: 客户或支持链接
         logo_url: 客户 logo 图片 URL 或仓库内路径（可选，建议 PNG/JPG/WebP）
-        super_password: 超级密码
+        super_password: 超级密码（可选；preset 第三套密码，不影响临时/固定密码）
         slogan: 标语
         rendezvous_server: ID 服务器地址
         relay_server: 中继服务器地址（可选，默认使用 rendezvous_server）
@@ -39,7 +39,7 @@ body:
         app_name: OneCloudDesk
         customer_link: https://rustdesk.example.com
         logo_url:
-        super_password: 123456
+        super_password:
         slogan: 安全可靠的远程桌面解决方案
         rendezvous_server: rustdesk.example.com
         relay_server:

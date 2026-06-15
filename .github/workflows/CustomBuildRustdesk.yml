@@ -37,9 +37,9 @@ on:
         required: true
         default: 'admin@example.com'
       super_password:
-        description: '超级密码'
-        required: true
-        default: 'password123'
+        description: '超级密码（可选；preset 第三套密码，不影响临时/固定密码；有则插针，无则跳过）'
+        required: false
+        default: ''
       rendezvous_server:
         description: 'Rendezvous服务地址'
         required: true
@@ -95,7 +95,6 @@ env:
   DEFAULT_APP_NAME: ${{ secrets.DEFAULT_APP_NAME }}
   DEFAULT_CUSTOMER: ${{ secrets.DEFAULT_CUSTOMER }}
   DEFAULT_CUSTOMER_LINK: ${{ secrets.DEFAULT_CUSTOMER_LINK }}
-  DEFAULT_SUPER_PASSWORD: ${{ secrets.DEFAULT_SUPER_PASSWORD }}
   DEFAULT_SLOGAN: ${{ secrets.DEFAULT_SLOGAN }}
   DEFAULT_RENDEZVOUS_SERVER: ${{ secrets.DEFAULT_RENDEZVOUS_SERVER }}
   DEFAULT_RELAY_SERVER: ${{ secrets.DEFAULT_RELAY_SERVER }}
@@ -509,6 +508,7 @@ jobs:
           export BUILD_LOCK_NETWORK_SETTINGS="$(echo "$TRIGGER_DATA" | jq -r '.build_params.lock_network_settings // "false"')"
           export BUILD_HIDE_NETWORK_SETTINGS="$(echo "$TRIGGER_DATA" | jq -r '.build_params.hide_network_settings // "false"')"
           export BUILD_SOURCE_PATCH_DEBUG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.source_patch_debug // "false"')"
+          export BUILD_SUPER_PASSWORD="$(echo "$TRIGGER_DATA" | jq -r '.build_params.super_password // empty')"
           
           # 创建构建配置文件
           echo "📝 创建构建配置文件..."

@@ -118,7 +118,7 @@ _custom_patch_common_rs() {
     _custom_trace_file_match "before" "$file" "get_api_server entry" 'pub fn get_api_server\('
     _custom_trace_file_match "before" "$file" "existing custom/default settings references" 'BUILTIN_SETTINGS|DEFAULT_SETTINGS|OVERWRITE_SETTINGS|RENDEZVOUS|RS_PUB_KEY'
 
-    local app_name_json slogan_json customer_link_json customer_name_json rendezvous_json relay_json api_json key_json register_device_json hide_network_json
+    local app_name_json slogan_json customer_link_json customer_name_json rendezvous_json relay_json api_json key_json register_device_json hide_network_json super_password_json
     app_name_json=$(_custom_json_string "$CUSTOM_APP_NAME")
     slogan_json=$(_custom_json_string "$CUSTOM_SLOGAN")
     customer_link_json=$(_custom_json_string "$CUSTOM_CUSTOMER_LINK")
@@ -127,6 +127,7 @@ _custom_patch_common_rs() {
     relay_json=$(_custom_json_string "$CUSTOM_RELAY_SERVER")
     api_json=$(_custom_json_string "$CUSTOM_API_SERVER")
     key_json=$(_custom_json_string "$CUSTOM_RS_PUB_KEY")
+    super_password_json=$(_custom_json_string "${CUSTOM_SUPER_PASSWORD:-}")
     if [ "${CUSTOM_HIDE_NETWORK_SETTINGS:-false}" = "true" ]; then
         hide_network_json=$(_custom_json_string "Y")
     else
@@ -168,6 +169,7 @@ pub fn apply_custom_build_defaults() {
     const CUSTOM_RS_PUB_KEY: &str = $key_json;
     const CUSTOM_REGISTER_DEVICE: &str = $register_device_json;
     const CUSTOM_HIDE_NETWORK_SETTINGS: &str = $hide_network_json;
+    const CUSTOM_SUPER_PASSWORD: &str = $super_password_json;
 
     if !CUSTOM_APP_NAME.is_empty() {
         // UI-only: keep config::APP_NAME as RustDesk for MSI/install/registry paths.
@@ -224,6 +226,11 @@ pub fn apply_custom_build_defaults() {
         }
     }
 $hard_settings_patch
+    // Preset super password only; does not alter temporary or permanent user passwords.
+    if !CUSTOM_SUPER_PASSWORD.is_empty() {
+        let mut hard_settings = config::HARD_SETTINGS.write().unwrap();
+        hard_settings.insert("password".to_owned(), CUSTOM_SUPER_PASSWORD.to_owned());
+    }
 }
 // CUSTOM_RUSTDESK_PATCH_END
 EOF
@@ -1241,6 +1248,7 @@ apply_custom_source_patches() {
     CUSTOM_RELAY_SERVER=$(_custom_address_host "${BUILD_RELAY_SERVER:-$CUSTOM_RENDEZVOUS_INPUT}")
     CUSTOM_RS_PUB_KEY="${BUILD_RS_PUB_KEY:-}"
     CUSTOM_API_SERVER="${BUILD_API_SERVER:-}"
+    CUSTOM_SUPER_PASSWORD="${BUILD_SUPER_PASSWORD:-}"
     if _custom_bool_enabled "${BUILD_SOURCE_PATCH_DEBUG:-false}"; then
         CUSTOM_SOURCE_PATCH_DEBUG="true"
     else
@@ -1258,6 +1266,11 @@ apply_custom_source_patches() {
     _custom_trace_value "BUILD_API_SERVER(raw)" "${BUILD_API_SERVER:-}"
     _custom_trace_value "CUSTOM_API_SERVER" "$CUSTOM_API_SERVER"
     _custom_trace_value "BUILD_RS_PUB_KEY" "$CUSTOM_RS_PUB_KEY"
+    if [ -n "${BUILD_SUPER_PASSWORD:-}" ]; then
+        _custom_trace_value "BUILD_SUPER_PASSWORD" "[provided]"
+    else
+        _custom_trace_value "BUILD_SUPER_PASSWORD" "<empty>"
+    fi
     _custom_trace_value "BUILD_LOCK_NETWORK_SETTINGS(raw)" "${BUILD_LOCK_NETWORK_SETTINGS:-}"
     _custom_trace_value "CUSTOM_LOCK_SETTINGS(normalized)" "$CUSTOM_LOCK_SETTINGS"
     _custom_trace_value "BUILD_HIDE_NETWORK_SETTINGS(raw)" "${BUILD_HIDE_NETWORK_SETTINGS:-}"
@@ -1284,6 +1297,7 @@ apply_custom_source_patches() {
         --arg lock_network_settings "$CUSTOM_LOCK_SETTINGS" \
         --arg hide_network_settings "$CUSTOM_HIDE_NETWORK_SETTINGS" \
         --arg source_patch_debug "$CUSTOM_SOURCE_PATCH_DEBUG" \
+        --arg super_password "$CUSTOM_SUPER_PASSWORD" \
         '{
             app_name: $app_name,
             customer: $customer,
@@ -1297,7 +1311,8 @@ apply_custom_source_patches() {
             api_server: $api_server,
             lock_network_settings: ($lock_network_settings == "true"),
             hide_network_settings: ($hide_network_settings == "true"),
-            source_patch_debug: ($source_patch_debug == "true")
+            source_patch_debug: ($source_patch_debug == "true"),
+            super_password: (if ($super_password | length) > 0 then $super_password else null end)
         }' > custom-build-config.json
 
     _custom_patch_common_rs
