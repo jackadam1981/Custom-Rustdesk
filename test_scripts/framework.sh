@@ -275,6 +275,10 @@ function run_specific_test() {
             run_workflow_tests "$@"
             return $?
             ;;
+        "patch-lab")
+            bash scripts/patch-lab/run.sh "$@"
+            return $?
+            ;;
         "utils-queue-length")
             source test_scripts/utils-tests.sh
             test_utils_queue_length "$@"

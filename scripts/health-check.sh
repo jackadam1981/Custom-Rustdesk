@@ -35,6 +35,22 @@ else
     fail=1
 fi
 
+echo "==> Patch-lab scripts"
+for f in scripts/patch-lab/clean.sh scripts/patch-lab/run.sh scripts/patch-lab/verify.sh; do
+    if [ -f "$f" ] && bash -n "$f"; then
+        echo "OK: $f"
+    else
+        echo "FAIL: $f"
+        fail=1
+    fi
+done
+if [ -f scripts/patch-lab/profiles/baixin.env ]; then
+    echo "OK: profiles/baixin.env"
+else
+    echo "FAIL: missing profiles/baixin.env"
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo "health-check: FAILED"
     exit 1

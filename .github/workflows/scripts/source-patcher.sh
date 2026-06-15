@@ -811,6 +811,7 @@ studio_block = """
                               style: const TextStyle(
                                   fontWeight: FontWeight.w800,
                                   color: Colors.white,
+                                  height: 2.0,
                                   decoration: TextDecoration.underline),
                             ),
                           ),"""
@@ -885,8 +886,8 @@ from pathlib import Path
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 studio_line = (
-    "<p class='link custom-event studio-about' style='font-weight: bold' url='https://zzsn.work'>\" "
-    "+ translate(\"custom_studio_attribution\") + \"</p> \\"
+    "<br /><span class='link custom-event studio-about' style='font-weight: bold' url='https://zzsn.work'>\" "
+    "+ translate(\"custom_studio_attribution\") + \"</span> \\"
 )
 text = re.sub(
     r"url='\" \+ handler\.get_builtin_option\(\"custom-customer-link\"\) \+ \"'",
@@ -901,10 +902,16 @@ p_tag_pattern = re.compile(
 
 text = re.sub(
     r'(" \+ translate\("Slogan_tip"\) \+ " \\\s*)<br />\\\\\s*\n\s*'
-    r"(<p class='link custom-event studio-about'[^>]*>)",
+    r"(<br /><span class='link custom-event studio-about'[^>]*>)",
     r"\1\2",
     text,
 )
+legacy_p_studio = (
+    "<p class='link custom-event studio-about' style='font-weight: bold' url='https://zzsn.work'>\" "
+    "+ translate(\"custom_studio_attribution\") + \"</p> \\"
+)
+if legacy_p_studio in text:
+    text = text.replace(legacy_p_studio, studio_line, 1)
 
 if "studio-about" not in text:
     p_match = p_tag_pattern.search(text)
@@ -1266,6 +1273,107 @@ _custom_patch_rust_cache_nonfatal() {
     echo "source-patcher: marked Swatinem/rust-cache steps as continue-on-error"
 }
 
+_custom_patch_is_custom_client() {
+    local file="src/common.rs"
+
+    if [ ! -f "$file" ]; then
+        return 0
+    fi
+
+    if grep -q "CUSTOM_RUSTDESK_IS_CUSTOM_CLIENT" "$file"; then
+        echo "source-patcher: is_custom_client already patched"
+        return 0
+    fi
+
+    if ! grep -q 'get_app_name() != "RustDesk"' "$file"; then
+        echo "source-patcher: is_custom_client anchor not found in $file, skipping"
+        return 0
+    fi
+
+    python3 - "$file" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+pattern = re.compile(
+    r"pub fn is_custom_client\(\) -> bool \{\n    get_app_name\(\) != \"RustDesk\"\n\}"
+)
+replacement = """pub fn is_custom_client() -> bool {
+    // CUSTOM_RUSTDESK_IS_CUSTOM_CLIENT: app-name builtin marks UI custom build; APP_NAME stays RustDesk for MSI.
+    if get_app_name() != "RustDesk" {
+        return true;
+    }
+    if !get_builtin_option("app-name").is_empty() {
+        return true;
+    }
+    !get_builtin_option("custom-customer-name").is_empty()
+}"""
+if not pattern.search(text):
+    raise SystemExit("source-patcher: is_custom_client anchor not found in src/common.rs")
+text = pattern.sub(replacement, text, count=1)
+path.write_text(text, encoding="utf-8")
+PY
+    if grep -q "CUSTOM_RUSTDESK_IS_CUSTOM_CLIENT" "$file"; then
+        echo "source-patcher: is_custom_client uses app-name builtin in $file"
+    else
+        echo "source-patcher: failed to patch is_custom_client in $file" >&2
+        return 1
+    fi
+}
+
+_custom_patch_about_line_height() {
+    local about_file="flutter/lib/desktop/pages/desktop_setting_page.dart"
+
+    if [ -f "$about_file" ] && grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file" &&
+       ! grep -q "CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT" "$about_file"; then
+        python3 - "$about_file" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+marker = "CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT"
+if marker in text:
+    path.write_text(text, encoding="utf-8")
+    raise SystemExit(0)
+
+if "style: const TextStyle(color: Colors.white)" in text:
+    text = text.replace(
+        "style: const TextStyle(color: Colors.white)",
+        "style: const TextStyle(color: Colors.white, height: 2.0), // CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT",
+        1,
+    )
+text = re.sub(
+    r"translate\('Slogan_tip'\),\s*style: TextStyle\(\s*fontWeight: FontWeight\.w800,\s*color: Colors\.white\s*\)\s*,",
+    "translate('Slogan_tip'),\n                            style: TextStyle(\n                                fontWeight: FontWeight.w800,\n                                color: Colors.white,\n                                height: 2.0), // CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT",
+    text,
+    count=1,
+)
+if marker not in text:
+    raise SystemExit("source-patcher: failed to apply about line-height in desktop_setting_page.dart")
+path.write_text(text, encoding="utf-8")
+PY
+        if grep -q "CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT" "$about_file"; then
+            echo "source-patcher: about line-height aligned in $about_file"
+        else
+            echo "source-patcher: failed to patch about line-height in $about_file" >&2
+            return 1
+        fi
+    fi
+
+    if [ -f "src/ui/index.tis" ] && grep -q "<p class='link custom-event studio-about'" "src/ui/index.tis"; then
+        perl -0pi -e "s|<p class='link custom-event studio-about' style='font-weight: bold' url='https://zzsn.work'>\" \+ translate\\(\"custom_studio_attribution\"\\) \+ \"</p> \\\|<br /><span class='link custom-event studio-about' style='font-weight: bold' url='https://zzsn.work'>\" + translate(\"custom_studio_attribution\") + \"</span> \\\|g" "src/ui/index.tis"
+        if grep -q "<p class='link custom-event studio-about'" "src/ui/index.tis"; then
+            echo "source-patcher: failed to normalize sciter about studio layout" >&2
+            return 1
+        fi
+        echo "source-patcher: sciter about studio line uses inline span + br"
+    fi
+}
+
 apply_custom_source_patches() {
     case "${BUILD_LOCK_NETWORK_SETTINGS:-false}" in
         true|TRUE|True|1|yes|YES|y|Y|on|ON)
@@ -1376,6 +1484,8 @@ apply_custom_source_patches() {
     _custom_patch_flutter_ui_app_name
     _custom_patch_logo_assets
     _custom_patch_custom_ui_text
+    _custom_patch_about_line_height
+    _custom_patch_is_custom_client
     _custom_patch_portable_working_dir
     _custom_patch_windows_test_signing
     _custom_patch_msi_preprocess_app_name

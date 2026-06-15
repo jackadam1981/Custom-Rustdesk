@@ -551,6 +551,7 @@ EOF
         grep -q 'CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION' flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q "translate('custom_studio_attribution')" flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q 'CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT' flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q 'studio-about' src/ui/index.tis
         grep -q 'translate("custom_studio_attribution")' src/ui/index.tis
         grep -q "url='https://zzsn.work'" src/ui/index.tis

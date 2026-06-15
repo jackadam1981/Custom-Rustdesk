@@ -9,8 +9,11 @@
 
 ### 编译机 2.18（完整回归）
 
-- full: `bash run-tests.sh workflow-tests`
+- fixture: `bash run-tests.sh workflow-tests`
+- **patch-lab: `bash run-tests.sh patch-lab`**（干净 clone 上游 → 插针 → 验证；**触发 CI 前必跑**）
 - optional: `bash run-tests.sh all`（含 gh 队列/触发类，需 `BUILD_TOKEN` 等环境）
+
+详见 [docs/patch-lab.md](docs/patch-lab.md)。
 
 ### 不在范围
 
