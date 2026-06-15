@@ -42,8 +42,6 @@
 | 链接 | 固定 `https://zzsn.work`（**不是** `customer_link`） |
 | 排版 | 各行间距与原版关于页 **保持一致** |
 
-> **与当前实现的差异**：关于页链接仍指向 `customer_link`；规范要求固定 `https://zzsn.work`。
-
 ### 4. 超级密码（`super_password`）
 
 | 项 | 要求 |
@@ -206,7 +204,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\clean-rustdesk-windows.ps1 -F
 | 某套 UI 缺少 Powered by | 应两套均有，检查 connection_page / `#powered-by` |
 | Logo 仍是 RustDesk | `logo_url` 未填或下载失败 |
 | 服务器地址不对 | 旧 `%APPDATA%\RustDesk` 配置未清理 |
-| 关于页链接跳到 customer_link | 插针待改为固定 `https://zzsn.work` |
+| 关于页链接跳到 customer_link | 关于页应固定 `https://zzsn.work`；Powered by 仍用 `customer_link` |
 
 ## 相关文档
 

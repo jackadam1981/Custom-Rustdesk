@@ -587,17 +587,23 @@ print(
 PY
 }
 
+_custom_sciter_slogan_markup() {
+    printf '%s' '{handler.get_builtin_option("custom-slogan") && handler.get_builtin_option("custom-slogan").length ? <div style="font-size:0.85em;margin-top:0.15em">{handler.get_builtin_option("custom-slogan")}</div> : ""}'
+}
+
 _custom_sciter_custom_brand_block() {
     local logo_markup=""
+    local slogan_markup
+    slogan_markup=$(_custom_sciter_slogan_markup)
 
     if [ -f "res/logo.png" ]; then
         logo_markup=$(_custom_sciter_logo_img_markup)
     fi
 
     if [ -n "$logo_markup" ]; then
-        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\">${logo_markup}<div style=\"font-size:1.1em;font-weight:bold\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div></div> : \"\"}"
+        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\">${logo_markup}<div style=\"font-size:1.1em;font-weight:bold\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div>${slogan_markup}</div> : \"\"}"
     else
-        printf '%s' '{is_custom_client ? <div #custom-brand.custom-rd-home-header style="text-align:center;margin-bottom:0.35em;font-size:1.1em;font-weight:bold">{handler.get_builtin_option("app-name") || handler.get_builtin_option("custom-customer-name")}</div> : ""}'
+        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\"><div style=\"font-size:1.1em;font-weight:bold\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div>${slogan_markup}</div> : \"\"}"
     fi
 }
 
@@ -798,8 +804,7 @@ studio_block = """
                           // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION
                           InkWell(
                             onTap: () {
-                              final link = bind.mainGetBuildinOption(key: "custom-customer-link");
-                              if (link.isNotEmpty) launchUrlString(link);
+                              launchUrlString('https://zzsn.work'); // CUSTOM_RUSTDESK_STUDIO_LINK
                             },
                             child: Text(
                               translate('custom_studio_attribution'),
@@ -809,6 +814,13 @@ studio_block = """
                                   decoration: TextDecoration.underline),
                             ),
                           ),"""
+
+text = re.sub(
+    r"final link = bind\.mainGetBuildinOption\(key: \"custom-customer-link\"\);\s*"
+    r"if \(link\.isNotEmpty\) launchUrlString\(link\);",
+    "launchUrlString('https://zzsn.work'); // CUSTOM_RUSTDESK_STUDIO_LINK",
+    text,
+)
 
 if marker in text:
     text = re.sub(
@@ -873,9 +885,13 @@ from pathlib import Path
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 studio_line = (
-    "<p class='link custom-event studio-about' style='font-weight: bold' url='\" "
-    "+ handler.get_builtin_option(\"custom-customer-link\") + \"'>\" "
+    "<p class='link custom-event studio-about' style='font-weight: bold' url='https://zzsn.work'>\" "
     "+ translate(\"custom_studio_attribution\") + \"</p> \\"
+)
+text = re.sub(
+    r"url='\" \+ handler\.get_builtin_option\(\"custom-customer-link\"\) \+ \"'",
+    "url='https://zzsn.work'",
+    text,
 )
 slogan_plain = '" + translate("Slogan_tip") + " \\'
 slogan_with_studio = '" + translate("Slogan_tip") + " \\\n            ' + studio_line
@@ -912,12 +928,51 @@ PY
     fi
 
     if [ -f "$home_file" ] && ! grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file"; then
-        perl -0pi -e 's/if \(bind\.isCustomClient\(\)\)\s*Align\(\s*alignment: Alignment\.center,\s*child: loadPowered\(context\),\s*\),\s*Align\(\s*alignment: Alignment\.center,\s*child: loadLogo\(\),\s*\),/if (bind.isCustomClient())\n        Align(\n          alignment: Alignment.center,\n          child: Column(\n            mainAxisSize: MainAxisSize.min,\n            children: [\n              loadLogo(),\n              Text(\n                bind.mainGetBuildinOption(key: "app-name"),\n                style: Theme.of(context).textTheme.titleMedium,\n              ).marginOnly(top: 4),\n            ],\n          ),\n        ) \/\/ CUSTOM_RUSTDESK_HOME_HEADER\n      else ...[\n        Align(\n          alignment: Alignment.center,\n          child: loadPowered(context),\n        ),\n        Align(\n          alignment: Alignment.center,\n          child: loadLogo(),\n        ),\n      ],/s' "$home_file"
-        perl -0pi -e 's/if \(bind\.isCustomClient\(\)\)\s*Align\(\s*alignment: Alignment\.center,\s*child: bind\.isCustomClient\(\) \? SizedBox\.shrink\(\) : loadPowered\(context\),\s*\),\s*Align\(\s*alignment: Alignment\.center,\s*child: loadLogo\(\),\s*\),/if (bind.isCustomClient())\n        Align(\n          alignment: Alignment.center,\n          child: Column(\n            mainAxisSize: MainAxisSize.min,\n            children: [\n              loadLogo(),\n              Text(\n                bind.mainGetBuildinOption(key: "app-name"),\n                style: Theme.of(context).textTheme.titleMedium,\n              ).marginOnly(top: 4),\n            ],\n          ),\n        ) \/\/ CUSTOM_RUSTDESK_HOME_HEADER\n      else ...[\n        Align(\n          alignment: Alignment.center,\n          child: loadPowered(context),\n        ),\n        Align(\n          alignment: Alignment.center,\n          child: loadLogo(),\n        ),\n      ],/s' "$home_file"
+        perl -0pi -e 's/if \(bind\.isCustomClient\(\)\)\s*Align\(\s*alignment: Alignment\.center,\s*child: loadPowered\(context\),\s*\),\s*Align\(\s*alignment: Alignment\.center,\s*child: loadLogo\(\),\s*\),/if (bind.isCustomClient())\n        Align(\n          alignment: Alignment.center,\n          child: Column(\n            mainAxisSize: MainAxisSize.min,\n            children: [\n              loadLogo(),\n              Text(\n                bind.mainGetBuildinOption(key: "app-name"),\n                style: Theme.of(context).textTheme.titleMedium,\n              ).marginOnly(top: 4),\n              if (bind.mainGetBuildinOption(key: "custom-slogan").isNotEmpty)\n                Text(\n                  bind.mainGetBuildinOption(key: "custom-slogan"),\n                  style: Theme.of(context).textTheme.bodySmall,\n                ).marginOnly(top: 2), \/\/ CUSTOM_RUSTDESK_HOME_SLOGAN\n            ],\n          ),\n        ) \/\/ CUSTOM_RUSTDESK_HOME_HEADER\n      else ...[\n        Align(\n          alignment: Alignment.center,\n          child: loadPowered(context),\n        ),\n        Align(\n          alignment: Alignment.center,\n          child: loadLogo(),\n        ),\n      ],/s' "$home_file"
+        perl -0pi -e 's/if \(bind\.isCustomClient\(\)\)\s*Align\(\s*alignment: Alignment\.center,\s*child: bind\.isCustomClient\(\) \? SizedBox\.shrink\(\) : loadPowered\(context\),\s*\),\s*Align\(\s*alignment: Alignment\.center,\s*child: loadLogo\(\),\s*\),/if (bind.isCustomClient())\n        Align(\n          alignment: Alignment.center,\n          child: Column(\n            mainAxisSize: MainAxisSize.min,\n            children: [\n              loadLogo(),\n              Text(\n                bind.mainGetBuildinOption(key: "app-name"),\n                style: Theme.of(context).textTheme.titleMedium,\n              ).marginOnly(top: 4),\n              if (bind.mainGetBuildinOption(key: "custom-slogan").isNotEmpty)\n                Text(\n                  bind.mainGetBuildinOption(key: "custom-slogan"),\n                  style: Theme.of(context).textTheme.bodySmall,\n                ).marginOnly(top: 2), \/\/ CUSTOM_RUSTDESK_HOME_SLOGAN\n            ],\n          ),\n        ) \/\/ CUSTOM_RUSTDESK_HOME_HEADER\n      else ...[\n        Align(\n          alignment: Alignment.center,\n          child: loadPowered(context),\n        ),\n        Align(\n          alignment: Alignment.center,\n          child: loadLogo(),\n        ),\n      ],/s' "$home_file"
         if grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file"; then
             echo "source-patcher: custom home header injected in $home_file"
         else
             echo "source-patcher: failed to inject custom home header in $home_file" >&2
+            return 1
+        fi
+    fi
+
+    if [ -f "$home_file" ] && grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file" &&
+       ! grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" "$home_file"; then
+        python3 - "$home_file" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+marker = "CUSTOM_RUSTDESK_HOME_SLOGAN"
+if marker in text:
+    raise SystemExit(0)
+
+pattern = re.compile(
+    r"(Text\(\s*\n\s*bind\.mainGetBuildinOption\(key: \"app-name\"\),\s*\n"
+    r"\s*style: Theme\.of\(context\)\.textTheme\.titleMedium,\s*\n"
+    r"\s*\)\.marginOnly\(top: 4\),)"
+)
+slogan_block = """
+              if (bind.mainGetBuildinOption(key: "custom-slogan").isNotEmpty)
+                Text(
+                  bind.mainGetBuildinOption(key: "custom-slogan"),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ).marginOnly(top: 2), // CUSTOM_RUSTDESK_HOME_SLOGAN"""
+
+if not pattern.search(text):
+    raise SystemExit("source-patcher: home header app-name anchor not found for slogan inject")
+
+text = pattern.sub(r"\1" + slogan_block, text, count=1)
+path.write_text(text, encoding="utf-8")
+PY
+        if grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" "$home_file"; then
+            echo "source-patcher: custom home slogan injected in $home_file"
+        else
+            echo "source-patcher: failed to inject custom home slogan in $home_file" >&2
             return 1
         fi
     fi
