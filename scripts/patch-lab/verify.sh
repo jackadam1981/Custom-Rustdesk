@@ -109,11 +109,22 @@ check "flutter studio zzsn.work url" grep -q 'https://zzsn.work' flutter/lib/des
 check "flutter about layout" grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
 
 check "sciter custom brand header" grep -q 'custom-rd-home-header' src/ui/index.tis
+check "sciter logo title same row" grep -q 'custom-rd-home-title-row' src/ui/index.tis
 check "sciter custom slogan markup" grep -q 'custom-slogan' src/ui/index.tis
 check "sciter studio zzsn.work" grep -q "url='https://zzsn.work'" src/ui/index.tis
 check "sciter studio-about p tag" grep -q "<p class='link custom-event studio-about'" src/ui/index.tis
 check "sciter powered title class" grep -q 'custom-rd-home-powered #powered-by .title' src/ui/index.tis
 check "sciter config menu flow" grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
+check "sciter config menu two columns" grep -q 'menu.context#config-options > li' src/ui/index.css
+check "flutter home dart syntax" python3 - flutter/lib/desktop/pages/desktop_home_page.dart <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+if re.search(r"if \(bind\.isCustomClient\(\)\)\)", text):
+    raise SystemExit("extra parenthesis after isCustomClient()")
+PY
 check "sciter about dialog height" grep -q 'CUSTOM_RUSTDESK_ABOUT_HEIGHT' src/ui/index.tis
 check "sciter powered above card-connect" python3 - src/ui/index.tis <<'PY'
 import sys

@@ -594,7 +594,7 @@ from pathlib import Path
 data = base64.b64encode(Path("res/icon.png").read_bytes()).decode("ascii")
 print(
     '<img.custom-rd-home-logo src="data:image/png;base64,' + data + '" '
-    'style="width:1.4em;height:1.4em;display:block;margin:0 auto 0.25em auto" />'
+    'style="width:1.4em;height:1.4em;vertical-align:middle" />'
 )
 PY
 }
@@ -613,7 +613,7 @@ _custom_sciter_custom_brand_block() {
     fi
 
     if [ -n "$logo_markup" ]; then
-        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\">${logo_markup}<div .title style=\"font-weight:bold\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div>${slogan_markup}</div> : \"\"}"
+        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\"><div .custom-rd-home-title-row style=\"flow:horizontal;horizontal-align:center;vertical-align:middle\">${logo_markup}<div .title style=\"font-weight:bold;display:inline-block;vertical-align:middle;margin-left:0.35em\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div></div>${slogan_markup}</div> : \"\"}"
     else
         printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\"><div .title style=\"font-weight:bold\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div>${slogan_markup}</div> : \"\"}"
     fi
@@ -986,11 +986,16 @@ from pathlib import Path
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 marker = "CUSTOM_RUSTDESK_HOME_HEADER"
-if "CUSTOM_RUSTDESK_HOME_ICON" in text:
+text = re.sub(
+    r"if \(bind\.isCustomClient\(\)\)\)\s*\n",
+    "if (bind.isCustomClient())\n",
+    text,
+)
+if "CUSTOM_RUSTDESK_HOME_ICON" in text and marker in text:
     path.write_text(text, encoding="utf-8")
     raise SystemExit(0)
 
-custom_block = """if (bind.isCustomClient()))
+custom_block = """if (bind.isCustomClient())
         Align(
           alignment: Alignment.center,
           child: Column(
@@ -1029,6 +1034,13 @@ custom_block = """if (bind.isCustomClient()))
           child: loadLogo(),
         ),"""
 legacy_custom_block = re.compile(
+    r"if \(bind\.isCustomClient\(\)\)\)?\s*"
+    r"Align\([\s\S]*?// CUSTOM_RUSTDESK_HOME_HEADER\s*"
+    r"(?:if \(!bind\.isCustomClient\(\)\)\s*"
+    r"Align\([\s\S]*?loadLogo\(\),\s*\),\s*)?",
+    re.MULTILINE,
+)
+legacy_custom_block_else = re.compile(
     r"if \(bind\.isCustomClient\(\)\)\s*Align\([\s\S]*?// CUSTOM_RUSTDESK_HOME_HEADER\s*"
     r"else \.\.\.\[[\s\S]*?loadLogo\(\),\s*\),\s*\],",
     re.MULTILINE,
@@ -1042,8 +1054,11 @@ upstream_block = re.compile(
     re.MULTILINE,
 )
 
-if marker in text or legacy_custom_block.search(text):
-    text = legacy_custom_block.sub(custom_block, text, count=1)
+if marker in text or legacy_custom_block.search(text) or legacy_custom_block_else.search(text):
+    if legacy_custom_block_else.search(text):
+        text = legacy_custom_block_else.sub(custom_block, text, count=1)
+    else:
+        text = legacy_custom_block.sub(custom_block, text, count=1)
 elif upstream_block.search(text):
     text = upstream_block.sub(custom_block, text, count=1)
 else:
@@ -1428,21 +1443,45 @@ _custom_patch_sciter_index_css() {
         return 0
     fi
 
-    if grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_FLOW" "$css_file"; then
-        echo "source-patcher: sciter config menu flow already patched"
-        return 0
-    fi
+    python3 - "$css_file" <<'PY'
+import re
+import sys
+from pathlib import Path
 
-    cat >>"$css_file" <<'EOF'
-
-/* CUSTOM_RUSTDESK_CONFIG_MENU_FLOW */
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+block = """/* CUSTOM_RUSTDESK_CONFIG_MENU_FLOW */
 menu.context#config-options {
   flow: horizontal-flow;
-  max-width: 520px;
+  width: 520px;
+  max-width: 90vw;
 }
-EOF
-    if grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_FLOW" "$css_file"; then
-        echo "source-patcher: sciter config menu two-column flow added in $css_file"
+menu.context#config-options > li {
+  width: 48%;
+  min-width: 200px;
+}
+menu.context#config-options > div.separator {
+  width: 100%;
+}
+"""
+pattern = re.compile(
+    r"/\* CUSTOM_RUSTDESK_CONFIG_MENU_FLOW \*/\s*"
+    r"menu\.context#config-options\s*\{[^}]*\}\s*"
+    r"(?:menu\.context#config-options > li\s*\{[^}]*\}\s*)?"
+    r"(?:menu\.context#config-options > div\.separator\s*\{[^}]*\}\s*)?",
+    re.DOTALL,
+)
+if pattern.search(text):
+    text = pattern.sub(block + "\n", text, count=1)
+elif "CUSTOM_RUSTDESK_CONFIG_MENU_FLOW" in text:
+    raise SystemExit("source-patcher: config menu css marker found but block shape unexpected")
+else:
+    text = text.rstrip() + "\n\n" + block
+path.write_text(text, encoding="utf-8")
+PY
+    if grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_FLOW" "$css_file" &&
+       grep -q 'menu.context#config-options > li' "$css_file"; then
+        echo "source-patcher: sciter config menu two-column flow patched in $css_file"
     else
         echo "source-patcher: failed to patch sciter config menu flow in $css_file" >&2
         return 1
