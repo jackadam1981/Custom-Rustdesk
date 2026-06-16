@@ -100,16 +100,21 @@ fi
 
 # --- B. UI patch markers ---
 check "flutter home header" grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home icon" grep -q 'CUSTOM_RUSTDESK_HOME_ICON' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home slogan" grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter connection powered by" grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/connection_page.dart
+check "flutter powered by titleLarge" grep -q 'CUSTOM_RUSTDESK_POWERED_STYLE' flutter/lib/common.dart
 check "flutter studio zzsn.work" grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
 check "flutter studio zzsn.work url" grep -q 'https://zzsn.work' flutter/lib/desktop/pages/desktop_setting_page.dart
-check "flutter about line-height" grep -q 'CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT' flutter/lib/desktop/pages/desktop_setting_page.dart
+check "flutter about layout" grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
 
 check "sciter custom brand header" grep -q 'custom-rd-home-header' src/ui/index.tis
 check "sciter custom slogan markup" grep -q 'custom-slogan' src/ui/index.tis
 check "sciter studio zzsn.work" grep -q "url='https://zzsn.work'" src/ui/index.tis
-check "sciter studio-about inline span" bash -c 'grep -q "studio-about" src/ui/index.tis && ! grep -q "<p class='"'"'link custom-event studio-about'"'"'" src/ui/index.tis'
+check "sciter studio-about p tag" grep -q "<p class='link custom-event studio-about'" src/ui/index.tis
+check "sciter powered title class" grep -q 'custom-rd-home-powered #powered-by .title' src/ui/index.tis
+check "sciter config menu flow" grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
+check "sciter about dialog height" grep -q 'CUSTOM_RUSTDESK_ABOUT_HEIGHT' src/ui/index.tis
 check "sciter powered above card-connect" python3 - src/ui/index.tis <<'PY'
 import sys
 from pathlib import Path
@@ -122,7 +127,10 @@ PY
 
 if [ -n "${BUILD_LOGO_URL:-}" ]; then
     check "flutter logo asset" test -f flutter/assets/logo.png
+    check "flutter logo light asset" test -f flutter/assets/logo_light.png
+    check "flutter logo dark asset" test -f flutter/assets/logo_dark.png
     check "res logo.png" test -f res/logo.png
+    check "res icon.png" test -f res/icon.png
 fi
 
 check "lang cn powered_by customer" grep -q 'powered_by_me' src/lang/cn.rs

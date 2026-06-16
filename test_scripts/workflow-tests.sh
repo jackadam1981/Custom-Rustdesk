@@ -551,25 +551,28 @@ EOF
         grep -q 'CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION' flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q "translate('custom_studio_attribution')" flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
-        grep -q 'CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT' flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q 'studio-about' src/ui/index.tis
         grep -q 'translate("custom_studio_attribution")' src/ui/index.tis
         grep -q "url='https://zzsn.work'" src/ui/index.tis
         grep -q 'custom-customer-link' src/ui/index.tis
         grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'CUSTOM_RUSTDESK_HOME_ICON' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'custom-slogan' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'custom-customer-name' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/connection_page.dart
         grep -q 'CUSTOM_RUSTDESK_POWERED_LINK' flutter/lib/common.dart
+        grep -q 'CUSTOM_RUSTDESK_POWERED_STYLE' flutter/lib/common.dart
         grep -q 'custom-rd-home-header' src/ui/index.tis
         grep -q 'custom-rd-home-powered' src/ui/index.tis
         grep -q 'custom-slogan' src/ui/index.tis
         grep -q 'custom-customer-name' src/ui/index.tis
-        grep -q 'fontSize: 14' flutter/lib/common.dart
-        grep -q 'Colors.black' flutter/lib/common.dart
-        grep -q 'color:#000;font-size:1.15em' src/ui/index.tis
-        grep -q 'SizedBox(height: 12)' flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q 'custom-rd-home-powered #powered-by .title' src/ui/index.tis
+        grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
+        ! grep -q 'fontSize: 14' flutter/lib/common.dart
+        ! grep -q 'color:#000;font-size:1.15em' src/ui/index.tis
+        ! grep -q 'SizedBox(height: 12)' flutter/lib/desktop/pages/desktop_setting_page.dart
         ! grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
         python3 - src/ui/index.tis <<'PY'
 import sys

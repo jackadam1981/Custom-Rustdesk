@@ -517,6 +517,8 @@ def save_fit_png(path, max_width, max_height):
 
 for target in (
     Path("flutter/assets/logo.png"),
+    Path("flutter/assets/logo_light.png"),
+    Path("flutter/assets/logo_dark.png"),
     Path("res/logo.png"),
 ):
     save_fit_png(target, 300, 60)
@@ -530,7 +532,17 @@ for target in (
 windows_icon = Path("flutter/windows/runner/resources/app_icon.ico")
 if windows_icon.exists():
     windows_icon.parent.mkdir(parents=True, exist_ok=True)
-    sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+    sizes = [
+        (16, 16),
+        (20, 20),
+        (24, 24),
+        (32, 32),
+        (40, 40),
+        (48, 48),
+        (64, 64),
+        (128, 128),
+        (256, 256),
+    ]
     square_canvas(image.copy(), 256).save(windows_icon, sizes=sizes)
 
 android_sizes = {
@@ -571,7 +583,7 @@ PY
 }
 
 _custom_sciter_logo_img_markup() {
-    if [ ! -f "res/logo.png" ]; then
+    if [ ! -f "res/icon.png" ]; then
         return 0
     fi
 
@@ -579,10 +591,10 @@ _custom_sciter_logo_img_markup() {
 import base64
 from pathlib import Path
 
-data = base64.b64encode(Path("res/logo.png").read_bytes()).decode("ascii")
+data = base64.b64encode(Path("res/icon.png").read_bytes()).decode("ascii")
 print(
     '<img.custom-rd-home-logo src="data:image/png;base64,' + data + '" '
-    'style="max-width:300px;max-height:60px;margin:0 auto 0.25em auto;display:block" />'
+    'style="width:1.4em;height:1.4em;display:block;margin:0 auto 0.25em auto" />'
 )
 PY
 }
@@ -596,14 +608,14 @@ _custom_sciter_custom_brand_block() {
     local slogan_markup
     slogan_markup=$(_custom_sciter_slogan_markup)
 
-    if [ -f "res/logo.png" ]; then
+    if [ -f "res/icon.png" ]; then
         logo_markup=$(_custom_sciter_logo_img_markup)
     fi
 
     if [ -n "$logo_markup" ]; then
-        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\">${logo_markup}<div style=\"font-size:1.1em;font-weight:bold\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div>${slogan_markup}</div> : \"\"}"
+        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\">${logo_markup}<div .title style=\"font-weight:bold\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div>${slogan_markup}</div> : \"\"}"
     else
-        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\"><div style=\"font-size:1.1em;font-weight:bold\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div>${slogan_markup}</div> : \"\"}"
+        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\"><div .title style=\"font-weight:bold\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div>${slogan_markup}</div> : \"\"}"
     fi
 }
 
@@ -629,7 +641,7 @@ text = path.read_text(encoding="utf-8")
 
 powered_block = (
     '{is_custom_client && handler.get_builtin_option("hide-powered-by-me") != "Y" '
-    '? <div .link .custom-rd-home-powered #powered-by style="color:#000;font-size:1.15em;'
+    '? <div .link .custom-rd-home-powered #powered-by .title style="color:#000;'
     'text-decoration:underline;margin-bottom:0.4em">{translate(\'powered_by_me\')}</div> : ""}'
 )
 plain_tip = (
@@ -709,9 +721,26 @@ if "custom-rd-home-powered" not in text:
     text = text.replace(right_anchor, right_with_powered, 1)
     changed = True
 elif powered_block not in text:
-    if right_anchor in text:
+    upgraded = re.sub(
+        r"\{is_custom_client && handler\.get_builtin_option\(\"hide-powered-by-me\"\) != \"Y\" "
+        r"\? <div \.link \.custom-rd-home-powered #powered-by(?: \.title)? style=\"[^\"]*\">"
+        r"\{translate\('powered_by_me'\)\}</div> : \"\"\}",
+        powered_block,
+        text,
+        count=1,
+    )
+    if upgraded != text:
+        text = upgraded
+        changed = True
+    elif right_anchor in text:
         text = legacy_powered.sub("", text)
         text = text.replace(right_anchor, right_with_powered, 1)
+        changed = True
+
+if brand not in text:
+    match = legacy_brand.search(text)
+    if match and match.group(0) != brand:
+        text = legacy_brand.sub(brand, text, count=1)
         changed = True
 
 if old_click in text:
@@ -721,7 +750,7 @@ if old_click in text:
 if not changed and "custom-rd-home-header" not in text and "custom-rd-home-powered" not in text:
     raise SystemExit("source-patcher: sciter home UI patch made no changes")
 
-if Path("res/logo.png").exists() and "custom-rd-home-logo" not in text:
+if Path("res/icon.png").exists() and "custom-rd-home-logo" not in text:
     match = legacy_brand.search(text)
     if match and match.group(0) != brand:
         text = legacy_brand.sub(brand, text, count=1)
@@ -811,9 +840,8 @@ studio_block = """
                               style: const TextStyle(
                                   fontWeight: FontWeight.w800,
                                   color: Colors.white,
-                                  height: 2.0,
                                   decoration: TextDecoration.underline),
-                            ),
+                            ), // CUSTOM_RUSTDESK_ABOUT_LAYOUT
                           ),"""
 
 text = re.sub(
@@ -833,6 +861,22 @@ if marker in text:
     text = re.sub(
         r"fontWeight: FontWeight\.w800,\s*fontSize: 13,\s*color: Colors\.white,",
         "fontWeight: FontWeight.w800,\n                                  color: Colors.white,",
+        text,
+        count=1,
+    )
+    text = re.sub(
+        r"height: 2\.0,\s*\n\s*decoration: TextDecoration\.underline\),\s*\n\s*\),\s*// CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION",
+        "decoration: TextDecoration.underline),\n                            ), // CUSTOM_RUSTDESK_ABOUT_LAYOUT\n                          ), // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION",
+        text,
+        count=1,
+    )
+    text = text.replace(
+        "style: const TextStyle(color: Colors.white, height: 2.0), // CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT",
+        "style: const TextStyle(color: Colors.white)",
+    )
+    text = re.sub(
+        r"height: 2\.0\), // CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT",
+        ")",
         text,
         count=1,
     )
@@ -885,45 +929,44 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-studio_line = (
-    "<br /><span class='link custom-event studio-about' style='font-weight: bold' url='https://zzsn.work'>\" "
-    "+ translate(\"custom_studio_attribution\") + \"</span> \\"
+studio_p = (
+    "<p class='link custom-event studio-about' style='font-weight: bold' url='https://zzsn.work'>\" "
+    "+ translate(\"custom_studio_attribution\") + \"</p> \\"
 )
 text = re.sub(
     r"url='\" \+ handler\.get_builtin_option\(\"custom-customer-link\"\) \+ \"'",
     "url='https://zzsn.work'",
     text,
 )
-slogan_plain = '" + translate("Slogan_tip") + " \\'
-slogan_with_studio = '" + translate("Slogan_tip") + " \\\n            ' + studio_line
-p_tag_pattern = re.compile(
-    r"(\s*)<p style='font-weight: bold'>\" \+ translate\(\"Slogan_tip\"\) \+ \"</p>\\"
-)
-
 text = re.sub(
-    r'(" \+ translate\("Slogan_tip"\) \+ " \\\s*)<br />\\\\\s*\n\s*'
-    r"(<br /><span class='link custom-event studio-about'[^>]*>)",
-    r"\1\2",
+    r"\s*<br /><span class='link custom-event studio-about'[^>]*>.*?</span> \\\\",
+    "",
     text,
+    flags=re.DOTALL,
 )
-legacy_p_studio = (
-    "<p class='link custom-event studio-about' style='font-weight: bold' url='https://zzsn.work'>\" "
-    "+ translate(\"custom_studio_attribution\") + \"</p> \\"
-)
-if legacy_p_studio in text:
-    text = text.replace(legacy_p_studio, studio_line, 1)
-
-if "studio-about" not in text:
-    p_match = p_tag_pattern.search(text)
-    if p_match:
-        text = p_tag_pattern.sub(lambda m: m.group(1) + slogan_with_studio, text, count=1)
-    elif slogan_plain in text:
-        text = text.replace(slogan_plain, slogan_with_studio, 1)
+slogan_p = "<p style='font-weight: bold'>\" + translate(\"Slogan_tip\") + \"</p>\\"
+if slogan_p in text and studio_p.strip() not in text:
+    text = text.replace(slogan_p, slogan_p + "\n            " + studio_p, 1)
+elif "studio-about" not in text:
+    slogan_plain = '" + translate("Slogan_tip") + " \\'
+    if slogan_plain in text:
+        text = text.replace(
+            slogan_plain,
+            '" + translate("Slogan_tip") + " \\\n            ' + studio_p,
+            1,
+        )
     else:
         raise SystemExit("source-patcher: Slogan_tip anchor not found in src/ui/index.tis")
 
 if "studio-about" not in text:
     raise SystemExit("source-patcher: failed to inject studio attribution in src/ui/index.tis")
+
+text = re.sub(
+    r"(function showAbout\(\)[\s\S]*?), 400, get_msgbox_width\(\)\);",
+    r"\1, 440, get_msgbox_width()); // CUSTOM_RUSTDESK_ABOUT_HEIGHT",
+    text,
+    count=1,
+)
 path.write_text(text, encoding="utf-8")
 PY
         if grep -q "studio-about" "src/ui/index.tis"; then
@@ -934,19 +977,7 @@ PY
         fi
     fi
 
-    if [ -f "$home_file" ] && ! grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file"; then
-        perl -0pi -e 's/if \(bind\.isCustomClient\(\)\)\s*Align\(\s*alignment: Alignment\.center,\s*child: loadPowered\(context\),\s*\),\s*Align\(\s*alignment: Alignment\.center,\s*child: loadLogo\(\),\s*\),/if (bind.isCustomClient())\n        Align(\n          alignment: Alignment.center,\n          child: Column(\n            mainAxisSize: MainAxisSize.min,\n            children: [\n              loadLogo(),\n              Text(\n                bind.mainGetBuildinOption(key: "app-name"),\n                style: Theme.of(context).textTheme.titleMedium,\n              ).marginOnly(top: 4),\n              if (bind.mainGetBuildinOption(key: "custom-slogan").isNotEmpty)\n                Text(\n                  bind.mainGetBuildinOption(key: "custom-slogan"),\n                  style: Theme.of(context).textTheme.bodySmall,\n                ).marginOnly(top: 2), \/\/ CUSTOM_RUSTDESK_HOME_SLOGAN\n            ],\n          ),\n        ) \/\/ CUSTOM_RUSTDESK_HOME_HEADER\n      else ...[\n        Align(\n          alignment: Alignment.center,\n          child: loadPowered(context),\n        ),\n        Align(\n          alignment: Alignment.center,\n          child: loadLogo(),\n        ),\n      ],/s' "$home_file"
-        perl -0pi -e 's/if \(bind\.isCustomClient\(\)\)\s*Align\(\s*alignment: Alignment\.center,\s*child: bind\.isCustomClient\(\) \? SizedBox\.shrink\(\) : loadPowered\(context\),\s*\),\s*Align\(\s*alignment: Alignment\.center,\s*child: loadLogo\(\),\s*\),/if (bind.isCustomClient())\n        Align(\n          alignment: Alignment.center,\n          child: Column(\n            mainAxisSize: MainAxisSize.min,\n            children: [\n              loadLogo(),\n              Text(\n                bind.mainGetBuildinOption(key: "app-name"),\n                style: Theme.of(context).textTheme.titleMedium,\n              ).marginOnly(top: 4),\n              if (bind.mainGetBuildinOption(key: "custom-slogan").isNotEmpty)\n                Text(\n                  bind.mainGetBuildinOption(key: "custom-slogan"),\n                  style: Theme.of(context).textTheme.bodySmall,\n                ).marginOnly(top: 2), \/\/ CUSTOM_RUSTDESK_HOME_SLOGAN\n            ],\n          ),\n        ) \/\/ CUSTOM_RUSTDESK_HOME_HEADER\n      else ...[\n        Align(\n          alignment: Alignment.center,\n          child: loadPowered(context),\n        ),\n        Align(\n          alignment: Alignment.center,\n          child: loadLogo(),\n        ),\n      ],/s' "$home_file"
-        if grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file"; then
-            echo "source-patcher: custom home header injected in $home_file"
-        else
-            echo "source-patcher: failed to inject custom home header in $home_file" >&2
-            return 1
-        fi
-    fi
-
-    if [ -f "$home_file" ] && grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file" &&
-       ! grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" "$home_file"; then
+    if [ -f "$home_file" ]; then
         python3 - "$home_file" <<'PY'
 import re
 import sys
@@ -954,32 +985,79 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-marker = "CUSTOM_RUSTDESK_HOME_SLOGAN"
-if marker in text:
+marker = "CUSTOM_RUSTDESK_HOME_HEADER"
+if "CUSTOM_RUSTDESK_HOME_ICON" in text:
+    path.write_text(text, encoding="utf-8")
     raise SystemExit(0)
 
-pattern = re.compile(
-    r"(Text\(\s*\n\s*bind\.mainGetBuildinOption\(key: \"app-name\"\),\s*\n"
-    r"\s*style: Theme\.of\(context\)\.textTheme\.titleMedium,\s*\n"
-    r"\s*\)\.marginOnly\(top: 4\),)"
-)
-slogan_block = """
+custom_block = """if (bind.isCustomClient()))
+        Align(
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Image.asset(
+                    'assets/icon.png',
+                    width: Theme.of(context).textTheme.titleLarge?.fontSize ?? 22,
+                    height: Theme.of(context).textTheme.titleLarge?.fontSize ?? 22,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ), // CUSTOM_RUSTDESK_HOME_ICON
+                  Flexible(
+                    child: Text(
+                      bind.mainGetBuildinOption(key: "app-name"),
+                      style: Theme.of(context).textTheme.titleLarge,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
               if (bind.mainGetBuildinOption(key: "custom-slogan").isNotEmpty)
                 Text(
                   bind.mainGetBuildinOption(key: "custom-slogan"),
                   style: Theme.of(context).textTheme.bodySmall,
-                ).marginOnly(top: 2), // CUSTOM_RUSTDESK_HOME_SLOGAN"""
+                ).marginOnly(top: 2), // CUSTOM_RUSTDESK_HOME_SLOGAN
+            ],
+          ),
+        ), // CUSTOM_RUSTDESK_HOME_HEADER
+      if (!bind.isCustomClient())
+        Align(
+          alignment: Alignment.center,
+          child: loadLogo(),
+        ),"""
+legacy_custom_block = re.compile(
+    r"if \(bind\.isCustomClient\(\)\)\s*Align\([\s\S]*?// CUSTOM_RUSTDESK_HOME_HEADER\s*"
+    r"else \.\.\.\[[\s\S]*?loadLogo\(\),\s*\),\s*\],",
+    re.MULTILINE,
+)
+upstream_block = re.compile(
+    r"if \(bind\.isCustomClient\(\)\)\s*"
+    r"Align\(\s*alignment: Alignment\.center,\s*"
+    r"child: loadPowered\(context\),\s*\),\s*"
+    r"Align\(\s*alignment: Alignment\.center,\s*"
+    r"child: loadLogo\(\),\s*\),",
+    re.MULTILINE,
+)
 
-if not pattern.search(text):
-    raise SystemExit("source-patcher: home header app-name anchor not found for slogan inject")
+if marker in text or legacy_custom_block.search(text):
+    text = legacy_custom_block.sub(custom_block, text, count=1)
+elif upstream_block.search(text):
+    text = upstream_block.sub(custom_block, text, count=1)
+else:
+    raise SystemExit("source-patcher: home header anchor not found in desktop_home_page.dart")
 
-text = pattern.sub(r"\1" + slogan_block, text, count=1)
+if marker not in text or "CUSTOM_RUSTDESK_HOME_ICON" not in text:
+    raise SystemExit("source-patcher: failed to inject custom home header in desktop_home_page.dart")
 path.write_text(text, encoding="utf-8")
 PY
-        if grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" "$home_file"; then
-            echo "source-patcher: custom home slogan injected in $home_file"
+        if grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file" &&
+           grep -q "CUSTOM_RUSTDESK_HOME_ICON" "$home_file"; then
+            echo "source-patcher: custom home header injected in $home_file"
         else
-            echo "source-patcher: failed to inject custom home slogan in $home_file" >&2
+            echo "source-patcher: failed to inject custom home header in $home_file" >&2
             return 1
         fi
     fi
@@ -1019,6 +1097,24 @@ OLD_CHILD = """      child: Opacity(
                 ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),
           )),"""
 NEW_CHILD = """      child: bind.isCustomClient()
+          ? Text(
+              translate("powered_by_me"),
+              overflow: TextOverflow.clip,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  decoration: TextDecoration.underline,
+                  height: 1), // CUSTOM_RUSTDESK_POWERED_STYLE
+            )
+          : Opacity(
+              opacity: 0.5,
+              child: Text(
+                translate("powered_by_me"),
+                overflow: TextOverflow.clip,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),
+              )),"""
+PREVIOUS_CUSTOM_CHILD = """      child: bind.isCustomClient()
           ? Text(
               translate("powered_by_me"),
               overflow: TextOverflow.clip,
@@ -1102,10 +1198,13 @@ if NEW_CHILD not in function_text:
     if OLD_CHILD in function_text:
         function_text = function_text.replace(OLD_CHILD, NEW_CHILD, 1)
         changed = True
+    elif PREVIOUS_CUSTOM_CHILD in function_text:
+        function_text = function_text.replace(PREVIOUS_CUSTOM_CHILD, NEW_CHILD, 1)
+        changed = True
     elif PARTIAL_CHILD in function_text:
         function_text = function_text.replace(PARTIAL_CHILD, NEW_CHILD, 1)
         changed = True
-    elif "fontSize: bind.isCustomClient() ? 14 : 9" in function_text:
+    elif "CUSTOM_RUSTDESK_POWERED_STYLE" in function_text:
         pass
     else:
         raise SystemExit("source-patcher: loadPowered style pattern not found in common.dart")
@@ -1114,8 +1213,7 @@ if changed:
     path.write_text(text[:start] + function_text + text[end:], encoding="utf-8")
 PY
         if grep -q "CUSTOM_RUSTDESK_POWERED_LINK" "$common_file" &&
-           grep -q "fontSize: 14" "$common_file" &&
-           grep -q "Colors.black" "$common_file"; then
+           grep -q "CUSTOM_RUSTDESK_POWERED_STYLE" "$common_file"; then
             echo "source-patcher: custom powered_by link and style wired in $common_file"
         else
             echo "source-patcher: failed to patch powered_by in $common_file" >&2
@@ -1323,11 +1421,39 @@ PY
     fi
 }
 
-_custom_patch_about_line_height() {
+_custom_patch_sciter_index_css() {
+    local css_file="src/ui/index.css"
+
+    if [ ! -f "$css_file" ]; then
+        return 0
+    fi
+
+    if grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_FLOW" "$css_file"; then
+        echo "source-patcher: sciter config menu flow already patched"
+        return 0
+    fi
+
+    cat >>"$css_file" <<'EOF'
+
+/* CUSTOM_RUSTDESK_CONFIG_MENU_FLOW */
+menu.context#config-options {
+  flow: horizontal-flow;
+  max-width: 520px;
+}
+EOF
+    if grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_FLOW" "$css_file"; then
+        echo "source-patcher: sciter config menu two-column flow added in $css_file"
+    else
+        echo "source-patcher: failed to patch sciter config menu flow in $css_file" >&2
+        return 1
+    fi
+}
+
+_custom_patch_about_layout() {
     local about_file="flutter/lib/desktop/pages/desktop_setting_page.dart"
 
     if [ -f "$about_file" ] && grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file" &&
-       ! grep -q "CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT" "$about_file"; then
+       grep -q "CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT" "$about_file"; then
         python3 - "$about_file" <<'PY'
 import re
 import sys
@@ -1335,42 +1461,35 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-marker = "CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT"
-if marker in text:
-    path.write_text(text, encoding="utf-8")
-    raise SystemExit(0)
-
-if "style: const TextStyle(color: Colors.white)" in text:
+text = text.replace(
+    "style: const TextStyle(color: Colors.white, height: 2.0), // CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT",
+    "style: const TextStyle(color: Colors.white)",
+)
+text = re.sub(
+    r"height: 2\.0\), // CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT",
+    ")",
+    text,
+)
+if "CUSTOM_RUSTDESK_ABOUT_LAYOUT" not in text and "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" in text:
     text = text.replace(
-        "style: const TextStyle(color: Colors.white)",
-        "style: const TextStyle(color: Colors.white, height: 2.0), // CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT",
+        "decoration: TextDecoration.underline),\n                            ),",
+        "decoration: TextDecoration.underline),\n                            ), // CUSTOM_RUSTDESK_ABOUT_LAYOUT",
         1,
     )
-text = re.sub(
-    r"translate\('Slogan_tip'\),\s*style: TextStyle\(\s*fontWeight: FontWeight\.w800,\s*color: Colors\.white\s*\)\s*,",
-    "translate('Slogan_tip'),\n                            style: TextStyle(\n                                fontWeight: FontWeight.w800,\n                                color: Colors.white,\n                                height: 2.0), // CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT",
-    text,
-    count=1,
-)
-if marker not in text:
-    raise SystemExit("source-patcher: failed to apply about line-height in desktop_setting_page.dart")
 path.write_text(text, encoding="utf-8")
 PY
-        if grep -q "CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT" "$about_file"; then
-            echo "source-patcher: about line-height aligned in $about_file"
-        else
-            echo "source-patcher: failed to patch about line-height in $about_file" >&2
-            return 1
-        fi
+        echo "source-patcher: removed legacy about line-height hack in $about_file"
     fi
 
-    if [ -f "src/ui/index.tis" ] && grep -q "<p class='link custom-event studio-about'" "src/ui/index.tis"; then
-        perl -0pi -e "s|<p class='link custom-event studio-about' style='font-weight: bold' url='https://zzsn.work'>\" \+ translate\\(\"custom_studio_attribution\"\\) \+ \"</p> \\\|<br /><span class='link custom-event studio-about' style='font-weight: bold' url='https://zzsn.work'>\" + translate(\"custom_studio_attribution\") + \"</span> \\\|g" "src/ui/index.tis"
-        if grep -q "<p class='link custom-event studio-about'" "src/ui/index.tis"; then
-            echo "source-patcher: failed to normalize sciter about studio layout" >&2
+    if [ -f "$about_file" ] && grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file" &&
+       ! grep -q "CUSTOM_RUSTDESK_ABOUT_LAYOUT" "$about_file"; then
+        perl -0pi -e 's/decoration: TextDecoration\.underline\),\s*\n\s*\),(\s*\/\/ CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION)/decoration: TextDecoration.underline),\n                            ), \/\/ CUSTOM_RUSTDESK_ABOUT_LAYOUT$1/' "$about_file"
+        if grep -q "CUSTOM_RUSTDESK_ABOUT_LAYOUT" "$about_file"; then
+            echo "source-patcher: about layout marker added in $about_file"
+        else
+            echo "source-patcher: failed to mark about layout in $about_file" >&2
             return 1
         fi
-        echo "source-patcher: sciter about studio line uses inline span + br"
     fi
 }
 
@@ -1484,7 +1603,8 @@ apply_custom_source_patches() {
     _custom_patch_flutter_ui_app_name
     _custom_patch_logo_assets
     _custom_patch_custom_ui_text
-    _custom_patch_about_line_height
+    _custom_patch_sciter_index_css
+    _custom_patch_about_layout
     _custom_patch_is_custom_client
     _custom_patch_portable_working_dir
     _custom_patch_windows_test_signing
