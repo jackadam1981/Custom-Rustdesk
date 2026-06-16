@@ -506,7 +506,8 @@ EOF
         apply_custom_source_patches
         grep -q '"app_name": "FixtureApp"' custom-build-config.json
         grep -q '"customer": "FixtureCustomer"' custom-build-config.json
-        grep -q '"logo_url": ""' custom-build-config.json
+        grep -q '"banner_url": null' custom-build-config.json
+        grep -q '"icon_url": null' custom-build-config.json
         grep -q '"rendezvous_server": "192.168.2.22:21117"' custom-build-config.json
         grep -q '"custom_rendezvous_server": "192.168.2.22"' custom-build-config.json
         grep -q '"relay_server": "192.168.2.22"' custom-build-config.json
@@ -556,6 +557,7 @@ EOF
         grep -q "translate('custom_studio_attribution')" flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q 'CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN' flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q 'studio-about' src/ui/index.tis
         grep -q 'translate("custom_studio_attribution")' src/ui/index.tis
         grep -q "url='https://zzsn.work'" src/ui/index.tis
@@ -574,6 +576,10 @@ EOF
         grep -q 'custom-customer-name' src/ui/index.tis
         grep -q 'custom-rd-home-powered #powered-by .title' src/ui/index.tis
         grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
+        grep -q 'max-height: 72vh' src/ui/index.css
+        grep -q 'overflow-y: scroll-indicator' src/ui/index.css
+        ! grep -q 'menu.context#config-options > li' src/ui/index.css
+        grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' src/ui/index.tis
         ! grep -q 'fontSize: 14' flutter/lib/common.dart
         ! grep -q 'color:#000;font-size:1.15em' src/ui/index.tis
         ! grep -q 'SizedBox(height: 12)' flutter/lib/desktop/pages/desktop_setting_page.dart
@@ -786,7 +792,7 @@ EOF
 function test_issue_params_preserve_issue_supplied_patch_variables() {
     local trigger=".github/workflows/scripts/trigger.sh"
     local event_data
-    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloud\napp_name: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nlogo_url: https://assets.example.com/logo.png\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true\nhide_network_settings: true\nsource_patch_debug: true' '{issue:{number:123, body:$body}}')
+    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloud\napp_name: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nbanner_url: https://assets.example.com/banner.png\nicon_url: https://assets.example.com/icon.png\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true\nhide_network_settings: true\nsource_patch_debug: true' '{issue:{number:123, body:$body}}')
 
     if (
         set -e
@@ -794,7 +800,8 @@ function test_issue_params_preserve_issue_supplied_patch_variables() {
         extracted="$(trigger_manager extract-issue "$event_data")"
         echo "$extracted" | grep -q 'APP_NAME="OneCloudDesk"'
         echo "$extracted" | grep -q 'CUSTOMER="OneCloud"'
-        echo "$extracted" | grep -q 'LOGO_URL="https://assets.example.com/logo.png"'
+        echo "$extracted" | grep -q 'BANNER_URL="https://assets.example.com/banner.png"'
+        echo "$extracted" | grep -q 'ICON_URL="https://assets.example.com/icon.png"'
         echo "$extracted" | grep -q 'RELAY_SERVER="rustdesk.jackadam.top:21117"'
         echo "$extracted" | grep -q 'RS_PUB_KEY="dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI="'
         echo "$extracted" | grep -q 'SLOGAN="Powered by OneCloud Desk"'

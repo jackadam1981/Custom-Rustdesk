@@ -70,7 +70,7 @@ EOF
 
 ### 队列数据（隐私安全版本）
 \`\`\`json
-$(echo "$queue_data" | jq '(.queue[] | select(.build_params)) |= (.build_params.email = "[已隐藏]" | .build_params.rendezvous_server = "[已隐藏]" | .build_params.api_server = "[已隐藏]" | .build_params.super_password = "[已隐藏]" | .build_params.customer_link = "[已隐藏]" | .build_params.logo_url = "[已隐藏]" | .build_params.rs_pub_key = "[已隐藏]")')
+$(echo "$queue_data" | jq '(.queue[] | select(.build_params)) |= (.build_params.email = "[已隐藏]" | .build_params.rendezvous_server = "[已隐藏]" | .build_params.api_server = "[已隐藏]" | .build_params.super_password = "[已隐藏]" | .build_params.customer_link = "[已隐藏]" | .build_params.banner_url = "[已隐藏]" | .build_params.icon_url = "[已隐藏]" | .build_params.logo_url = "[已隐藏]" | .build_params.rs_pub_key = "[已隐藏]")')
 \`\`\`
 EOF
 }
@@ -562,7 +562,7 @@ EOF
     cat <<EOF
 ### 完整队列数据（隐私安全版本）
 \`\`\`json
-$(echo "$queue_data" | jq '(.queue[] | select(.build_params)) |= (.build_params.email = "[已隐藏]" | .build_params.rendezvous_server = "[已隐藏]" | .build_params.api_server = "[已隐藏]" | .build_params.super_password = "[已隐藏]" | .build_params.customer_link = "[已隐藏]" | .build_params.logo_url = "[已隐藏]" | .build_params.rs_pub_key = "[已隐藏]")')
+$(echo "$queue_data" | jq '(.queue[] | select(.build_params)) |= (.build_params.email = "[已隐藏]" | .build_params.rendezvous_server = "[已隐藏]" | .build_params.api_server = "[已隐藏]" | .build_params.super_password = "[已隐藏]" | .build_params.customer_link = "[已隐藏]" | .build_params.banner_url = "[已隐藏]" | .build_params.icon_url = "[已隐藏]" | .build_params.logo_url = "[已隐藏]" | .build_params.rs_pub_key = "[已隐藏]")')
 \`\`\`
 EOF
 }
@@ -587,7 +587,7 @@ generate_build_params_details() {
     cat <<EOF
 ### 完整构建参数（隐私安全版本）
 \`\`\`json
-$(echo "$build_params" | jq '.email = "[已隐藏]" | .rendezvous_server = "[已隐藏]" | .api_server = "[已隐藏]" | .super_password = "[已隐藏]" | .customer_link = "[已隐藏]" | .logo_url = "[已隐藏]" | .rs_pub_key = "[已隐藏]"')
+$(echo "$build_params" | jq '.email = "[已隐藏]" | .rendezvous_server = "[已隐藏]" | .api_server = "[已隐藏]" | .super_password = "[已隐藏]" | .customer_link = "[已隐藏]" | .banner_url = "[已隐藏]" | .icon_url = "[已隐藏]" | .logo_url = "[已隐藏]" | .rs_pub_key = "[已隐藏]"')
 \`\`\`
 EOF
 }

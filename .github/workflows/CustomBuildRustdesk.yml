@@ -24,8 +24,12 @@ on:
         description: '客户链接'
         required: false
         default: ''
-      logo_url:
-        description: 'Customer logo image URL or repository path, optional'
+      banner_url:
+        description: 'Home banner logo (300x60 PNG recommended); URL or repo path'
+        required: false
+        default: ''
+      icon_url:
+        description: 'Square tray/app icon (256x256 PNG recommended); URL or repo path'
         required: false
         default: ''
       slogan:
@@ -416,6 +420,8 @@ jobs:
           app_name=$(echo "$TRIGGER_DATA" | jq -r '.build_params.app_name // empty')
           customer=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')
           customer_link=$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer_link // empty')
+          banner_url=$(echo "$TRIGGER_DATA" | jq -r '.build_params.banner_url // empty')
+          icon_url=$(echo "$TRIGGER_DATA" | jq -r '.build_params.icon_url // empty')
           logo_url=$(echo "$TRIGGER_DATA" | jq -r '.build_params.logo_url // empty')
           slogan=$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')
           email=$(echo "$TRIGGER_DATA" | jq -r '.build_params.email // empty')
@@ -431,7 +437,11 @@ jobs:
           echo "  - app_name: ${app_name:-$customer}"
           echo "  - customer: $customer"
           echo "  - customer_link: $customer_link"
-          echo "  - logo_url: ${logo_url:+[provided]}"
+          echo "  - banner_url: ${banner_url:+[provided]}"
+          echo "  - icon_url: ${icon_url:+[provided]}"
+          if [ -n "$logo_url" ]; then
+            echo "  - logo_url(deprecated): [provided]"
+          fi
           echo "  - slogan: $slogan"
           echo "  - email: $email"
           echo "  - rendezvous_server: $rendezvous_server"
@@ -503,6 +513,8 @@ jobs:
           export BUILD_APP_NAME="$(echo "$TRIGGER_DATA" | jq -r '.build_params.app_name // empty')"
           export BUILD_CUSTOMER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')"
           export BUILD_CUSTOMER_LINK="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer_link // empty')"
+          export BUILD_BANNER_URL="$(echo "$TRIGGER_DATA" | jq -r '.build_params.banner_url // empty')"
+          export BUILD_ICON_URL="$(echo "$TRIGGER_DATA" | jq -r '.build_params.icon_url // empty')"
           export BUILD_LOGO_URL="$(echo "$TRIGGER_DATA" | jq -r '.build_params.logo_url // empty')"
           export BUILD_SLOGAN="$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')"
           export BUILD_RENDEZVOUS_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rendezvous_server // empty')"
@@ -527,6 +539,8 @@ jobs:
             "app_name": "$BUILD_APP_NAME",
             "customer": "$BUILD_CUSTOMER",
             "customer_link": "$BUILD_CUSTOMER_LINK",
+            "banner_url": "$BUILD_BANNER_URL",
+            "icon_url": "$BUILD_ICON_URL",
             "logo_url": "$BUILD_LOGO_URL",
             "slogan": "$BUILD_SLOGAN",
             "email": "$(echo "$TRIGGER_DATA" | jq -r '.build_params.email // empty')",

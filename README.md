@@ -36,7 +36,8 @@
 | relay_server | host:21117 |
 | rs_pub_key | （hbbs 公钥） |
 | hide_network_settings | true |
-| logo_url | 客户 Logo 图片 URL（留空则用默认 RustDesk logo） |
+| banner_url | 首页横幅 logo（建议 300×60 PNG） |
+| icon_url | 托盘/应用方图（建议 256×256 PNG） |
 
 ## Windows 测试清理
 

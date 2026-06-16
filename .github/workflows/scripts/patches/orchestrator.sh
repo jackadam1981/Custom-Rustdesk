@@ -15,7 +15,18 @@ _custom_resolve_build_inputs() {
     CUSTOM_APP_NAME="${BUILD_APP_NAME:-${BUILD_CUSTOMER:-${BUILD_TAG:-CustomRustDesk}}}"
     CUSTOM_CUSTOMER="${BUILD_CUSTOMER:-定制客户}"
     CUSTOM_CUSTOMER_LINK="${BUILD_CUSTOMER_LINK:-https://zzsn.work}"
+    CUSTOM_BANNER_URL="${BUILD_BANNER_URL:-}"
+    CUSTOM_ICON_URL="${BUILD_ICON_URL:-}"
     CUSTOM_LOGO_URL="${BUILD_LOGO_URL:-}"
+    if [ -n "$CUSTOM_LOGO_URL" ]; then
+        echo "source-patcher: logo_url is deprecated; prefer banner_url + icon_url"
+        if [ -z "$CUSTOM_BANNER_URL" ]; then
+            CUSTOM_BANNER_URL="$CUSTOM_LOGO_URL"
+        fi
+        if [ -z "$CUSTOM_ICON_URL" ]; then
+            CUSTOM_ICON_URL="$CUSTOM_LOGO_URL"
+        fi
+    fi
     CUSTOM_SLOGAN="${BUILD_SLOGAN:-}"
     CUSTOM_RENDEZVOUS_INPUT="${BUILD_RENDEZVOUS_SERVER:-}"
     CUSTOM_RENDEZVOUS_SERVER=$(_custom_address_host "$CUSTOM_RENDEZVOUS_INPUT")
@@ -32,7 +43,11 @@ _custom_resolve_build_inputs() {
     echo "source-patcher-trace: resolved custom build inputs"
     _custom_trace_value "BUILD_APP_NAME" "${BUILD_APP_NAME:-}"
     _custom_trace_value "CUSTOM_APP_NAME(resolved)" "$CUSTOM_APP_NAME"
-    _custom_trace_value "BUILD_LOGO_URL" "${BUILD_LOGO_URL:+[provided]}"
+    _custom_trace_value "BUILD_BANNER_URL" "${BUILD_BANNER_URL:+[provided]}"
+    _custom_trace_value "BUILD_ICON_URL" "${BUILD_ICON_URL:+[provided]}"
+    if [ -n "${BUILD_LOGO_URL:-}" ]; then
+        _custom_trace_value "BUILD_LOGO_URL(deprecated)" "[provided]"
+    fi
     _custom_trace_value "BUILD_RENDEZVOUS_SERVER(raw)" "${BUILD_RENDEZVOUS_SERVER:-}"
     _custom_trace_value "CUSTOM_RENDEZVOUS_SERVER(normalized)" "$CUSTOM_RENDEZVOUS_SERVER"
     _custom_trace_value "BUILD_RELAY_SERVER(raw)" "${BUILD_RELAY_SERVER:-}"
@@ -63,6 +78,8 @@ _custom_write_build_config_json() {
         --arg app_name "$CUSTOM_APP_NAME" \
         --arg customer "$BUILD_CUSTOMER" \
         --arg customer_link "$CUSTOM_CUSTOMER_LINK" \
+        --arg banner_url "$CUSTOM_BANNER_URL" \
+        --arg icon_url "$CUSTOM_ICON_URL" \
         --arg logo_url "$CUSTOM_LOGO_URL" \
         --arg slogan "$CUSTOM_SLOGAN" \
         --arg rendezvous_server "$CUSTOM_RENDEZVOUS_INPUT" \
@@ -79,7 +96,9 @@ _custom_write_build_config_json() {
             app_name: $app_name,
             customer: $customer,
             customer_link: $customer_link,
-            logo_url: $logo_url,
+            banner_url: (if ($banner_url | length) > 0 then $banner_url else null end),
+            icon_url: (if ($icon_url | length) > 0 then $icon_url else null end),
+            logo_url: (if ($logo_url | length) > 0 then $logo_url else null end),
             slogan: $slogan,
             rendezvous_server: $rendezvous_server,
             custom_rendezvous_server: $custom_rendezvous_server,

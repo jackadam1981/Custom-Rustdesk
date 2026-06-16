@@ -1,18 +1,40 @@
 _custom_sciter_logo_img_markup() {
-    if [ ! -f "res/icon.png" ]; then
+    local logo_file=""
+    if [ -f "res/logo.png" ]; then
+        logo_file="res/logo.png"
+    elif [ -f "res/icon.png" ]; then
+        logo_file="res/icon.png"
+    else
         return 0
     fi
 
-    python3 - <<'PY'
+    if [ "$logo_file" = "res/logo.png" ]; then
+        python3 - "$logo_file" <<'PY'
 import base64
+import sys
 from pathlib import Path
 
-data = base64.b64encode(Path("res/icon.png").read_bytes()).decode("ascii")
+path = Path(sys.argv[1])
+data = base64.b64encode(path.read_bytes()).decode("ascii")
+print(
+    '<img.custom-rd-home-logo src="data:image/png;base64,' + data + '" '
+    'style="max-width:300px;max-height:60px;vertical-align:middle" />'
+)
+PY
+    else
+        python3 - "$logo_file" <<'PY'
+import base64
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = base64.b64encode(path.read_bytes()).decode("ascii")
 print(
     '<img.custom-rd-home-logo src="data:image/png;base64,' + data + '" '
     'style="width:1.4em;height:1.4em;vertical-align:middle" />'
 )
 PY
+    fi
 }
 
 _custom_sciter_slogan_markup() {
@@ -24,7 +46,7 @@ _custom_sciter_custom_brand_block() {
     local slogan_markup
     slogan_markup=$(_custom_sciter_slogan_markup)
 
-    if [ -f "res/icon.png" ]; then
+    if [ -f "res/logo.png" ] || [ -f "res/icon.png" ]; then
         logo_markup=$(_custom_sciter_logo_img_markup)
     fi
 

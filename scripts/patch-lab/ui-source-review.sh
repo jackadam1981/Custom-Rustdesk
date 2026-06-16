@@ -73,6 +73,7 @@ fi
 if grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$af" &&
    grep -q "https://zzsn.work" "$af" &&
    grep -q "CUSTOM_RUSTDESK_ABOUT_LAYOUT" "$af" &&
+   grep -q "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN" "$af" &&
    ! grep -q "CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT" "$af" &&
    ! grep -q "height: 2.0" "$af"; then
     ok "F3 about: studio below Slogan_tip, zzsn.work, no line-height hack"
@@ -172,8 +173,11 @@ if grep -q "<p class='link custom-event studio-about'" "$tis" &&
    grep -q "CUSTOM_RUSTDESK_ABOUT_HEIGHT" "$tis" &&
    grep -q '<p style='"'"'font-weight: bold'"'"'>\" + translate(\"Slogan_tip\")' "$tis" &&
    grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_FLOW" src/ui/index.css &&
-   grep -q 'menu.context#config-options > li' src/ui/index.css; then
-    ok "S3 sciter about p-tag + taller dialog + menu 2-col css"
+   grep -q 'max-height: 72vh' src/ui/index.css &&
+   grep -q 'overflow-y: scroll-indicator' src/ui/index.css &&
+   ! grep -q 'menu.context#config-options > li' src/ui/index.css &&
+   grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' "$tis"; then
+    ok "S3 sciter about p-tag + taller dialog + menu scroll css"
 else
     bad "S3 sciter about/menu"
 fi

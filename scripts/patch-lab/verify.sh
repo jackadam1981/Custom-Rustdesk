@@ -145,6 +145,7 @@ if verify_from F12; then
 check "flutter studio zzsn.work" grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
 check "flutter studio zzsn.work url" grep -q 'https://zzsn.work' flutter/lib/desktop/pages/desktop_setting_page.dart
 check "flutter about layout" grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
+check "flutter about row spacing" grep -q 'CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN' flutter/lib/desktop/pages/desktop_setting_page.dart
 fi
 
 if verify_from S10; then
@@ -171,16 +172,31 @@ fi
 
 if verify_from S13; then
 check "sciter config menu flow" grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
-check "sciter config menu two columns" grep -q 'menu.context#config-options > li' src/ui/index.css
+check "sciter config menu max-height vh" grep -q 'max-height: 72vh' src/ui/index.css
+check "sciter config menu scroll" grep -q 'overflow-y: scroll-indicator' src/ui/index.css
+check "sciter config menu no two-column" ! grep -q 'menu.context#config-options > li' src/ui/index.css
+check "sciter config menu max-height hook" grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' src/ui/index.tis
 fi
 
 if verify_from B02; then
-if [ -n "${BUILD_LOGO_URL:-}" ]; then
+has_banner=false
+has_icon=false
+if [ -n "${BUILD_BANNER_URL:-}" ] || [ -n "${BUILD_LOGO_URL:-}" ]; then
+    has_banner=true
+fi
+if [ -n "${BUILD_ICON_URL:-}" ] || [ -n "${BUILD_LOGO_URL:-}" ]; then
+    has_icon=true
+fi
+if [ "$has_banner" = true ]; then
     check "flutter logo asset" test -f flutter/assets/logo.png
     check "flutter logo light asset" test -f flutter/assets/logo_light.png
     check "flutter logo dark asset" test -f flutter/assets/logo_dark.png
     check "res logo.png" test -f res/logo.png
+fi
+if [ "$has_icon" = true ]; then
+    check "flutter icon asset" test -f flutter/assets/icon.png
     check "res icon.png" test -f res/icon.png
+    check "res tray-icon.ico" test -f res/tray-icon.ico
 fi
 fi
 

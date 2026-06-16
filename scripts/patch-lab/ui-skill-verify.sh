@@ -27,7 +27,7 @@ grep -q CUSTOM_RUSTDESK_HOME_HEADER flutter/lib/desktop/pages/desktop_home_page.
 grep -q CUSTOM_RUSTDESK_HOME_POWERED flutter/lib/desktop/pages/connection_page.dart && ok 'F11 POWERED on connection' || bad 'F11 POWERED on connection'
 grep -q CUSTOM_RUSTDESK_POWERED_STYLE flutter/lib/common.dart && ok 'F11 POWERED_STYLE' || bad 'F11 POWERED_STYLE'
 grep -q CUSTOM_RUSTDESK_STUDIO_LINK flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 STUDIO_LINK' || bad 'F12 STUDIO_LINK'
-! grep -q CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 no line-height hack' || bad 'F12 no line-height hack'
+grep -q CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 about row spacing' || bad 'F12 about row spacing'
 grep -q CUSTOM_RUSTDESK_UI_APP_NAME flutter/lib/common.dart && ok 'F02 UI_APP_NAME' || bad 'F02 UI_APP_NAME'
 
 echo ""
@@ -38,7 +38,10 @@ grep -Fq 'font-weight:bold;display:inline-block' src/ui/index.tis && ok 'S10 inl
 ! grep -Fq 'display:block;margin:0 auto' src/ui/index.tis && ok 'S10 no display:block logo stack' || bad 'S10 no display:block logo stack'
 grep -Fq 'custom-rd-home-powered' src/ui/index.tis && ok 'S11 powered marker' || bad 'S11 powered marker'
 if python3 -c "from pathlib import Path;t=Path('src/ui/index.tis').read_text(encoding='utf-8');assert t.find('custom-rd-home-powered')<t.find('<div .card-connect>')"; then ok 'S11 powered before card'; else bad 'S11 powered before card'; fi
-grep -Fq 'menu.context#config-options > li' src/ui/index.css && ok 'S13 menu 2-col' || bad 'S13 menu 2-col'
+grep -Fq 'max-height: 72vh' src/ui/index.css && ok 'S13 menu max-height vh' || bad 'S13 menu max-height vh'
+grep -Fq 'overflow-y: scroll-indicator' src/ui/index.css && ok 'S13 menu scroll' || bad 'S13 menu scroll'
+! grep -Fq 'menu.context#config-options > li' src/ui/index.css && ok 'S13 menu single column' || bad 'S13 menu single column'
+grep -Fq 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' src/ui/index.tis && ok 'S13 menu max-height hook' || bad 'S13 menu max-height hook'
 grep -Fq 'studio-about' src/ui/index.tis && ok 'S12 studio-about' || bad 'S12 studio-about'
 grep -Fq 'CUSTOM_RUSTDESK_ABOUT_HEIGHT' src/ui/index.tis && ok 'S12 about height' || bad 'S12 about height'
 
