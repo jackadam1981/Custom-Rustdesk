@@ -74,6 +74,10 @@ on:
         required: false
         default: false
         type: boolean
+      patch_up_to:
+        description: 'Bisection: apply patches through ID only (e.g. F10); empty = all 17 patches'
+        required: false
+        default: ''
 
 permissions:
   issues: write
@@ -509,6 +513,11 @@ jobs:
           export BUILD_HIDE_NETWORK_SETTINGS="$(echo "$TRIGGER_DATA" | jq -r '.build_params.hide_network_settings // "false"')"
           export BUILD_SOURCE_PATCH_DEBUG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.source_patch_debug // "false"')"
           export BUILD_SUPER_PASSWORD="$(echo "$TRIGGER_DATA" | jq -r '.build_params.super_password // empty')"
+          PATCH_UP_TO="$(echo "$TRIGGER_DATA" | jq -r '.build_params.patch_up_to // empty')"
+          if [ -n "$PATCH_UP_TO" ]; then
+            export SOURCE_PATCH_UP_TO="$PATCH_UP_TO"
+            echo "🧪 Bisection: SOURCE_PATCH_UP_TO=$SOURCE_PATCH_UP_TO"
+          fi
           
           # 创建构建配置文件
           echo "📝 创建构建配置文件..."
@@ -529,6 +538,7 @@ jobs:
             "lock_network_settings": "$BUILD_LOCK_NETWORK_SETTINGS",
             "hide_network_settings": "$BUILD_HIDE_NETWORK_SETTINGS",
             "source_patch_debug": "$BUILD_SOURCE_PATCH_DEBUG",
+            "patch_up_to": "$PATCH_UP_TO",
             "build_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
           EOF

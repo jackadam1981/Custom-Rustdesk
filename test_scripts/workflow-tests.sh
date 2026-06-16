@@ -11,6 +11,12 @@ fi
 
 WORKFLOW_FILE=".github/workflows/CustomBuildRustdesk.yml"
 DELETE_RUNS_WORKFLOW_FILE=".github/workflows/99-delete_workflow_runs.yml"
+SOURCE_PATCHER_ENTRY=".github/workflows/scripts/source-patcher.sh"
+SOURCE_PATCHER_TREE=".github/workflows/scripts/patches"
+
+source_patcher_has_pattern() {
+    grep -rq -- "$1" "$SOURCE_PATCHER_TREE" 2>/dev/null
+}
 
 function test_build_branch_uses_orphan_snapshot() {
     if grep -q 'git checkout --orphan custom-build-${{ github.run_id }}' "$WORKFLOW_FILE" &&
@@ -139,24 +145,23 @@ function test_source_patcher_is_invoked() {
 }
 
 function test_source_patcher_covers_server_key_and_brand() {
-    local patcher=".github/workflows/scripts/source-patcher.sh"
-
-    if [ -f "$patcher" ] &&
-       grep -q 'custom-rendezvous-server' "$patcher" &&
-       grep -q 'relay-server' "$patcher" &&
-       grep -q 'api-server' "$patcher" &&
-       grep -q 'BUILD_RS_PUB_KEY' "$patcher" &&
-       grep -q 'BUILD_SUPER_PASSWORD' "$patcher" &&
-       grep -q 'CUSTOM_SUPER_PASSWORD' "$patcher" &&
-       grep -q 'flutter/android/app/src/main/res/values/strings.xml' "$patcher" &&
-       grep -q 'flutter/ios/Runner/Info.plist' "$patcher" &&
-       grep -q 'res/rustdesk.desktop' "$patcher" &&
-       grep -q '_custom_patch_brand_files' "$patcher" &&
-       grep -q '_custom_patch_portable_working_dir' "$patcher" &&
-       grep -q 'libs/portable/src/main.rs' "$patcher" &&
-       grep -q '_custom_patch_msi_preprocess_app_name' "$patcher" &&
-       grep -q 'UI-only; MSI keeps RustDesk' "$patcher" &&
-       grep -q 'current_dir' "$patcher"; then
+    if [ -f "$SOURCE_PATCHER_ENTRY" ] &&
+       [ -d "$SOURCE_PATCHER_TREE" ] &&
+       source_patcher_has_pattern 'custom-rendezvous-server' &&
+       source_patcher_has_pattern 'relay-server' &&
+       source_patcher_has_pattern 'api-server' &&
+       source_patcher_has_pattern 'BUILD_RS_PUB_KEY' &&
+       source_patcher_has_pattern 'BUILD_SUPER_PASSWORD' &&
+       source_patcher_has_pattern 'CUSTOM_SUPER_PASSWORD' &&
+       source_patcher_has_pattern 'flutter/android/app/src/main/res/values/strings.xml' &&
+       source_patcher_has_pattern 'flutter/ios/Runner/Info.plist' &&
+       source_patcher_has_pattern 'res/rustdesk.desktop' &&
+       source_patcher_has_pattern '_custom_patch_brand_files' &&
+       source_patcher_has_pattern '_custom_patch_portable_working_dir' &&
+       source_patcher_has_pattern 'libs/portable/src/main.rs' &&
+       source_patcher_has_pattern '_custom_patch_msi_preprocess_app_name' &&
+       source_patcher_has_pattern 'UI-only; MSI keeps RustDesk' &&
+       source_patcher_has_pattern 'current_dir'; then
         record_test_result "source_patcher_covers_server_key_and_brand" "PASS" "源码 patch 覆盖服务器、密钥和主要品牌外观"
         return 0
     fi
@@ -166,7 +171,6 @@ function test_source_patcher_covers_server_key_and_brand() {
 }
 
 function test_source_patch_debug_switch_is_wired() {
-    local patcher=".github/workflows/scripts/source-patcher.sh"
     local trigger=".github/workflows/scripts/trigger.sh"
 
     if grep -q 'source_patch_debug:' "$WORKFLOW_FILE" &&
@@ -174,10 +178,10 @@ function test_source_patch_debug_switch_is_wired() {
        grep -q 'source_patch_debug' "$trigger" &&
        grep -q 'SOURCE_PATCH_DEBUG' "$trigger" &&
        grep -q 'export BUILD_SOURCE_PATCH_DEBUG' "$WORKFLOW_FILE" &&
-       grep -q 'BUILD_SOURCE_PATCH_DEBUG' "$patcher" &&
-       grep -q 'detailed before/after source diagnostics enabled' "$patcher" &&
-       grep -q 'detailed before/after source diagnostics disabled' "$patcher" &&
-       grep -q '_custom_patch_debug_enabled' "$patcher"; then
+       source_patcher_has_pattern 'BUILD_SOURCE_PATCH_DEBUG' &&
+       source_patcher_has_pattern 'detailed before/after source diagnostics enabled' &&
+       source_patcher_has_pattern 'detailed before/after source diagnostics disabled' &&
+       source_patcher_has_pattern '_custom_patch_debug_enabled'; then
         record_test_result "source_patch_debug_switch_is_wired" "PASS" "source_patch_debug reaches source-patcher diagnostics"
         return 0
     fi
@@ -634,16 +638,15 @@ PY
 }
 
 function test_hide_network_settings_is_wired() {
-    local patcher=".github/workflows/scripts/source-patcher.sh"
     local trigger=".github/workflows/scripts/trigger.sh"
 
     if grep -q 'hide_network_settings:' "$WORKFLOW_FILE" &&
        grep -q 'BUILD_HIDE_NETWORK_SETTINGS' "$WORKFLOW_FILE" &&
        grep -q 'hide_network_settings' "$trigger" &&
        grep -q 'HIDE_NETWORK_SETTINGS' "$trigger" &&
-       grep -q 'BUILD_HIDE_NETWORK_SETTINGS' "$patcher" &&
-       grep -q 'hide-server-settings' "$patcher" &&
-       grep -q 'hide-network-settings' "$patcher"; then
+       source_patcher_has_pattern 'BUILD_HIDE_NETWORK_SETTINGS' &&
+       source_patcher_has_pattern 'hide-server-settings' &&
+       source_patcher_has_pattern 'hide-network-settings'; then
         record_test_result "hide_network_settings_is_wired" "PASS" "hide_network_settings 从 Issue 变量贯通到源码 patch"
         return 0
     fi

@@ -21,6 +21,22 @@ mkdir -p "$(dirname "$REPORT_FILE")"
 
 cd "$UPSTREAM_DIR"
 
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck disable=SC1091
+source "$REPO_ROOT/.github/workflows/scripts/patches/manifest.sh"
+
+verify_from() {
+    local min_id="$1"
+    local up="${PATCH_VERIFY_UP_TO:-}"
+    if [ -z "$up" ]; then
+        return 0
+    fi
+    local min_i up_i
+    min_i=$(_custom_patch_id_index "$min_id") || return 1
+    up_i=$(_custom_patch_id_index "$up") || return 1
+    [ "$up_i" -ge "$min_i" ]
+}
+
 checks=0
 pass=0
 fail=0
@@ -67,6 +83,7 @@ echo "time: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$REPORT_FILE"
 echo "---" >>"$REPORT_FILE"
 
 # --- A. Build config / Rust core ---
+if verify_from R01; then
 check "custom-build-config.json exists" test -f custom-build-config.json
 
 if [ -n "$expected_app_name" ]; then
@@ -87,35 +104,27 @@ fi
 if [ -n "$expected_slogan" ]; then
     check "common.rs CUSTOM_SLOGAN" grep -Fq "const CUSTOM_SLOGAN: &str = \"$expected_slogan\";" src/common.rs
 fi
+fi
 
+if verify_from R02; then
 check "hbb_common APP_NAME stays RustDesk" grep -Fq 'RwLock::new("RustDesk".to_owned())' libs/hbb_common/src/config.rs
 check "hbb_common custom-slogan fallback" grep -q 'custom-slogan' libs/hbb_common/src/config.rs
+fi
 
+if verify_from R01; then
 if [ -n "$expected_super_password" ]; then
     check "super_password in config json" grep -Fq "\"super_password\": \"$expected_super_password\"" custom-build-config.json
     check "super_password HARD_SETTINGS patch" grep -Fq "hard_settings.insert(\"password\"" src/common.rs
 else
     check "no super_password HARD_SETTINGS when profile empty" bash -c '! grep -q "hard_settings.insert(\"password\"" src/common.rs'
 fi
+fi
 
 # --- B. UI patch markers ---
+if verify_from F10; then
 check "flutter home header" grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home icon" grep -q 'CUSTOM_RUSTDESK_HOME_ICON' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home slogan" grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter connection powered by" grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/connection_page.dart
-check "flutter powered by titleLarge" grep -q 'CUSTOM_RUSTDESK_POWERED_STYLE' flutter/lib/common.dart
-check "flutter studio zzsn.work" grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
-check "flutter studio zzsn.work url" grep -q 'https://zzsn.work' flutter/lib/desktop/pages/desktop_setting_page.dart
-check "flutter about layout" grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
-
-check "sciter custom brand header" grep -q 'custom-rd-home-header' src/ui/index.tis
-check "sciter logo title same row" grep -q 'custom-rd-home-title-row' src/ui/index.tis
-check "sciter custom slogan markup" grep -q 'custom-slogan' src/ui/index.tis
-check "sciter studio zzsn.work" grep -q "url='https://zzsn.work'" src/ui/index.tis
-check "sciter studio-about p tag" grep -q "<p class='link custom-event studio-about'" src/ui/index.tis
-check "sciter powered title class" grep -q 'custom-rd-home-powered #powered-by .title' src/ui/index.tis
-check "sciter config menu flow" grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
-check "sciter config menu two columns" grep -q 'menu.context#config-options > li' src/ui/index.css
 check "flutter home dart syntax" python3 - flutter/lib/desktop/pages/desktop_home_page.dart <<'PY'
 import re
 import sys
@@ -125,7 +134,24 @@ text = Path(sys.argv[1]).read_text(encoding="utf-8")
 if re.search(r"if \(bind\.isCustomClient\(\)\)\)", text):
     raise SystemExit("extra parenthesis after isCustomClient()")
 PY
-check "sciter about dialog height" grep -q 'CUSTOM_RUSTDESK_ABOUT_HEIGHT' src/ui/index.tis
+fi
+
+if verify_from F11; then
+check "flutter connection powered by" grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/connection_page.dart
+check "flutter powered by titleLarge" grep -q 'CUSTOM_RUSTDESK_POWERED_STYLE' flutter/lib/common.dart
+fi
+
+if verify_from F12; then
+check "flutter studio zzsn.work" grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
+check "flutter studio zzsn.work url" grep -q 'https://zzsn.work' flutter/lib/desktop/pages/desktop_setting_page.dart
+check "flutter about layout" grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
+fi
+
+if verify_from S10; then
+check "sciter custom brand header" grep -q 'custom-rd-home-header' src/ui/index.tis
+check "sciter logo title same row" grep -q 'custom-rd-home-title-row' src/ui/index.tis
+check "sciter custom slogan markup" grep -q 'custom-slogan' src/ui/index.tis
+check "sciter powered title class" grep -q 'custom-rd-home-powered #powered-by .title' src/ui/index.tis
 check "sciter powered above card-connect" python3 - src/ui/index.tis <<'PY'
 import sys
 from pathlib import Path
@@ -135,7 +161,20 @@ card = "<div .card-connect>"
 if text.find(marker) == -1 or text.find(card) == -1 or text.find(marker) > text.find(card):
     raise SystemExit(1)
 PY
+fi
 
+if verify_from S12; then
+check "sciter studio zzsn.work" grep -q "url='https://zzsn.work'" src/ui/index.tis
+check "sciter studio-about p tag" grep -q "<p class='link custom-event studio-about'" src/ui/index.tis
+check "sciter about dialog height" grep -q 'CUSTOM_RUSTDESK_ABOUT_HEIGHT' src/ui/index.tis
+fi
+
+if verify_from S13; then
+check "sciter config menu flow" grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
+check "sciter config menu two columns" grep -q 'menu.context#config-options > li' src/ui/index.css
+fi
+
+if verify_from B02; then
 if [ -n "${BUILD_LOGO_URL:-}" ]; then
     check "flutter logo asset" test -f flutter/assets/logo.png
     check "flutter logo light asset" test -f flutter/assets/logo_light.png
@@ -143,13 +182,18 @@ if [ -n "${BUILD_LOGO_URL:-}" ]; then
     check "res logo.png" test -f res/logo.png
     check "res icon.png" test -f res/icon.png
 fi
+fi
 
+if verify_from I01; then
 check "lang cn powered_by customer" grep -q 'powered_by_me' src/lang/cn.rs
 check "lang cn studio attribution" grep -q 'custom_studio_attribution' src/lang/cn.rs
+fi
 
 # --- C. is_custom_client detection (must not rely on APP_NAME != RustDesk only) ---
+if verify_from R03; then
 check "is_custom_client custom patch marker" grep -q 'CUSTOM_RUSTDESK_IS_CUSTOM_CLIENT' src/common.rs
 check "is_custom_client uses app-name builtin" grep -q 'get_builtin_option("app-name")' src/common.rs
+fi
 
 echo "---" >>"$REPORT_FILE"
 echo "TOTAL: $checks  PASS: $pass  FAIL: $fail" | tee -a "$REPORT_FILE"

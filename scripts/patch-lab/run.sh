@@ -15,22 +15,30 @@ profile="baixin"
 env_file=""
 keep_on_fail=false
 skip_clean=false
+patch_only=""
+patch_up_to=""
+verify_up_to=""
 
 usage() {
     cat <<'EOF'
 Usage: scripts/patch-lab/run.sh [OPTIONS]
 
 Options:
-  --profile NAME     Load scripts/patch-lab/profiles/NAME.env (default: baixin)
-  --env-file PATH    Load build params from custom env file
-  --keep-on-fail     Do not delete upstream tree when patch/verify fails
-  --skip-clean       Skip clean.sh (not recommended)
-  -h, --help         Show help
+  --profile NAME       Load scripts/patch-lab/profiles/NAME.env (default: baixin)
+  --env-file PATH      Load build params from custom env file
+  --patch-only ID      Apply single patch module (e.g. F10)
+  --patch-up-to ID     Apply patches through ID inclusive (e.g. F10)
+  --verify-up-to ID    Run only verify checks for patches through ID
+  --keep-on-fail       Do not delete upstream tree when patch/verify fails
+  --skip-clean         Skip clean.sh (not recommended)
+  -h, --help           Show help
+
+Patch IDs (order): R01 R02 R03 B01 B02 I01 F02 F10 F11 F12 S10 S12 S13 P01 P02 P03 P04
 
 Environment:
-  PATCH_LAB_ROOT     Workspace root (default: ~/patch-lab/custom-rustdesk)
-  RUSTDESK_REPO      Upstream repo (default: rustdesk/rustdesk)
-  RUSTDESK_BRANCH    Upstream branch (default: master)
+  PATCH_LAB_ROOT       Workspace root (default: ~/patch-lab/custom-rustdesk)
+  RUSTDESK_REPO        Upstream repo (default: rustdesk/rustdesk)
+  RUSTDESK_BRANCH      Upstream branch (default: master)
 EOF
 }
 
@@ -51,6 +59,18 @@ while [ $# -gt 0 ]; do
         --skip-clean)
             skip_clean=true
             shift
+            ;;
+        --patch-only)
+            patch_only="$2"
+            shift 2
+            ;;
+        --patch-up-to)
+            patch_up_to="$2"
+            shift 2
+            ;;
+        --verify-up-to)
+            verify_up_to="$2"
+            shift 2
             ;;
         -h|--help)
             usage
@@ -76,6 +96,14 @@ fi
 echo "patch-lab/run: CUSTOM_RUSTDESK repo=$ROOT"
 echo "patch-lab/run: PATCH_LAB_ROOT=$PATCH_LAB_ROOT"
 echo "patch-lab/run: profile=$profile_file"
+if [ -n "$patch_only" ]; then
+    echo "patch-lab/run: SOURCE_PATCH_ONLY=$patch_only"
+elif [ -n "$patch_up_to" ]; then
+    echo "patch-lab/run: SOURCE_PATCH_UP_TO=$patch_up_to"
+fi
+if [ -n "$verify_up_to" ]; then
+    echo "patch-lab/run: PATCH_VERIFY_UP_TO=$verify_up_to"
+fi
 
 if [ "$skip_clean" != true ]; then
     bash "$PATCH_LAB_DIR/clean.sh"
@@ -100,6 +128,9 @@ cd "$UPSTREAM_DIR"
 # shellcheck disable=SC1091
 source "$ROOT/.github/workflows/scripts/source-patcher.sh"
 
+export SOURCE_PATCH_ONLY="${patch_only:-}"
+export SOURCE_PATCH_UP_TO="${patch_up_to:-}"
+
 if ! apply_custom_source_patches; then
     echo "patch-lab/run: apply_custom_source_patches FAILED" >&2
     if [ "$keep_on_fail" = true ]; then
@@ -111,6 +142,7 @@ if ! apply_custom_source_patches; then
 fi
 
 report="$OUT_DIR/verify-report.txt"
+export PATCH_VERIFY_UP_TO="${verify_up_to:-}"
 if ! bash "$PATCH_LAB_DIR/verify.sh" "$UPSTREAM_DIR" "$report" "$profile_file"; then
     echo "patch-lab/run: verify FAILED (see $report)" >&2
     cp -f custom-build-config.json "$OUT_DIR/custom-build-config.json" 2>/dev/null || true

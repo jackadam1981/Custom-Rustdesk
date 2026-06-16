@@ -32,6 +32,7 @@ _extract_workflow_dispatch_params() {
     echo "LOCK_NETWORK_SETTINGS=\"$(echo "$event_data" | jq -r '.inputs.lock_network_settings // "false"')\""
     echo "HIDE_NETWORK_SETTINGS=\"$(echo "$event_data" | jq -r '.inputs.hide_network_settings // "false"')\""
     echo "SOURCE_PATCH_DEBUG=\"$(echo "$event_data" | jq -r '.inputs.source_patch_debug // .inputs.enable_debug // "false"')\""
+    echo "PATCH_UP_TO=\"$(echo "$event_data" | jq -r '.inputs.patch_up_to // empty')\""
 }
 
 # 从 issue 内容中提取参数
@@ -119,6 +120,8 @@ _extract_issue_params() {
         source_patch_debug=$(_extract_issue_value "$issue_body" "debug_source_patcher")
     fi
     debug "log" "Extracted source_patch_debug: '$source_patch_debug'"
+    local patch_up_to=$(_extract_issue_value "$issue_body" "patch_up_to")
+    debug "log" "Extracted patch_up_to: '$patch_up_to'"
     
     echo "BUILD_ID=\"$build_id\""
     echo "TAG=\"$tag\""
@@ -136,6 +139,7 @@ _extract_issue_params() {
     echo "LOCK_NETWORK_SETTINGS=\"$lock_network_settings\""
     echo "HIDE_NETWORK_SETTINGS=\"$hide_network_settings\""
     echo "SOURCE_PATCH_DEBUG=\"$source_patch_debug\""
+    echo "PATCH_UP_TO=\"$patch_up_to\""
 }
 
 # 应用默认值
@@ -244,6 +248,7 @@ _generate_final_data() {
         local lock_network_settings=$(echo "$event_data" | jq -r '.inputs.lock_network_settings // "false"')
         local hide_network_settings=$(echo "$event_data" | jq -r '.inputs.hide_network_settings // "false"')
         local source_patch_debug=$(echo "$event_data" | jq -r '.inputs.source_patch_debug // .inputs.enable_debug // "false"')
+        local patch_up_to=$(echo "$event_data" | jq -r '.inputs.patch_up_to // empty')
         local trigger_type="workflow_dispatch"
         local issue_number="null"
     else
@@ -262,6 +267,7 @@ _generate_final_data() {
         local lock_network_settings="${LOCK_NETWORK_SETTINGS:-false}"
         local hide_network_settings="${HIDE_NETWORK_SETTINGS:-false}"
         local source_patch_debug="${SOURCE_PATCH_DEBUG:-false}"
+        local patch_up_to="${PATCH_UP_TO:-}"
         local trigger_type="issue"
         local issue_number=$(echo "$event_data" | jq -r '.issue.number // empty')
     fi
@@ -286,7 +292,8 @@ _generate_final_data() {
         --arg lock_network_settings "${lock_network_settings:-false}" \
         --arg hide_network_settings "${hide_network_settings:-false}" \
         --arg source_patch_debug "${source_patch_debug:-false}" \
-        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, app_name: $app_name, customer: $customer, customer_link: $customer_link, logo_url: $logo_url, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, relay_server: $relay_server, rs_pub_key: $rs_pub_key, api_server: $api_server, lock_network_settings: $lock_network_settings, hide_network_settings: $hide_network_settings, source_patch_debug: $source_patch_debug}}')
+        --arg patch_up_to "${patch_up_to:-}" \
+        '{build_id: $build_id, trigger_type: $trigger_type, issue_number: $issue_number, build_params: {tag: $tag, original_tag: $original_tag, email: $email, app_name: $app_name, customer: $customer, customer_link: $customer_link, logo_url: $logo_url, super_password: $super_password, slogan: $slogan, rendezvous_server: $rendezvous_server, relay_server: $relay_server, rs_pub_key: $rs_pub_key, api_server: $api_server, lock_network_settings: $lock_network_settings, hide_network_settings: $hide_network_settings, source_patch_debug: $source_patch_debug, patch_up_to: $patch_up_to}}')
     
     debug "var" "Generated JSON data" "$data"
     echo "$data"
