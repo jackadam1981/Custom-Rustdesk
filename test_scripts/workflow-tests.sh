@@ -190,6 +190,50 @@ function test_source_patch_debug_switch_is_wired() {
     return 1
 }
 
+function test_verified_patch_rollout_is_wired() {
+    if [ -f ".github/verified-patches.env" ] &&
+       grep -q 'CUSTOM_VERIFIED_PATCH_UP_TO=""' ".github/verified-patches.env" &&
+       grep -q 'CUSTOM_UPSTREAM_BUILD_ENABLED' "$WORKFLOW_FILE" &&
+       grep -q 'Load verified patch rollout' "$WORKFLOW_FILE" &&
+       grep -q 'verified-patches.env' "$WORKFLOW_FILE" &&
+       source_patcher_has_pattern 'vanilla upstream'; then
+        record_test_result "verified_patch_rollout_is_wired" "PASS" "零针默认 + rollout 文件已接入 workflow"
+        return 0
+    fi
+
+    record_test_result "verified_patch_rollout_is_wired" "FAIL" "应存在 .github/verified-patches.env 且 workflow 加载 rollout"
+    return 1
+}
+
+function test_source_patcher_vanilla_skips_patches() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    cat > "$tmp_dir/src/common.rs" <<'EOF'
+pub fn load_custom_client() {}
+EOF
+
+    if (
+        set -e
+        export BUILD_TAG=vanilla BUILD_CUSTOMER=c BUILD_RENDEZVOUS_SERVER=1.2.3.4
+        export CUSTOM_VERIFIED_PATCH_UP_TO=""
+        source "$patcher"
+        cd "$tmp_dir"
+        apply_custom_source_patches
+        grep -q '"source_patches_enabled": false' custom-build-config.json
+        ! grep -q 'CUSTOM_RUSTDESK_PATCH_START' src/common.rs
+    ); then
+        rm -rf "$tmp_dir"
+        record_test_result "source_patcher_vanilla_skips_patches" "PASS" "空 rollout 时不改上游源码"
+        return 0
+    fi
+
+    rm -rf "$tmp_dir"
+    record_test_result "source_patcher_vanilla_skips_patches" "FAIL" "空 rollout 应跳过所有插针"
+    return 1
+}
+
 function test_source_patcher_applies_to_fixture_tree() {
     local patcher=".github/workflows/scripts/source-patcher.sh"
     local tmp_dir
@@ -501,6 +545,7 @@ EOF
         export BUILD_RS_PUB_KEY="fixture-public-key"
         export BUILD_API_SERVER="http://192.168.2.22:21114"
         export BUILD_SOURCE_PATCH_DEBUG="true"
+        export CUSTOM_PATCH_APPLY_ALL=true
         source "$patcher"
         cd "$tmp_dir"
         apply_custom_source_patches
@@ -708,6 +753,7 @@ EOF
         export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21117"
         export BUILD_RS_PUB_KEY="fixture-public-key"
         export BUILD_HIDE_NETWORK_SETTINGS="true"
+        export CUSTOM_PATCH_APPLY_ALL=true
         source "$patcher"
         cd "$tmp_dir"
         apply_custom_source_patches
@@ -761,6 +807,7 @@ EOF
         export BUILD_CUSTOMER="FixtureDesk"
         export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21117"
         export BUILD_RS_PUB_KEY="fixture-public-key"
+        export CUSTOM_PATCH_APPLY_ALL=true
         source "$patcher"
         cd "$tmp_dir"
         apply_custom_source_patches
@@ -883,6 +930,7 @@ EOF
         export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21116"
         export BUILD_RS_PUB_KEY="fixture-public-key"
         export BUILD_SUPER_PASSWORD="fixture-super-secret"
+        export CUSTOM_PATCH_APPLY_ALL=true
         source "$patcher"
         cd "$tmp_dir"
         apply_custom_source_patches
@@ -930,6 +978,7 @@ EOF
         export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21116"
         export BUILD_RS_PUB_KEY="fixture-public-key"
         unset BUILD_SUPER_PASSWORD
+        export CUSTOM_PATCH_APPLY_ALL=true
         source "$patcher"
         cd "$tmp_dir"
         apply_custom_source_patches
@@ -1141,6 +1190,8 @@ function run_workflow_tests() {
     test_queue_issue_lock_uses_ref_guard || failed=1
     test_manual_queue_limit_is_five || failed=1
     test_source_patcher_is_invoked || failed=1
+    test_verified_patch_rollout_is_wired || failed=1
+    test_source_patcher_vanilla_skips_patches || failed=1
     test_source_patcher_covers_server_key_and_brand || failed=1
     test_source_patch_debug_switch_is_wired || failed=1
     test_hide_network_settings_is_wired || failed=1

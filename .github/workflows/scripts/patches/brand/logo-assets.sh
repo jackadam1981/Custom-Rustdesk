@@ -25,16 +25,6 @@ _custom_patch_logo_assets() {
     local banner_source="${CUSTOM_BANNER_URL:-}"
     local icon_source="${CUSTOM_ICON_URL:-}"
 
-    if [ -n "${CUSTOM_LOGO_URL:-}" ]; then
-        echo "source-patcher: logo_url is deprecated; use banner_url (300x60) and icon_url (square)"
-        if [ -z "$banner_source" ]; then
-            banner_source="${CUSTOM_LOGO_URL}"
-        fi
-        if [ -z "$icon_source" ]; then
-            icon_source="${CUSTOM_LOGO_URL}"
-        fi
-    fi
-
     if [ -z "$banner_source" ] && [ -z "$icon_source" ]; then
         echo "source-patcher: no banner_url/icon_url configured, skipping logo assets"
         return 0

@@ -28,12 +28,14 @@ _custom_should_run_patch() {
     local only="${SOURCE_PATCH_ONLY:-}"
     local up_to="${SOURCE_PATCH_UP_TO:-}"
 
-    if [ -z "$only" ] && [ -z "$up_to" ]; then
-        return 0
-    fi
-
     if [ -n "$only" ]; then
         [ "$id" = "$only" ]
+        return
+    fi
+
+    if [ -z "$up_to" ]; then
+        # patch-lab 全量回归显式传 CUSTOM_PATCH_APPLY_ALL=true；CI 默认空 = 零针
+        _custom_bool_enabled "${CUSTOM_PATCH_APPLY_ALL:-false}"
         return
     fi
 

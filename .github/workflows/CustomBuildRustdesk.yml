@@ -79,7 +79,7 @@ on:
         default: false
         type: boolean
       patch_up_to:
-        description: 'Bisection: apply patches through ID only (e.g. F10); empty = all 17 patches'
+        description: 'Debug: override verified rollout (see .github/verified-patches.env)'
         required: false
         default: ''
 
@@ -108,8 +108,9 @@ env:
   DEFAULT_RELAY_SERVER: ${{ secrets.DEFAULT_RELAY_SERVER }}
   DEFAULT_RS_PUB_KEY: ${{ secrets.DEFAULT_RS_PUB_KEY }}
   DEFAULT_API_SERVER: ${{ secrets.DEFAULT_API_SERVER }}
-
-jobs:
+  # 上游构建：true=队列通过后 clone/push/等待上游编译；false=仅记录 build-spec
+  CUSTOM_UPSTREAM_BUILD_ENABLED: 'true'
+  OUTLINE_PATCH_SPEC_URL: 'https://wiki.jackadam.top/doc/custom-rustdesk-cWWhzjEHzb'
   # 00-触发处理 - 提取和验证参数
   trigger:
     runs-on: ubuntu-latest
@@ -392,12 +393,25 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_success: ${{ steps.extract-vars.outputs.build_success }}
-      download_url: ${{ steps.record-artifact.outputs.download_url || steps.extract-vars.outputs.download_url }}
+      download_url: ${{ steps.record-spec.outputs.download_url || steps.record-artifact.outputs.download_url || steps.extract-vars.outputs.download_url }}
       error_message: ${{ steps.extract-vars.outputs.error_message }}
       source_branch: ${{ steps.commit-repo.outputs.branch_name }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Load verified patch rollout
+        run: |
+          set -a
+          # shellcheck disable=SC1091
+          source .github/verified-patches.env
+          set +a
+          echo "CUSTOM_VERIFIED_PATCH_UP_TO=${CUSTOM_VERIFIED_PATCH_UP_TO:-}" >> "$GITHUB_ENV"
+          if [ -z "${CUSTOM_VERIFIED_PATCH_UP_TO:-}" ]; then
+            echo "📦 Rollout gate: vanilla upstream (zero patches)"
+          else
+            echo "📌 Rollout gate: patches through ${CUSTOM_VERIFIED_PATCH_UP_TO}"
+          fi
 
       - name: Download trigger data
         uses: actions/download-artifact@v4
@@ -476,10 +490,50 @@ jobs:
 
           echo "✅ 构建过程执行完成！"
 
+      # 规格记录模式（仅当关闭上游构建时）
+      - name: Record build specification
+        id: record-spec
+        if: steps.extract-vars.outputs.extract_success == 'true' && env.CUSTOM_UPSTREAM_BUILD_ENABLED != 'true'
+        run: |
+          echo "📋 Record build specification (upstream build disabled)..."
+          source .github/workflows/scripts/source-patcher.sh
+          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
+          mkdir -p build-spec
+          export CUSTOM_VERIFIED_PATCH_UP_TO="${CUSTOM_VERIFIED_PATCH_UP_TO:-}"
+          export BUILD_TAG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')"
+          export BUILD_APP_NAME="$(echo "$TRIGGER_DATA" | jq -r '.build_params.app_name // empty')"
+          export BUILD_CUSTOMER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')"
+          export BUILD_CUSTOMER_LINK="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer_link // empty')"
+          export BUILD_BANNER_URL="$(echo "$TRIGGER_DATA" | jq -r '.build_params.banner_url // empty')"
+          export BUILD_ICON_URL="$(echo "$TRIGGER_DATA" | jq -r '.build_params.icon_url // empty')"
+          export BUILD_SLOGAN="$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')"
+          export BUILD_RENDEZVOUS_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rendezvous_server // empty')"
+          export BUILD_RELAY_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.relay_server // empty')"
+          export BUILD_RS_PUB_KEY="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rs_pub_key // empty')"
+          export BUILD_API_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.api_server // empty')"
+          export BUILD_LOCK_NETWORK_SETTINGS="$(echo "$TRIGGER_DATA" | jq -r '.build_params.lock_network_settings // "false"')"
+          export BUILD_HIDE_NETWORK_SETTINGS="$(echo "$TRIGGER_DATA" | jq -r '.build_params.hide_network_settings // "false"')"
+          export BUILD_SOURCE_PATCH_DEBUG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.source_patch_debug // "false"')"
+          export BUILD_SUPER_PASSWORD="$(echo "$TRIGGER_DATA" | jq -r '.build_params.super_password // empty')"
+          cd build-spec
+          apply_custom_source_patches
+          cp "$RUNNER_TEMP/trigger-data/trigger-data.json" trigger-data-snapshot.json
+          echo "record_success=true" >> $GITHUB_OUTPUT
+          echo "download_url=${{ env.OUTLINE_PATCH_SPEC_URL }}" >> $GITHUB_OUTPUT
+
+      - name: Upload build specification
+        id: upload-build-spec
+        if: steps.record-spec.outputs.record_success == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-spec-${{ github.run_id }}
+          path: build-spec
+          retention-days: 30
+
       # 步骤2: 克隆源码
       - name: Clone source code
         id: clone-source
-        if: steps.extract-vars.outputs.extract_success == 'true'
+        if: steps.extract-vars.outputs.extract_success == 'true' && env.CUSTOM_UPSTREAM_BUILD_ENABLED == 'true'
         run: |
           echo "🔧 Step 2: Cloning source code..."
           
@@ -504,8 +558,9 @@ jobs:
         id: modify-source
         if: steps.clone-source.outputs.clone_success == 'true'
         run: |
-          echo "🔧 Step 3: Modifying source code..."
+          echo "🔧 Step 3: Preparing upstream source..."
           source .github/workflows/scripts/source-patcher.sh
+          export CUSTOM_VERIFIED_PATCH_UP_TO="${CUSTOM_VERIFIED_PATCH_UP_TO:-}"
 
           TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           cd rustdesk-source
@@ -528,7 +583,12 @@ jobs:
           PATCH_UP_TO="$(echo "$TRIGGER_DATA" | jq -r '.build_params.patch_up_to // empty')"
           if [ -n "$PATCH_UP_TO" ]; then
             export SOURCE_PATCH_UP_TO="$PATCH_UP_TO"
-            echo "🧪 Bisection: SOURCE_PATCH_UP_TO=$SOURCE_PATCH_UP_TO"
+            echo "🧪 Debug override: SOURCE_PATCH_UP_TO=$SOURCE_PATCH_UP_TO"
+          elif [ -n "${CUSTOM_VERIFIED_PATCH_UP_TO:-}" ]; then
+            export SOURCE_PATCH_UP_TO="$CUSTOM_VERIFIED_PATCH_UP_TO"
+            echo "📌 Verified rollout: SOURCE_PATCH_UP_TO=$SOURCE_PATCH_UP_TO"
+          else
+            echo "📦 Vanilla upstream: no source patches"
           fi
           
           # 创建构建配置文件
@@ -557,7 +617,7 @@ jobs:
           }
           EOF
 
-          echo "🧩 应用自定义源码补丁..."
+          echo "🧩 Apply source patches (if rollout gate allows)..."
           apply_custom_source_patches
 
           mkdir -p .github/workflows
@@ -752,7 +812,7 @@ jobs:
   # 05-等待定制源码分支 push 自动触发的 RustDesk 原版 workflow
   upstream-build:
     needs: [build]
-    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true'
+    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true' && env.CUSTOM_UPSTREAM_BUILD_ENABLED == 'true'
     runs-on: ubuntu-latest
     outputs:
       upstream_run_id: ${{ steps.wait-upstream.outputs.upstream_run_id }}
@@ -900,7 +960,17 @@ jobs:
           EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"
 
           # 确定构建状态
-          if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ] && [ "${{ needs.upstream-build.result }}" = "success" ]; then
+          if [ "${{ env.CUSTOM_UPSTREAM_BUILD_ENABLED }}" != "true" ]; then
+            if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ]; then
+              build_status="success"
+              download_url="${{ needs.build.outputs.download_url || env.OUTLINE_PATCH_SPEC_URL }}"
+              error_message="上游构建已关闭；构建参数已记录（build-spec artifact）。"
+            else
+              build_status="failure"
+              download_url=""
+              error_message="${{ needs.build.outputs.error_message || '参数校验或记录失败' }}"
+            fi
+          elif [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ] && [ "${{ needs.upstream-build.result }}" = "success" ]; then
             build_status="success"
             download_url="${{ needs.upstream-build.outputs.upstream_run_url || needs.build.outputs.download_url || '' }}"
             error_message="${{ needs.build.outputs.error_message || '' }}"
@@ -918,6 +988,7 @@ jobs:
 
           upstream_platform_conclusion="${{ needs.upstream-build.outputs.upstream_platform_conclusion || '' }}"
           platform_results="${{ needs.upstream-build.outputs.platform_results || '' }}"
+          if [ "${{ env.CUSTOM_UPSTREAM_BUILD_ENABLED }}" = "true" ]; then
           if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ] && [ "${{ needs.upstream-build.result }}" = "success" ] && { [ "$upstream_platform_conclusion" = "success" ] || [ "$upstream_platform_conclusion" = "partial_success" ]; }; then
             build_status="success"
             download_url="${{ needs.upstream-build.outputs.upstream_run_url || needs.build.outputs.download_url || '' }}"
@@ -930,6 +1001,7 @@ jobs:
             build_status="failure"
             download_url=""
             error_message="Target platform builds failed: $platform_results"
+          fi
           fi
           
           # 设置构建参数

@@ -1,4 +1,15 @@
-# Orchestrator: resolve BUILD_* and apply patches in dependency order.
+# Orchestrator: resolve BUILD_* and optionally apply patches in dependency order.
+# CI 默认 CUSTOM_VERIFIED_PATCH_UP_TO 为空 → 原版上游；逐项验证后 bump .github/verified-patches.env
+
+_custom_patch_schedule_active() {
+    if [ -n "${SOURCE_PATCH_ONLY:-}" ]; then
+        return 0
+    fi
+    if [ -n "${SOURCE_PATCH_UP_TO:-}" ]; then
+        return 0
+    fi
+    _custom_bool_enabled "${CUSTOM_PATCH_APPLY_ALL:-false}"
+}
 
 _custom_resolve_build_inputs() {
     case "${BUILD_LOCK_NETWORK_SETTINGS:-false}" in
@@ -17,16 +28,6 @@ _custom_resolve_build_inputs() {
     CUSTOM_CUSTOMER_LINK="${BUILD_CUSTOMER_LINK:-https://zzsn.work}"
     CUSTOM_BANNER_URL="${BUILD_BANNER_URL:-}"
     CUSTOM_ICON_URL="${BUILD_ICON_URL:-}"
-    CUSTOM_LOGO_URL="${BUILD_LOGO_URL:-}"
-    if [ -n "$CUSTOM_LOGO_URL" ]; then
-        echo "source-patcher: logo_url is deprecated; prefer banner_url + icon_url"
-        if [ -z "$CUSTOM_BANNER_URL" ]; then
-            CUSTOM_BANNER_URL="$CUSTOM_LOGO_URL"
-        fi
-        if [ -z "$CUSTOM_ICON_URL" ]; then
-            CUSTOM_ICON_URL="$CUSTOM_LOGO_URL"
-        fi
-    fi
     CUSTOM_SLOGAN="${BUILD_SLOGAN:-}"
     CUSTOM_RENDEZVOUS_INPUT="${BUILD_RENDEZVOUS_SERVER:-}"
     CUSTOM_RENDEZVOUS_SERVER=$(_custom_address_host "$CUSTOM_RENDEZVOUS_INPUT")
@@ -45,9 +46,6 @@ _custom_resolve_build_inputs() {
     _custom_trace_value "CUSTOM_APP_NAME(resolved)" "$CUSTOM_APP_NAME"
     _custom_trace_value "BUILD_BANNER_URL" "${BUILD_BANNER_URL:+[provided]}"
     _custom_trace_value "BUILD_ICON_URL" "${BUILD_ICON_URL:+[provided]}"
-    if [ -n "${BUILD_LOGO_URL:-}" ]; then
-        _custom_trace_value "BUILD_LOGO_URL(deprecated)" "[provided]"
-    fi
     _custom_trace_value "BUILD_RENDEZVOUS_SERVER(raw)" "${BUILD_RENDEZVOUS_SERVER:-}"
     _custom_trace_value "CUSTOM_RENDEZVOUS_SERVER(normalized)" "$CUSTOM_RENDEZVOUS_SERVER"
     _custom_trace_value "BUILD_RELAY_SERVER(raw)" "${BUILD_RELAY_SERVER:-}"
@@ -66,6 +64,8 @@ _custom_resolve_build_inputs() {
     _custom_trace_value "CUSTOM_HIDE_NETWORK_SETTINGS(normalized)" "$CUSTOM_HIDE_NETWORK_SETTINGS"
     _custom_trace_value "BUILD_SOURCE_PATCH_DEBUG(raw)" "${BUILD_SOURCE_PATCH_DEBUG:-}"
     _custom_trace_value "CUSTOM_SOURCE_PATCH_DEBUG(normalized)" "$CUSTOM_SOURCE_PATCH_DEBUG"
+    _custom_trace_value "CUSTOM_VERIFIED_PATCH_UP_TO" "${CUSTOM_VERIFIED_PATCH_UP_TO:-<empty>}"
+    _custom_trace_value "SOURCE_PATCH_UP_TO(effective)" "${SOURCE_PATCH_UP_TO:-<none>}"
     if _custom_patch_debug_enabled; then
         echo "source-patcher-trace: detailed before/after source diagnostics enabled"
     else
@@ -74,13 +74,18 @@ _custom_resolve_build_inputs() {
 }
 
 _custom_write_build_config_json() {
+    local patches_enabled="false"
+    local verified_up_to="${CUSTOM_VERIFIED_PATCH_UP_TO:-}"
+    if _custom_patch_schedule_active; then
+        patches_enabled="true"
+    fi
+
     jq -n \
         --arg app_name "$CUSTOM_APP_NAME" \
         --arg customer "$BUILD_CUSTOMER" \
         --arg customer_link "$CUSTOM_CUSTOMER_LINK" \
         --arg banner_url "$CUSTOM_BANNER_URL" \
         --arg icon_url "$CUSTOM_ICON_URL" \
-        --arg logo_url "$CUSTOM_LOGO_URL" \
         --arg slogan "$CUSTOM_SLOGAN" \
         --arg rendezvous_server "$CUSTOM_RENDEZVOUS_INPUT" \
         --arg custom_rendezvous_server "$CUSTOM_RENDEZVOUS_SERVER" \
@@ -92,13 +97,16 @@ _custom_write_build_config_json() {
         --arg source_patch_debug "$CUSTOM_SOURCE_PATCH_DEBUG" \
         --arg super_password "$CUSTOM_SUPER_PASSWORD" \
         --arg patch_up_to "${SOURCE_PATCH_UP_TO:-}" \
+        --arg verified_patch_up_to "$verified_up_to" \
+        --arg source_patches_enabled "$patches_enabled" \
         '{
             app_name: $app_name,
             customer: $customer,
             customer_link: $customer_link,
             banner_url: (if ($banner_url | length) > 0 then $banner_url else null end),
             icon_url: (if ($icon_url | length) > 0 then $icon_url else null end),
-            logo_url: (if ($logo_url | length) > 0 then $logo_url else null end),
+            source_patches_enabled: ($source_patches_enabled == "true"),
+            verified_patch_up_to: (if ($verified_patch_up_to | length) > 0 then $verified_patch_up_to else null end),
             slogan: $slogan,
             rendezvous_server: $rendezvous_server,
             custom_rendezvous_server: $custom_rendezvous_server,
@@ -115,12 +123,26 @@ _custom_write_build_config_json() {
 
 apply_custom_source_patches() {
     _custom_resolve_build_inputs || return 1
+
+    if [ -z "${SOURCE_PATCH_UP_TO:-}" ] && [ -n "${CUSTOM_VERIFIED_PATCH_UP_TO:-}" ]; then
+        export SOURCE_PATCH_UP_TO="$CUSTOM_VERIFIED_PATCH_UP_TO"
+    fi
+
+    _custom_write_build_config_json
+
+    if ! _custom_patch_schedule_active; then
+        echo "source-patcher: vanilla upstream — no patches scheduled"
+        echo "source-patcher: bump CUSTOM_VERIFIED_PATCH_UP_TO in .github/verified-patches.env after each gate passes"
+        return 0
+    fi
+
     if [ -n "${SOURCE_PATCH_UP_TO:-}" ]; then
-        echo "source-patcher: bisection mode SOURCE_PATCH_UP_TO=${SOURCE_PATCH_UP_TO}"
+        echo "source-patcher: rollout mode SOURCE_PATCH_UP_TO=${SOURCE_PATCH_UP_TO}"
     elif [ -n "${SOURCE_PATCH_ONLY:-}" ]; then
         echo "source-patcher: single-patch mode SOURCE_PATCH_ONLY=${SOURCE_PATCH_ONLY}"
+    elif _custom_bool_enabled "${CUSTOM_PATCH_APPLY_ALL:-false}"; then
+        echo "source-patcher: patch-lab full apply (CUSTOM_PATCH_APPLY_ALL=true)"
     fi
-    _custom_write_build_config_json
 
     _custom_run_patch R01 _custom_patch_common_rs
     _custom_run_patch R02 _custom_patch_hbb_common_config_rs

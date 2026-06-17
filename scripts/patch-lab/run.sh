@@ -130,6 +130,9 @@ source "$ROOT/.github/workflows/scripts/source-patcher.sh"
 
 export SOURCE_PATCH_ONLY="${patch_only:-}"
 export SOURCE_PATCH_UP_TO="${patch_up_to:-}"
+if [ -z "$patch_only" ] && [ -z "$patch_up_to" ]; then
+    export CUSTOM_PATCH_APPLY_ALL=true
+fi
 
 if ! apply_custom_source_patches; then
     echo "patch-lab/run: apply_custom_source_patches FAILED" >&2
