@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fresh upstream clone -> apply source-patcher -> verify patched tree (CI-aligned).
+# Fresh upstream clone -> optional source-patcher -> verify tree (aligns with CI rollout).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -18,6 +18,7 @@ skip_clean=false
 patch_only=""
 patch_up_to=""
 verify_up_to=""
+apply_all=false
 
 usage() {
     cat <<'EOF'
@@ -28,6 +29,7 @@ Options:
   --env-file PATH      Load build params from custom env file
   --patch-only ID      Apply single patch module (e.g. F10)
   --patch-up-to ID     Apply patches through ID inclusive (e.g. F10)
+  --apply-all          Apply all 17 patches (local debug only)
   --verify-up-to ID    Run only verify checks for patches through ID
   --keep-on-fail       Do not delete upstream tree when patch/verify fails
   --skip-clean         Skip clean.sh (not recommended)
@@ -72,6 +74,10 @@ while [ $# -gt 0 ]; do
             verify_up_to="$2"
             shift 2
             ;;
+        --apply-all)
+            apply_all=true
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -100,6 +106,10 @@ if [ -n "$patch_only" ]; then
     echo "patch-lab/run: SOURCE_PATCH_ONLY=$patch_only"
 elif [ -n "$patch_up_to" ]; then
     echo "patch-lab/run: SOURCE_PATCH_UP_TO=$patch_up_to"
+elif [ "$apply_all" = true ]; then
+    echo "patch-lab/run: CUSTOM_PATCH_APPLY_ALL=true"
+else
+    echo "patch-lab/run: vanilla upstream (no patches; use --patch-up-to or --apply-all)"
 fi
 if [ -n "$verify_up_to" ]; then
     echo "patch-lab/run: PATCH_VERIFY_UP_TO=$verify_up_to"
@@ -130,10 +140,13 @@ source "$ROOT/.github/workflows/scripts/source-patcher.sh"
 
 export SOURCE_PATCH_ONLY="${patch_only:-}"
 export SOURCE_PATCH_UP_TO="${patch_up_to:-}"
-if [ -z "$patch_only" ] && [ -z "$patch_up_to" ]; then
+if [ "$apply_all" = true ]; then
     export CUSTOM_PATCH_APPLY_ALL=true
 fi
 
+if [ -z "$patch_only" ] && [ -z "$patch_up_to" ] && [ "$apply_all" != true ]; then
+    echo "patch-lab/run: skipping apply_custom_source_patches (vanilla)"
+else
 if ! apply_custom_source_patches; then
     echo "patch-lab/run: apply_custom_source_patches FAILED" >&2
     if [ "$keep_on_fail" = true ]; then
@@ -143,21 +156,63 @@ if ! apply_custom_source_patches; then
     fi
     exit 1
 fi
-
-report="$OUT_DIR/verify-report.txt"
-export PATCH_VERIFY_UP_TO="${verify_up_to:-}"
-if ! bash "$PATCH_LAB_DIR/verify.sh" "$UPSTREAM_DIR" "$report" "$profile_file"; then
-    echo "patch-lab/run: verify FAILED (see $report)" >&2
-    cp -f custom-build-config.json "$OUT_DIR/custom-build-config.json" 2>/dev/null || true
-    if [ "$keep_on_fail" = true ]; then
-        echo "patch-lab/run: upstream tree kept at $UPSTREAM_DIR"
-    else
-        rm -rf "$UPSTREAM_DIR"
-    fi
-    exit 1
 fi
 
+report="$OUT_DIR/verify-report.txt"
+mkdir -p "$OUT_DIR"
+
+if [ -z "$patch_only" ] && [ -z "$patch_up_to" ] && [ "$apply_all" != true ]; then
+    echo "patch-lab/run: Q0 vanilla verify..."
+    {
+        echo "patch-lab Q0 vanilla verify"
+        echo "time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "---"
+    } >"$report"
+    q0_fail=0
+    if grep -rq 'CUSTOM_RUSTDESK_PATCH_START' src/ libs/ flutter/ 2>/dev/null; then
+        echo "FAIL: unexpected patch markers in upstream tree" | tee -a "$report"
+        q0_fail=1
+    else
+        echo "PASS: no CUSTOM_RUSTDESK patch markers" | tee -a "$report"
+    fi
+    if [ -f src/common.rs ] && grep -q 'pub fn load_custom_client' src/common.rs; then
+        echo "PASS: vanilla common.rs present" | tee -a "$report"
+    else
+        echo "FAIL: vanilla common.rs missing" | tee -a "$report"
+        q0_fail=1
+    fi
+    if [ "$q0_fail" -ne 0 ]; then
+        echo "patch-lab/run: Q0 verify FAILED (see $report)" >&2
+        exit 1
+    fi
+    echo "patch-lab/run: Q0 vanilla verify PASSED"
+else
+    if [ -z "$verify_up_to" ]; then
+        if [ "$apply_all" = true ]; then
+            verify_up_to="P04"
+        elif [ -n "$patch_up_to" ]; then
+            verify_up_to="$patch_up_to"
+        elif [ -n "$patch_only" ]; then
+            verify_up_to="$patch_only"
+        fi
+    fi
+
+    export PATCH_VERIFY_UP_TO="${verify_up_to:-}"
+    if ! bash "$PATCH_LAB_DIR/verify.sh" "$UPSTREAM_DIR" "$report" "$profile_file"; then
+        echo "patch-lab/run: verify FAILED (see $report)" >&2
+        cp -f custom-build-config.json "$OUT_DIR/custom-build-config.json" 2>/dev/null || true
+        if [ "$keep_on_fail" = true ]; then
+            echo "patch-lab/run: upstream tree kept at $UPSTREAM_DIR"
+        else
+            rm -rf "$UPSTREAM_DIR"
+        fi
+        exit 1
+    fi
+fi
+
+if [ -f custom-build-config.json ]; then
 cp -f custom-build-config.json "$OUT_DIR/custom-build-config.json"
+fi
 for f in \
     src/common.rs \
     flutter/lib/desktop/pages/desktop_home_page.dart \

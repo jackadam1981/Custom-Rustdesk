@@ -1,5 +1,5 @@
 # Orchestrator: resolve BUILD_* and optionally apply patches in dependency order.
-# CI 默认 CUSTOM_VERIFIED_PATCH_UP_TO 为空 → 原版上游；逐项验证后 bump .github/verified-patches.env
+# CI 读 .github/verified-patches.env；patch-lab 用 --patch-up-to / --apply-all。
 
 _custom_patch_schedule_active() {
     if [ -n "${SOURCE_PATCH_ONLY:-}" ]; then
@@ -132,7 +132,7 @@ apply_custom_source_patches() {
 
     if ! _custom_patch_schedule_active; then
         echo "source-patcher: vanilla upstream — no patches scheduled"
-        echo "source-patcher: bump CUSTOM_VERIFIED_PATCH_UP_TO in .github/verified-patches.env after each gate passes"
+        echo "source-patcher: bump CUSTOM_VERIFIED_PATCH_UP_TO in .github/verified-patches.env after patch-lab gate passes"
         return 0
     fi
 

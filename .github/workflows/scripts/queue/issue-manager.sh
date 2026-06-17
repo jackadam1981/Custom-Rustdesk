@@ -1,9 +1,11 @@
 #!/bin/bash
 # Issue 管理器脚本 - 双锁架构版本
 
-# 加载依赖脚本
-source .github/workflows/scripts/debug-utils.sh
-source .github/workflows/scripts/issue-templates.sh
+QUEUE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=queue/debug-utils.sh
+source "$QUEUE_SCRIPT_DIR/debug-utils.sh"
+# shellcheck source=queue/issue-templates.sh
+source "$QUEUE_SCRIPT_DIR/issue-templates.sh"
 
 # ========== 私有辅助函数 ==========
 

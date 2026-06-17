@@ -73,15 +73,6 @@ on:
         required: false
         default: true
         type: boolean
-      source_patch_debug:
-        description: 'Print detailed source patch before/after diagnostics'
-        required: false
-        default: false
-        type: boolean
-      patch_up_to:
-        description: 'Debug: override verified rollout (see .github/verified-patches.env)'
-        required: false
-        default: ''
 
 permissions:
   issues: write
@@ -108,9 +99,6 @@ env:
   DEFAULT_RELAY_SERVER: ${{ secrets.DEFAULT_RELAY_SERVER }}
   DEFAULT_RS_PUB_KEY: ${{ secrets.DEFAULT_RS_PUB_KEY }}
   DEFAULT_API_SERVER: ${{ secrets.DEFAULT_API_SERVER }}
-  # 上游构建：true=队列通过后 clone/push/等待上游编译；false=仅记录 build-spec
-  CUSTOM_UPSTREAM_BUILD_ENABLED: 'true'
-  OUTLINE_PATCH_SPEC_URL: 'https://wiki.jackadam.top/doc/custom-rustdesk-cWWhzjEHzb'
 
 jobs:
   # 00-触发处理 - 提取和验证参数
@@ -127,7 +115,7 @@ jobs:
       - name: Process trigger and validate parameters
         id: trigger
         run: |
-          source .github/workflows/scripts/trigger.sh
+          source .github/workflows/scripts/queue/trigger.sh
           
           # 使用环境变量传递事件数据
           export EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"
@@ -233,7 +221,7 @@ jobs:
         id: review
         shell: bash
         run: |
-          source .github/workflows/scripts/review.sh
+          source .github/workflows/scripts/queue/review.sh
 
           EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"
           TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
@@ -257,7 +245,7 @@ jobs:
           
           # 如果是issue触发，清理issue内容
           if [ "${{ github.event_name }}" = "issues" ]; then
-            source .github/workflows/scripts/trigger.sh
+            source .github/workflows/scripts/queue/trigger.sh
             
             # 从TRIGGER_DATA中提取参数用于清理
             final_tag_param=$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')
@@ -273,9 +261,9 @@ jobs:
           if [ "$need_review" = "true" ]; then
             # 需要审核，在issue中回复需要审核的信息
             if [ "${{ github.event_name }}" = "issues" ]; then
-              source .github/workflows/scripts/issue-templates.sh
+              source .github/workflows/scripts/queue/issue-templates.sh
               review_comment=$(generate_review_required_template "${{ github.run_id }}" "${{ github.event.issue.number }}" "$TRIGGER_DATA")
-              source .github/workflows/scripts/issue-manager.sh
+              source .github/workflows/scripts/queue/issue-manager.sh
               add_issue_comment "${{ github.event.issue.number }}" "$review_comment" || true
             fi
             
@@ -326,7 +314,7 @@ jobs:
       - name: Join build queue
         id: join-queue
         run: |
-          source .github/workflows/scripts/queue-manager.sh
+          source .github/workflows/scripts/queue/queue-manager.sh
 
           trigger_data="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           
@@ -365,7 +353,7 @@ jobs:
       - name: Wait for build lock
         id: wait-build-lock
         run: |
-          source .github/workflows/scripts/queue-manager.sh
+          source .github/workflows/scripts/queue/queue-manager.sh
           
           # 获取构建锁
           echo "Acquiring build lock..."
@@ -395,8 +383,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_success: ${{ steps.extract-vars.outputs.build_success }}
-      upstream_build_enabled: ${{ env.CUSTOM_UPSTREAM_BUILD_ENABLED == 'true' }}
-      download_url: ${{ steps.record-spec.outputs.download_url || steps.record-artifact.outputs.download_url || steps.extract-vars.outputs.download_url }}
+      download_url: ${{ steps.record-artifact.outputs.download_url || steps.extract-vars.outputs.download_url }}
       error_message: ${{ steps.extract-vars.outputs.error_message }}
       source_branch: ${{ steps.commit-repo.outputs.branch_name }}
     steps:
@@ -447,7 +434,6 @@ jobs:
           relay_server=$(echo "$TRIGGER_DATA" | jq -r '.build_params.relay_server // empty')
           rs_pub_key=$(echo "$TRIGGER_DATA" | jq -r '.build_params.rs_pub_key // empty')
           api_server=$(echo "$TRIGGER_DATA" | jq -r '.build_params.api_server // empty')
-          source_patch_debug=$(echo "$TRIGGER_DATA" | jq -r '.build_params.source_patch_debug // "false"')
 
           echo "🔍 提取的构建参数:"
           echo "  - tag: $tag"
@@ -466,7 +452,6 @@ jobs:
           echo "  - super_password: [masked]"
           echo "  - rs_pub_key: [masked]"
           echo "  - api_server: $api_server"
-          echo "  - source_patch_debug: $source_patch_debug"
 
           # 验证关键参数
           if [ -n "$tag" ] && [ -n "$customer" ] && [ -n "$email" ]; then
@@ -493,50 +478,10 @@ jobs:
 
           echo "✅ 构建过程执行完成！"
 
-      # 规格记录模式（仅当关闭上游构建时）
-      - name: Record build specification
-        id: record-spec
-        if: steps.extract-vars.outputs.extract_success == 'true' && env.CUSTOM_UPSTREAM_BUILD_ENABLED != 'true'
-        run: |
-          echo "📋 Record build specification (upstream build disabled)..."
-          source .github/workflows/scripts/source-patcher.sh
-          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
-          mkdir -p build-spec
-          export CUSTOM_VERIFIED_PATCH_UP_TO="${CUSTOM_VERIFIED_PATCH_UP_TO:-}"
-          export BUILD_TAG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')"
-          export BUILD_APP_NAME="$(echo "$TRIGGER_DATA" | jq -r '.build_params.app_name // empty')"
-          export BUILD_CUSTOMER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')"
-          export BUILD_CUSTOMER_LINK="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer_link // empty')"
-          export BUILD_BANNER_URL="$(echo "$TRIGGER_DATA" | jq -r '.build_params.banner_url // empty')"
-          export BUILD_ICON_URL="$(echo "$TRIGGER_DATA" | jq -r '.build_params.icon_url // empty')"
-          export BUILD_SLOGAN="$(echo "$TRIGGER_DATA" | jq -r '.build_params.slogan // empty')"
-          export BUILD_RENDEZVOUS_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rendezvous_server // empty')"
-          export BUILD_RELAY_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.relay_server // empty')"
-          export BUILD_RS_PUB_KEY="$(echo "$TRIGGER_DATA" | jq -r '.build_params.rs_pub_key // empty')"
-          export BUILD_API_SERVER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.api_server // empty')"
-          export BUILD_LOCK_NETWORK_SETTINGS="$(echo "$TRIGGER_DATA" | jq -r '.build_params.lock_network_settings // "false"')"
-          export BUILD_HIDE_NETWORK_SETTINGS="$(echo "$TRIGGER_DATA" | jq -r '.build_params.hide_network_settings // "false"')"
-          export BUILD_SOURCE_PATCH_DEBUG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.source_patch_debug // "false"')"
-          export BUILD_SUPER_PASSWORD="$(echo "$TRIGGER_DATA" | jq -r '.build_params.super_password // empty')"
-          cd build-spec
-          apply_custom_source_patches
-          cp "$RUNNER_TEMP/trigger-data/trigger-data.json" trigger-data-snapshot.json
-          echo "record_success=true" >> $GITHUB_OUTPUT
-          echo "download_url=${{ env.OUTLINE_PATCH_SPEC_URL }}" >> $GITHUB_OUTPUT
-
-      - name: Upload build specification
-        id: upload-build-spec
-        if: steps.record-spec.outputs.record_success == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-spec-${{ github.run_id }}
-          path: build-spec
-          retention-days: 30
-
-      # 步骤2: 克隆源码
+      # 步骤2: 克隆原版上游（CI 不执行插针；插针仅在编译机 patch-lab 本地验证）
       - name: Clone source code
         id: clone-source
-        if: steps.extract-vars.outputs.extract_success == 'true' && env.CUSTOM_UPSTREAM_BUILD_ENABLED == 'true'
+        if: steps.extract-vars.outputs.extract_success == 'true'
         run: |
           echo "🔧 Step 2: Cloning source code..."
           
@@ -556,17 +501,18 @@ jobs:
             exit 1
           fi
 
-      # 步骤3: 修改源码
+      # 步骤3: 按 rollout 插针并准备上游编译
       - name: Modify source code
         id: modify-source
         if: steps.clone-source.outputs.clone_success == 'true'
         run: |
-          echo "🔧 Step 3: Preparing upstream source..."
+          echo "🔧 Step 3: Preparing upstream source (verified rollout patches)..."
           source .github/workflows/scripts/source-patcher.sh
           export CUSTOM_VERIFIED_PATCH_UP_TO="${CUSTOM_VERIFIED_PATCH_UP_TO:-}"
 
           TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           cd rustdesk-source
+
           export BUILD_TAG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')"
           export BUILD_APP_NAME="$(echo "$TRIGGER_DATA" | jq -r '.build_params.app_name // empty')"
           export BUILD_CUSTOMER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')"
@@ -591,10 +537,9 @@ jobs:
             export SOURCE_PATCH_UP_TO="$CUSTOM_VERIFIED_PATCH_UP_TO"
             echo "📌 Verified rollout: SOURCE_PATCH_UP_TO=$SOURCE_PATCH_UP_TO"
           else
-            echo "📦 Vanilla upstream: no source patches"
+            echo "📦 Vanilla upstream: no source patches (Q0)"
           fi
-          
-          # 创建构建配置文件
+
           echo "📝 创建构建配置文件..."
           cat > build-config.json << EOF
           {
@@ -616,11 +561,12 @@ jobs:
             "hide_network_settings": "$BUILD_HIDE_NETWORK_SETTINGS",
             "source_patch_debug": "$BUILD_SOURCE_PATCH_DEBUG",
             "patch_up_to": "$PATCH_UP_TO",
+            "verified_patch_up_to": "${CUSTOM_VERIFIED_PATCH_UP_TO:-}",
             "build_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
           EOF
 
-          echo "🧩 Apply source patches (if rollout gate allows)..."
+          echo "🧩 Apply source patches (verified rollout gate)..."
           apply_custom_source_patches
 
           mkdir -p .github/workflows
@@ -777,7 +723,7 @@ jobs:
         id: record-artifact
         if: steps.wait-cleanup.outputs.cleanup_completed == 'true'
         run: |
-          echo "🔧 Step 8: Recording patched source artifact..."
+          echo "🔧 Recording patched source artifact..."
           echo "artifact_name=patched-source-${{ github.run_id }}" >> $GITHUB_OUTPUT
           echo "download_url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_OUTPUT
           echo "✅ Patched source artifact is available from this workflow run"
@@ -815,7 +761,7 @@ jobs:
   # 05-等待定制源码分支 push 自动触发的 RustDesk 原版 workflow
   upstream-build:
     needs: [build]
-    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true' && needs.build.outputs.upstream_build_enabled == 'true'
+    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true'
     runs-on: ubuntu-latest
     outputs:
       upstream_run_id: ${{ steps.wait-upstream.outputs.upstream_run_id }}
@@ -955,25 +901,15 @@ jobs:
       - name: Complete cleanup and notification
         id: finish
         run: |
-          source .github/workflows/scripts/finish.sh
-          source .github/workflows/scripts/queue-manager.sh
+          source .github/workflows/scripts/queue/finish.sh
+          source .github/workflows/scripts/queue/queue-manager.sh
           TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           
           # 重新获取 github.event
           EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"
 
           # 确定构建状态
-          if [ "${{ env.CUSTOM_UPSTREAM_BUILD_ENABLED }}" != "true" ]; then
-            if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ]; then
-              build_status="success"
-              download_url="${{ needs.build.outputs.download_url || env.OUTLINE_PATCH_SPEC_URL }}"
-              error_message="上游构建已关闭；构建参数已记录（build-spec artifact）。"
-            else
-              build_status="failure"
-              download_url=""
-              error_message="${{ needs.build.outputs.error_message || '参数校验或记录失败' }}"
-            fi
-          elif [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ] && [ "${{ needs.upstream-build.result }}" = "success" ]; then
+          if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ] && [ "${{ needs.upstream-build.result }}" = "success" ]; then
             build_status="success"
             download_url="${{ needs.upstream-build.outputs.upstream_run_url || needs.build.outputs.download_url || '' }}"
             error_message="${{ needs.build.outputs.error_message || '' }}"
@@ -991,7 +927,6 @@ jobs:
 
           upstream_platform_conclusion="${{ needs.upstream-build.outputs.upstream_platform_conclusion || '' }}"
           platform_results="${{ needs.upstream-build.outputs.platform_results || '' }}"
-          if [ "${{ env.CUSTOM_UPSTREAM_BUILD_ENABLED }}" = "true" ]; then
           if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.build.outputs.build_success }}" = "true" ] && [ "${{ needs.upstream-build.result }}" = "success" ] && { [ "$upstream_platform_conclusion" = "success" ] || [ "$upstream_platform_conclusion" = "partial_success" ]; }; then
             build_status="success"
             download_url="${{ needs.upstream-build.outputs.upstream_run_url || needs.build.outputs.download_url || '' }}"
@@ -1004,7 +939,6 @@ jobs:
             build_status="failure"
             download_url=""
             error_message="Target platform builds failed: $platform_results"
-          fi
           fi
           
           # 设置构建参数

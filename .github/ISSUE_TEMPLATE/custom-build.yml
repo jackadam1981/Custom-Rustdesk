@@ -29,6 +29,8 @@ body:
         source_patch_debug: false
         ```
 
+        **Q0 零针验收**请使用 Issue 模板：[Q0 基线构建（零针）](q0-baseline.yml)（勿填 `patch_up_to`）。
+
   - type: textarea
     id: params
     attributes:

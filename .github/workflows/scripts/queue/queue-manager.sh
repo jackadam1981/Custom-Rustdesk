@@ -1,10 +1,13 @@
 #!/bin/bash
 # 队列管理脚本 - 重构版本（1层调用架构）
 
-# 加载依赖脚本
-source .github/workflows/scripts/debug-utils.sh
-source .github/workflows/scripts/issue-templates.sh
-source .github/workflows/scripts/issue-manager.sh
+QUEUE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=queue/debug-utils.sh
+source "$QUEUE_SCRIPT_DIR/debug-utils.sh"
+# shellcheck source=queue/issue-templates.sh
+source "$QUEUE_SCRIPT_DIR/issue-templates.sh"
+# shellcheck source=queue/issue-manager.sh
+source "$QUEUE_SCRIPT_DIR/issue-manager.sh"
 
 # 配置
 QUEUE_ISSUE_NUMBER="1"

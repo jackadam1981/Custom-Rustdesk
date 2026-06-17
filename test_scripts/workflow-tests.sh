@@ -35,7 +35,7 @@ function test_release_all_locks_leaves_queue() {
         /^release_all_locks\(\)/ { in_func=1 }
         in_func && /_leave_queue/ { found=1 }
         in_func && /^}/ { exit(found ? 0 : 1) }
-    ' .github/workflows/scripts/queue-manager.sh; then
+    ' .github/workflows/scripts/queue/queue-manager.sh; then
         record_test_result "release_all_locks_leaves_queue" "PASS" "完成阶段释放锁时会移除当前队列项"
         return 0
     fi
@@ -50,7 +50,7 @@ function test_release_all_locks_skips_unowned_build_lock() {
         in_func && /current_build_holder/ { saw_holder=1 }
         in_func && /Skipping build lock release/ { saw_skip=1 }
         in_func && /^}/ { exit((saw_holder && saw_skip) ? 0 : 1) }
-    ' .github/workflows/scripts/queue-manager.sh; then
+    ' .github/workflows/scripts/queue/queue-manager.sh; then
         record_test_result "release_all_locks_skips_unowned_build_lock" "PASS" "未持有构建锁的 run 不会释放别人的锁"
         return 0
     fi
@@ -66,7 +66,7 @@ function test_cleanup_queue_clears_orphan_build_lock() {
         in_func && /孤儿构建锁/ { saw_orphan_log=1 }
         in_func && /should_clear_build_lock=true/ && saw_queue_check { saw_clear=1 }
         in_func && /^}/ { exit((saw_queue_check && saw_orphan_log && saw_clear) ? 0 : 1) }
-    ' .github/workflows/scripts/queue-manager.sh; then
+    ' .github/workflows/scripts/queue/queue-manager.sh; then
         record_test_result "cleanup_queue_clears_orphan_build_lock" "PASS" "清理队列会移除不再属于队列成员的孤儿构建锁"
         return 0
     fi
@@ -86,7 +86,7 @@ function test_finish_queue_cleanup_is_best_effort() {
 }
 
 function test_actions_ci_does_not_enable_test_mode() {
-    if grep -q 'CI:-' .github/workflows/scripts/queue-manager.sh; then
+    if grep -q 'CI:-' .github/workflows/scripts/queue/queue-manager.sh; then
         record_test_result "actions_ci_does_not_enable_test_mode" "FAIL" "GitHub Actions 默认 CI=true，不能用 CI 判断队列测试模式"
         return 1
     fi
@@ -110,9 +110,9 @@ function test_build_lock_failure_exits_job() {
 }
 
 function test_queue_issue_lock_uses_ref_guard() {
-    if grep -q 'REF_LOCK_PREFIX="queue-locks"' .github/workflows/scripts/queue-manager.sh &&
-       grep -q '_acquire_ref_lock' .github/workflows/scripts/queue-manager.sh &&
-       grep -q 'git/refs' .github/workflows/scripts/queue-manager.sh &&
+    if grep -q 'REF_LOCK_PREFIX="queue-locks"' .github/workflows/scripts/queue/queue-manager.sh &&
+       grep -q '_acquire_ref_lock' .github/workflows/scripts/queue/queue-manager.sh &&
+       grep -q 'git/refs' .github/workflows/scripts/queue/queue-manager.sh &&
        grep -q 'contents: write' .github/workflows/CustomBuildRustdesk.yml; then
         record_test_result "queue_issue_lock_uses_ref_guard" "PASS" "Issue body 更新由 Git ref 原子锁保护"
         return 0
@@ -123,8 +123,8 @@ function test_queue_issue_lock_uses_ref_guard() {
 }
 
 function test_manual_queue_limit_is_five() {
-    if grep -q '^MANUAL_TRIGGER_LIMIT=5' .github/workflows/scripts/queue-manager.sh &&
-       grep -q '手动触发：.*\$workflow_count/5' .github/workflows/scripts/issue-templates.sh; then
+    if grep -q '^MANUAL_TRIGGER_LIMIT=5' .github/workflows/scripts/queue/queue-manager.sh &&
+       grep -q '手动触发：.*\$workflow_count/5' .github/workflows/scripts/queue/issue-templates.sh; then
         record_test_result "manual_queue_limit_is_five" "PASS" "手动触发队列上限为 5"
         return 0
     fi
@@ -133,14 +133,16 @@ function test_manual_queue_limit_is_five() {
     return 1
 }
 
-function test_source_patcher_is_invoked() {
+function test_source_patcher_is_invoked_in_ci() {
     if grep -q 'source .github/workflows/scripts/source-patcher.sh' "$WORKFLOW_FILE" &&
-       grep -q 'apply_custom_source_patches' "$WORKFLOW_FILE"; then
-        record_test_result "source_patcher_is_invoked" "PASS" "构建流程会调用源码自定义 patch 脚本"
+       grep -q 'apply_custom_source_patches' "$WORKFLOW_FILE" &&
+       grep -q 'Load verified patch rollout' "$WORKFLOW_FILE" &&
+       ! grep -q 'CUSTOM_UPSTREAM_BUILD_ENABLED' "$WORKFLOW_FILE"; then
+        record_test_result "source_patcher_is_invoked_in_ci" "PASS" "CI 按 verified rollout 调用 source-patcher，且无上游编译总开关"
         return 0
     fi
 
-    record_test_result "source_patcher_is_invoked" "FAIL" "Modify source code 阶段应调用 source-patcher.sh"
+    record_test_result "source_patcher_is_invoked_in_ci" "FAIL" "CI 应加载 verified-patches.env 并调用 source-patcher"
     return 1
 }
 
@@ -171,37 +173,35 @@ function test_source_patcher_covers_server_key_and_brand() {
 }
 
 function test_source_patch_debug_switch_is_wired() {
-    local trigger=".github/workflows/scripts/trigger.sh"
+    local trigger=".github/workflows/scripts/queue/trigger.sh"
 
-    if grep -q 'source_patch_debug:' "$WORKFLOW_FILE" &&
-       grep -q 'BUILD_SOURCE_PATCH_DEBUG' "$WORKFLOW_FILE" &&
+    if grep -q 'BUILD_SOURCE_PATCH_DEBUG' "$WORKFLOW_FILE" &&
        grep -q 'source_patch_debug' "$trigger" &&
        grep -q 'SOURCE_PATCH_DEBUG' "$trigger" &&
-       grep -q 'export BUILD_SOURCE_PATCH_DEBUG' "$WORKFLOW_FILE" &&
        source_patcher_has_pattern 'BUILD_SOURCE_PATCH_DEBUG' &&
        source_patcher_has_pattern 'detailed before/after source diagnostics enabled' &&
-       source_patcher_has_pattern 'detailed before/after source diagnostics disabled' &&
-       source_patcher_has_pattern '_custom_patch_debug_enabled'; then
-        record_test_result "source_patch_debug_switch_is_wired" "PASS" "source_patch_debug reaches source-patcher diagnostics"
+       source_patcher_has_pattern '_custom_patch_debug_enabled' &&
+       grep -q 'BUILD_SOURCE_PATCH_DEBUG' scripts/patch-lab/run.sh; then
+        record_test_result "source_patch_debug_switch_is_wired" "PASS" "source_patch_debug 贯通 trigger、CI 与 patch-lab"
         return 0
     fi
 
-    record_test_result "source_patch_debug_switch_is_wired" "FAIL" "source_patch_debug should flow from trigger params to source-patcher.sh"
+    record_test_result "source_patch_debug_switch_is_wired" "FAIL" "source_patch_debug 应贯通 trigger 与 source-patcher"
     return 1
 }
 
 function test_verified_patch_rollout_is_wired() {
     if [ -f ".github/verified-patches.env" ] &&
        grep -q 'CUSTOM_VERIFIED_PATCH_UP_TO=""' ".github/verified-patches.env" &&
-       grep -q 'CUSTOM_UPSTREAM_BUILD_ENABLED' "$WORKFLOW_FILE" &&
+       ! grep -q 'CUSTOM_UPSTREAM_BUILD_ENABLED' "$WORKFLOW_FILE" &&
        grep -q 'Load verified patch rollout' "$WORKFLOW_FILE" &&
        grep -q 'verified-patches.env' "$WORKFLOW_FILE" &&
        source_patcher_has_pattern 'vanilla upstream'; then
-        record_test_result "verified_patch_rollout_is_wired" "PASS" "零针默认 + rollout 文件已接入 workflow"
+        record_test_result "verified_patch_rollout_is_wired" "PASS" "零针默认 + rollout 已接入 CI（无 CUSTOM_UPSTREAM_BUILD_ENABLED）"
         return 0
     fi
 
-    record_test_result "verified_patch_rollout_is_wired" "FAIL" "应存在 .github/verified-patches.env 且 workflow 加载 rollout"
+    record_test_result "verified_patch_rollout_is_wired" "FAIL" "应存在 verified-patches.env 且 workflow 加载 rollout"
     return 1
 }
 
@@ -689,7 +689,7 @@ PY
 }
 
 function test_hide_network_settings_is_wired() {
-    local trigger=".github/workflows/scripts/trigger.sh"
+    local trigger=".github/workflows/scripts/queue/trigger.sh"
 
     if grep -q 'hide_network_settings:' "$WORKFLOW_FILE" &&
        grep -q 'BUILD_HIDE_NETWORK_SETTINGS' "$WORKFLOW_FILE" &&
@@ -837,29 +837,34 @@ EOF
 }
 
 function test_issue_params_preserve_issue_supplied_patch_variables() {
-    local trigger=".github/workflows/scripts/trigger.sh"
+    local trigger=".github/workflows/scripts/queue/trigger.sh"
     local event_data
+    local tmp_out
     event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloud\napp_name: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nbanner_url: https://assets.example.com/banner.png\nicon_url: https://assets.example.com/icon.png\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true\nhide_network_settings: true\nsource_patch_debug: true' '{issue:{number:123, body:$body}}')
+    tmp_out=$(mktemp)
 
-    if (
+    (
         set -e
         source "$trigger"
-        extracted="$(trigger_manager extract-issue "$event_data")"
-        echo "$extracted" | grep -q 'APP_NAME="OneCloudDesk"'
-        echo "$extracted" | grep -q 'CUSTOMER="OneCloud"'
-        echo "$extracted" | grep -q 'BANNER_URL="https://assets.example.com/banner.png"'
-        echo "$extracted" | grep -q 'ICON_URL="https://assets.example.com/icon.png"'
-        echo "$extracted" | grep -q 'RELAY_SERVER="rustdesk.jackadam.top:21117"'
-        echo "$extracted" | grep -q 'RS_PUB_KEY="dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI="'
-        echo "$extracted" | grep -q 'SLOGAN="Powered by OneCloud Desk"'
-        echo "$extracted" | grep -q 'LOCK_NETWORK_SETTINGS="true"'
-        echo "$extracted" | grep -q 'HIDE_NETWORK_SETTINGS="true"'
-        echo "$extracted" | grep -q 'SOURCE_PATCH_DEBUG="true"'
-    ); then
+        trigger_manager extract-issue "$event_data" > "$tmp_out"
+    )
+
+    if grep -q 'APP_NAME="OneCloudDesk"' "$tmp_out" &&
+       grep -q 'CUSTOMER="OneCloud"' "$tmp_out" &&
+       grep -q 'BANNER_URL="https://assets.example.com/banner.png"' "$tmp_out" &&
+       grep -q 'ICON_URL="https://assets.example.com/icon.png"' "$tmp_out" &&
+       grep -q 'RELAY_SERVER="rustdesk.jackadam.top:21117"' "$tmp_out" &&
+       grep -q 'RS_PUB_KEY="dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI="' "$tmp_out" &&
+       grep -q 'SLOGAN="Powered by OneCloud Desk"' "$tmp_out" &&
+       grep -q 'LOCK_NETWORK_SETTINGS="true"' "$tmp_out" &&
+       grep -q 'HIDE_NETWORK_SETTINGS="true"' "$tmp_out" &&
+       grep -q 'SOURCE_PATCH_DEBUG="true"' "$tmp_out"; then
+        rm -f "$tmp_out"
         record_test_result "issue_params_preserve_issue_supplied_patch_variables" "PASS" "Issue 变量保留完整 key、空格和网络锁定项"
         return 0
     fi
 
+    rm -f "$tmp_out"
     record_test_result "issue_params_preserve_issue_supplied_patch_variables" "FAIL" "Issue 参数解析不应截断 rs_pub_key、slogan、lock_network_settings 或 hide_network_settings"
     return 1
 }
@@ -872,7 +877,7 @@ function test_api_server_is_optional_for_plain_hbbs_hbbr() {
         in_api && /^      [a-z_]+:/ && !/api_server:/ { in_api=0 }
         END { exit(found ? 0 : 1) }
        ' "$WORKFLOW_FILE" &&
-       ! grep -q '\[ -z "$api_server" \].*api_server is required' .github/workflows/scripts/trigger.sh; then
+       ! grep -q '\[ -z "$api_server" \].*api_server is required' .github/workflows/scripts/queue/trigger.sh; then
         record_test_result "api_server_is_optional_for_plain_hbbs_hbbr" "PASS" "没有 API 服务的 hbbs/hbbr 构建允许 api_server 留空"
         return 0
     fi
@@ -889,7 +894,7 @@ function test_super_password_is_optional() {
         END { exit(found ? 0 : 1) }
        ' "$WORKFLOW_FILE" &&
        grep -q 'export BUILD_SUPER_PASSWORD' "$WORKFLOW_FILE" &&
-       ! grep -q 'super_password is required' .github/workflows/scripts/trigger.sh &&
+       ! grep -q 'super_password is required' .github/workflows/scripts/queue/trigger.sh &&
        ! grep -q 'DEFAULT_SUPER_PASSWORD' "$WORKFLOW_FILE"; then
         record_test_result "super_password_is_optional" "PASS" "super_password 选填，有则插针，无则跳过"
         return 0
@@ -1045,7 +1050,7 @@ function test_build_uploads_patched_source_artifact() {
         return 0
     fi
 
-    record_test_result "build_uploads_patched_source_artifact" "FAIL" "build 阶段应上传已定制源码 artifact，并避免触发 rustdesk/rustdesk dispatch"
+    record_test_result "build_uploads_patched_source_artifact" "FAIL" "build 阶段应上传 patched-source artifact，并避免触发 rustdesk/rustdesk dispatch"
     return 1
 }
 
@@ -1189,7 +1194,7 @@ function run_workflow_tests() {
     test_build_lock_failure_exits_job || failed=1
     test_queue_issue_lock_uses_ref_guard || failed=1
     test_manual_queue_limit_is_five || failed=1
-    test_source_patcher_is_invoked || failed=1
+    test_source_patcher_is_invoked_in_ci || failed=1
     test_verified_patch_rollout_is_wired || failed=1
     test_source_patcher_vanilla_skips_patches || failed=1
     test_source_patcher_covers_server_key_and_brand || failed=1

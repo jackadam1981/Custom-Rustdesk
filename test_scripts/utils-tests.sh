@@ -185,7 +185,7 @@ function test_utils_queue_reset() {
     log_info "环境设置: GITHUB_RUN_ID=$GITHUB_RUN_ID"
     
     # 加载队列管理器
-    source .github/workflows/scripts/queue-manager.sh
+    source .github/workflows/scripts/queue/queue-manager.sh
     
     log_info "执行队列复位..."
     

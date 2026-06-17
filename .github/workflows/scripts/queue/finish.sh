@@ -1,11 +1,15 @@
 #!/bin/bash
 # 完成处理脚本 - 简化版本
 
-# 加载依赖脚本
-source .github/workflows/scripts/debug-utils.sh
-source .github/workflows/scripts/encryption-utils.sh
-source .github/workflows/scripts/queue-manager.sh
-source .github/workflows/scripts/issue-templates.sh
+QUEUE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=queue/debug-utils.sh
+source "$QUEUE_SCRIPT_DIR/debug-utils.sh"
+# shellcheck source=queue/encryption-utils.sh
+source "$QUEUE_SCRIPT_DIR/encryption-utils.sh"
+# shellcheck source=queue/queue-manager.sh
+source "$QUEUE_SCRIPT_DIR/queue-manager.sh"
+# shellcheck source=queue/issue-templates.sh
+source "$QUEUE_SCRIPT_DIR/issue-templates.sh"
 
 # 设置完成环境
 _setup_finish_environment() {

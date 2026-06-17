@@ -1,5 +1,6 @@
 #!/bin/bash
-# Applies custom RustDesk source patches inside the cloned rustdesk source tree.
+# Applies custom RustDesk source patches inside a cloned rustdesk source tree.
+# CI 按 verified-patches.env rollout；patch-lab 用于本地验收后再 bump rollout。
 # Thin entry — logic lives under patches/.
 #
 # Incremental apply (patch-lab / local debug):

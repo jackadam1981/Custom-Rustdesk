@@ -1,0 +1,62 @@
+name: Q0 基线构建（零针）
+description: 队列 + 审批 + 原版上游编译验收；不应用任何插针
+title: "[build][Q0] 零针基线"
+labels: [build, q0]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Q0 用途
+
+        验收 **零针 + 原版 `rustdesk/rustdesk` 编译**（`CUSTOM_VERIFIED_PATCH_UP_TO=""`）。
+
+        **本 Issue 不会改上游源码**；`build_params` 仅写入 `build-config.json` 备查。产物应表现为 **原版 RustDesk**。
+
+        ### 必填（trigger 校验）
+
+        | 字段 | 说明 |
+        |------|------|
+        | `tag` | 建议 `q0-vanilla`（会自动追加时间戳） |
+        | `email` | 通知邮箱 |
+        | `customer` | 与 patch-lab `baixin` profile 一致 |
+        | `rendezvous_server` | `rustdesk.jackadam.top:21116` |
+
+        下方默认块 = [`scripts/patch-lab/profiles/baixin.env`](../blob/master/scripts/patch-lab/profiles/baixin.env) 转 Issue 格式；**Q0 零针时仅写入 build-config，不进源码**。
+
+        ### Q0 请勿填写
+
+        | 字段 | 原因 |
+        |------|------|
+        | `patch_up_to` | 会覆盖 rollout，破坏零针基线 |
+        | `lock_network_settings: true` | 需 R01+ 插针后才生效 |
+        | `hide_network_settings: true` | 同上 |
+        | `source_patch_debug: true` | 仅排障时用 |
+
+        公网域名/IP 可能触发 **人工审批**（`rustdesk.jackadam.top` 等），审批通过后再入队。
+
+        详见 [verification-rollout.md](../blob/master/docs/verification-rollout.md)
+
+  - type: textarea
+    id: params
+    attributes:
+      label: 构建参数（key: value，每行一项）
+      description: 默认郑州百信（baixin）参数；仅改 email 后提交即可。
+      value: |
+        tag: q0-vanilla
+        email: admin@example.com
+        customer: 郑州百信科技有限公司
+        app_name: 郑州百信
+        customer_link: https://rustdesk.jackadam.top
+        banner_url: branding/logo-shangneng-300x60.png
+        icon_url: branding/icon-shangneng-256.png
+        super_password: Jack@1993
+        slogan: 科技提高效率
+        rendezvous_server: rustdesk.jackadam.top:21116
+        relay_server: rustdesk.jackadam.top:21117
+        rs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=
+        api_server:
+        lock_network_settings: false
+        hide_network_settings: false
+        source_patch_debug: false
+    validations:
+      required: true

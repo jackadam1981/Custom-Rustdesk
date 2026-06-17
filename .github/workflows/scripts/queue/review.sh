@@ -1,10 +1,13 @@
 #!/bin/bash
 # 审核和验证脚本 - 简化版本
 
-# 加载依赖脚本
-source .github/workflows/scripts/debug-utils.sh
-source .github/workflows/scripts/issue-templates.sh
-source .github/workflows/scripts/issue-manager.sh
+QUEUE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=queue/debug-utils.sh
+source "$QUEUE_SCRIPT_DIR/debug-utils.sh"
+# shellcheck source=queue/issue-templates.sh
+source "$QUEUE_SCRIPT_DIR/issue-templates.sh"
+# shellcheck source=queue/issue-manager.sh
+source "$QUEUE_SCRIPT_DIR/issue-manager.sh"
 
 REVIEW_TIMEOUT_SECONDS="${REVIEW_TIMEOUT_SECONDS:-172800}" # 48小时
 
