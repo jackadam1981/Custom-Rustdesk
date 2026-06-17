@@ -395,6 +395,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_success: ${{ steps.extract-vars.outputs.build_success }}
+      upstream_build_enabled: ${{ env.CUSTOM_UPSTREAM_BUILD_ENABLED == 'true' }}
       download_url: ${{ steps.record-spec.outputs.download_url || steps.record-artifact.outputs.download_url || steps.extract-vars.outputs.download_url }}
       error_message: ${{ steps.extract-vars.outputs.error_message }}
       source_branch: ${{ steps.commit-repo.outputs.branch_name }}
@@ -814,7 +815,7 @@ jobs:
   # 05-等待定制源码分支 push 自动触发的 RustDesk 原版 workflow
   upstream-build:
     needs: [build]
-    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true' && env.CUSTOM_UPSTREAM_BUILD_ENABLED == 'true'
+    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true' && needs.build.outputs.upstream_build_enabled == 'true'
     runs-on: ubuntu-latest
     outputs:
       upstream_run_id: ${{ steps.wait-upstream.outputs.upstream_run_id }}
