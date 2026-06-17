@@ -111,6 +111,8 @@ env:
   # 上游构建：true=队列通过后 clone/push/等待上游编译；false=仅记录 build-spec
   CUSTOM_UPSTREAM_BUILD_ENABLED: 'true'
   OUTLINE_PATCH_SPEC_URL: 'https://wiki.jackadam.top/doc/custom-rustdesk-cWWhzjEHzb'
+
+jobs:
   # 00-触发处理 - 提取和验证参数
   trigger:
     runs-on: ubuntu-latest
