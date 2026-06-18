@@ -59,7 +59,7 @@ patch-lab 验收 R01  →  改 verified-patches.env = "R01"  →  下次 CI 队�
 
 | ID | 本地 patch-lab | 备注 |
 |----|----------------|------|
-| R01 | 11/11（合并 r01.sh 后） | bump env 后 CI [27734278366] 待 exe 验收 |
+| R01 | 11/11（合并 r01.sh 后） | CI [27734278366](https://github.com/jackadam1981/Custom-Rustdesk/actions/runs/27734278366) success；Release `r01-baixin-20260618-031444`；exe UI 待本机验收 |
 | R03 | 曾 13/13（旧 R02 单独时） | bump R01 后按新序重验 |
 
 每项：
