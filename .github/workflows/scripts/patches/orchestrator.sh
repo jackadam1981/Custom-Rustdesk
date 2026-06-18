@@ -136,6 +136,8 @@ apply_custom_source_patches() {
         return 0
     fi
 
+    _custom_validate_source_patch_up_to || return 1
+
     if [ -n "${SOURCE_PATCH_UP_TO:-}" ]; then
         echo "source-patcher: rollout mode SOURCE_PATCH_UP_TO=${SOURCE_PATCH_UP_TO}"
     elif [ -n "${SOURCE_PATCH_ONLY:-}" ]; then

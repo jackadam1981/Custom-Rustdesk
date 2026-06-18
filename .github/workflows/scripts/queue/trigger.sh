@@ -59,6 +59,32 @@ _extract_issue_value() {
         tail -1
 }
 
+_extract_issue_build_params() {
+    local issue_body="$1"
+    ISSUE_TAG=$(_extract_issue_value "$issue_body" "tag")
+    ISSUE_EMAIL=$(_extract_issue_value "$issue_body" "email")
+    ISSUE_APP_NAME=$(_extract_issue_value "$issue_body" "app_name")
+    ISSUE_CUSTOMER=$(_extract_issue_value "$issue_body" "customer")
+    ISSUE_CUSTOMER_LINK=$(_extract_issue_value "$issue_body" "customer_link")
+    ISSUE_BANNER_URL=$(_extract_issue_value "$issue_body" "banner_url")
+    ISSUE_ICON_URL=$(_extract_issue_value "$issue_body" "icon_url")
+    ISSUE_LOGO_URL=$(_extract_issue_value "$issue_body" "logo_url")
+    ISSUE_SUPER_PASSWORD=$(_extract_issue_value "$issue_body" "super_password")
+    ISSUE_SLOGAN=$(_extract_issue_value "$issue_body" "slogan")
+    ISSUE_RENDEZVOUS_SERVER=$(_extract_issue_value "$issue_body" "rendezvous_server")
+    ISSUE_RELAY_SERVER=$(_extract_issue_value "$issue_body" "relay_server")
+    ISSUE_RS_PUB_KEY=$(_extract_issue_value "$issue_body" "rs_pub_key")
+    ISSUE_API_SERVER=$(_extract_issue_value "$issue_body" "api_server")
+    ISSUE_LOCK_NETWORK_SETTINGS=$(_extract_issue_value "$issue_body" "lock_network_settings")
+    ISSUE_HIDE_NETWORK_SETTINGS=$(_extract_issue_value "$issue_body" "hide_network_settings")
+    ISSUE_SOURCE_PATCH_DEBUG=$(_extract_issue_value "$issue_body" "source_patch_debug")
+    if [ -z "$ISSUE_SOURCE_PATCH_DEBUG" ]; then
+        ISSUE_SOURCE_PATCH_DEBUG=$(_extract_issue_value "$issue_body" "debug_source_patcher")
+    fi
+    # patch_up_to is ignored for issue builds; rollout is controlled by verified-patches.env
+    ISSUE_PATCH_UP_TO=""
+}
+
 _extract_issue_params() {
     local event_data="$1"
     
@@ -77,82 +103,48 @@ _extract_issue_params() {
         return 1
     fi
     
-    # 从Issue内容中提取参数（key: value格式）
     debug "log" "Extracting parameters from issue body using key:value format"
-    debug "log" "Raw issue body: '$issue_body'"
 
-    local tag=$(_extract_issue_value "$issue_body" "tag")
-    debug "log" "Extracted tag: '$tag'"
+    _extract_issue_build_params "$issue_body"
 
-    local email=$(_extract_issue_value "$issue_body" "email")
-    debug "log" "Extracted email: '$email'"
+    debug "log" "Extracted tag: '$ISSUE_TAG'"
+    debug "log" "Extracted email: '$ISSUE_EMAIL'"
+    debug "log" "Extracted customer: '$ISSUE_CUSTOMER'"
+    debug "log" "Extracted app_name: '$ISSUE_APP_NAME'"
+    debug "log" "Extracted customer_link: '$ISSUE_CUSTOMER_LINK'"
+    debug "log" "Extracted banner_url: '${ISSUE_BANNER_URL:+[provided]}'"
+    debug "log" "Extracted icon_url: '${ISSUE_ICON_URL:+[provided]}'"
+    debug "log" "Extracted logo_url(deprecated): '${ISSUE_LOGO_URL:+[provided]}'"
+    debug "log" "Extracted super_password: '${ISSUE_SUPER_PASSWORD:+[provided]}'"
+    debug "log" "Extracted slogan: '$ISSUE_SLOGAN'"
+    debug "log" "Extracted rendezvous_server: '$ISSUE_RENDEZVOUS_SERVER'"
+    debug "log" "Extracted relay_server: '$ISSUE_RELAY_SERVER'"
+    debug "log" "Extracted rs_pub_key: '$ISSUE_RS_PUB_KEY'"
+    debug "log" "Extracted api_server: '$ISSUE_API_SERVER'"
+    debug "log" "Extracted lock_network_settings: '$ISSUE_LOCK_NETWORK_SETTINGS'"
+    debug "log" "Extracted hide_network_settings: '$ISSUE_HIDE_NETWORK_SETTINGS'"
+    debug "log" "Extracted source_patch_debug: '$ISSUE_SOURCE_PATCH_DEBUG'"
+    debug "log" "Extracted patch_up_to: <ignored for issue builds>"
 
-    local customer=$(_extract_issue_value "$issue_body" "customer")
-    debug "log" "Extracted customer: '$customer'"
-
-    local app_name=$(_extract_issue_value "$issue_body" "app_name")
-    debug "log" "Extracted app_name: '$app_name'"
-
-    local customer_link=$(_extract_issue_value "$issue_body" "customer_link")
-    debug "log" "Extracted customer_link: '$customer_link'"
-
-    local banner_url=$(_extract_issue_value "$issue_body" "banner_url")
-    debug "log" "Extracted banner_url: '${banner_url:+[provided]}'"
-
-    local icon_url=$(_extract_issue_value "$issue_body" "icon_url")
-    debug "log" "Extracted icon_url: '${icon_url:+[provided]}'"
-
-    local logo_url=$(_extract_issue_value "$issue_body" "logo_url")
-    debug "log" "Extracted logo_url(deprecated): '${logo_url:+[provided]}'"
-
-    local super_password=$(_extract_issue_value "$issue_body" "super_password")
-    debug "log" "Extracted super_password: '$super_password'"
-
-    local slogan=$(_extract_issue_value "$issue_body" "slogan")
-    debug "log" "Extracted slogan: '$slogan'"
-
-    local rendezvous_server=$(_extract_issue_value "$issue_body" "rendezvous_server")
-    debug "log" "Extracted rendezvous_server: '$rendezvous_server'"
-
-    local relay_server=$(_extract_issue_value "$issue_body" "relay_server")
-    debug "log" "Extracted relay_server: '$relay_server'"
-
-    local rs_pub_key=$(_extract_issue_value "$issue_body" "rs_pub_key")
-    debug "log" "Extracted rs_pub_key: '$rs_pub_key'"
-
-    local api_server=$(_extract_issue_value "$issue_body" "api_server")
-    debug "log" "Extracted api_server: '$api_server'"
-    local lock_network_settings=$(_extract_issue_value "$issue_body" "lock_network_settings")
-    debug "log" "Extracted lock_network_settings: '$lock_network_settings'"
-    local hide_network_settings=$(_extract_issue_value "$issue_body" "hide_network_settings")
-    debug "log" "Extracted hide_network_settings: '$hide_network_settings'"
-    local source_patch_debug=$(_extract_issue_value "$issue_body" "source_patch_debug")
-    if [ -z "$source_patch_debug" ]; then
-        source_patch_debug=$(_extract_issue_value "$issue_body" "debug_source_patcher")
-    fi
-    debug "log" "Extracted source_patch_debug: '$source_patch_debug'"
-    local patch_up_to=$(_extract_issue_value "$issue_body" "patch_up_to")
-    debug "log" "Extracted patch_up_to: '$patch_up_to'"
-    
     echo "BUILD_ID=\"$build_id\""
-    echo "TAG=\"$tag\""
-    echo "EMAIL=\"$email\""
-    echo "APP_NAME=\"$app_name\""
-    echo "CUSTOMER=\"$customer\""
-    echo "CUSTOMER_LINK=\"$customer_link\""
-    echo "BANNER_URL=\"$banner_url\""
-    echo "ICON_URL=\"$icon_url\""
-    echo "LOGO_URL=\"$logo_url\""
-    echo "SUPER_PASSWORD=\"$super_password\""
-    echo "SLOGAN=\"$slogan\""
-    echo "RENDEZVOUS_SERVER=\"$rendezvous_server\""
-    echo "RELAY_SERVER=\"$relay_server\""
-    echo "RS_PUB_KEY=\"$rs_pub_key\""
-    echo "API_SERVER=\"$api_server\""
-    echo "LOCK_NETWORK_SETTINGS=\"$lock_network_settings\""
-    echo "HIDE_NETWORK_SETTINGS=\"$hide_network_settings\""
-    echo "SOURCE_PATCH_DEBUG=\"$source_patch_debug\""
-    echo "PATCH_UP_TO=\"$patch_up_to\""
+    echo "TAG=\"$ISSUE_TAG\""
+    echo "EMAIL=\"$ISSUE_EMAIL\""
+    echo "APP_NAME=\"$ISSUE_APP_NAME\""
+    echo "CUSTOMER=\"$ISSUE_CUSTOMER\""
+    echo "CUSTOMER_LINK=\"$ISSUE_CUSTOMER_LINK\""
+    echo "BANNER_URL=\"$ISSUE_BANNER_URL\""
+    echo "ICON_URL=\"$ISSUE_ICON_URL\""
+    echo "LOGO_URL=\"$ISSUE_LOGO_URL\""
+    echo "SUPER_PASSWORD=\"$ISSUE_SUPER_PASSWORD\""
+    echo "SLOGAN=\"$ISSUE_SLOGAN\""
+    echo "RENDEZVOUS_SERVER=\"$ISSUE_RENDEZVOUS_SERVER\""
+    echo "RELAY_SERVER=\"$ISSUE_RELAY_SERVER\""
+    echo "RS_PUB_KEY=\"$ISSUE_RS_PUB_KEY\""
+    echo "API_SERVER=\"$ISSUE_API_SERVER\""
+    echo "LOCK_NETWORK_SETTINGS=\"$ISSUE_LOCK_NETWORK_SETTINGS\""
+    echo "HIDE_NETWORK_SETTINGS=\"$ISSUE_HIDE_NETWORK_SETTINGS\""
+    echo "SOURCE_PATCH_DEBUG=\"$ISSUE_SOURCE_PATCH_DEBUG\""
+    echo "PATCH_UP_TO=\"$ISSUE_PATCH_UP_TO\""
 }
 
 # 应用默认值
@@ -180,23 +172,25 @@ _apply_default_values() {
         local hide_network_settings=$(echo "$event_data" | jq -r '.inputs.hide_network_settings // "false"')
         local source_patch_debug=$(echo "$event_data" | jq -r '.inputs.source_patch_debug // .inputs.enable_debug // "false"')
     else
-        local tag="$TAG"
-        local email="$EMAIL"
-        local app_name="$APP_NAME"
-        local customer="$CUSTOMER"
-        local customer_link="$CUSTOMER_LINK"
-        local banner_url="$BANNER_URL"
-        local icon_url="$ICON_URL"
-        local logo_url="$LOGO_URL"
-        local super_password="$SUPER_PASSWORD"
-        local slogan="$SLOGAN"
-        local rendezvous_server="$RENDEZVOUS_SERVER"
-        local relay_server="$RELAY_SERVER"
-        local rs_pub_key="$RS_PUB_KEY"
-        local api_server="$API_SERVER"
-        local lock_network_settings="${LOCK_NETWORK_SETTINGS:-false}"
-        local hide_network_settings="${HIDE_NETWORK_SETTINGS:-false}"
-        local source_patch_debug="${SOURCE_PATCH_DEBUG:-false}"
+        local issue_body=$(echo "$event_data" | jq -r '.issue.body // empty')
+        _extract_issue_build_params "$issue_body"
+        local tag="$ISSUE_TAG"
+        local email="$ISSUE_EMAIL"
+        local app_name="$ISSUE_APP_NAME"
+        local customer="$ISSUE_CUSTOMER"
+        local customer_link="$ISSUE_CUSTOMER_LINK"
+        local banner_url="$ISSUE_BANNER_URL"
+        local icon_url="$ISSUE_ICON_URL"
+        local logo_url="$ISSUE_LOGO_URL"
+        local super_password="$ISSUE_SUPER_PASSWORD"
+        local slogan="$ISSUE_SLOGAN"
+        local rendezvous_server="$ISSUE_RENDEZVOUS_SERVER"
+        local relay_server="$ISSUE_RELAY_SERVER"
+        local rs_pub_key="$ISSUE_RS_PUB_KEY"
+        local api_server="$ISSUE_API_SERVER"
+        local lock_network_settings="${ISSUE_LOCK_NETWORK_SETTINGS:-false}"
+        local hide_network_settings="${ISSUE_HIDE_NETWORK_SETTINGS:-false}"
+        local source_patch_debug="${ISSUE_SOURCE_PATCH_DEBUG:-false}"
     fi
     
     echo "TAG=\"${tag:-${DEFAULT_TAG:-}}\""
@@ -226,7 +220,8 @@ _process_tag_timestamp() {
     if echo "$event_data" | jq -e '.inputs' > /dev/null 2>&1; then
         tag=$(echo "$event_data" | jq -r '.inputs.tag // empty')
     else
-        tag="$TAG"
+        local issue_body=$(echo "$event_data" | jq -r '.issue.body // empty')
+        tag=$(_extract_issue_value "$issue_body" "tag")
     fi
     
     debug "log" "Processing tag timestamp for: $tag"
@@ -273,24 +268,26 @@ _generate_final_data() {
         local trigger_type="workflow_dispatch"
         local issue_number="null"
     else
-        local tag="$TAG"
-        local email="$EMAIL"
-        local app_name="$APP_NAME"
-        local customer="$CUSTOMER"
-        local customer_link="$CUSTOMER_LINK"
-        local banner_url="$BANNER_URL"
-        local icon_url="$ICON_URL"
-        local logo_url="$LOGO_URL"
-        local super_password="$SUPER_PASSWORD"
-        local slogan="$SLOGAN"
-        local rendezvous_server="$RENDEZVOUS_SERVER"
-        local relay_server="$RELAY_SERVER"
-        local rs_pub_key="$RS_PUB_KEY"
-        local api_server="$API_SERVER"
-        local lock_network_settings="${LOCK_NETWORK_SETTINGS:-false}"
-        local hide_network_settings="${HIDE_NETWORK_SETTINGS:-false}"
-        local source_patch_debug="${SOURCE_PATCH_DEBUG:-false}"
-        local patch_up_to="${PATCH_UP_TO:-}"
+        local issue_body=$(echo "$event_data" | jq -r '.issue.body // empty')
+        _extract_issue_build_params "$issue_body"
+        local tag="$ISSUE_TAG"
+        local email="$ISSUE_EMAIL"
+        local app_name="$ISSUE_APP_NAME"
+        local customer="$ISSUE_CUSTOMER"
+        local customer_link="$ISSUE_CUSTOMER_LINK"
+        local banner_url="$ISSUE_BANNER_URL"
+        local icon_url="$ISSUE_ICON_URL"
+        local logo_url="$ISSUE_LOGO_URL"
+        local super_password="$ISSUE_SUPER_PASSWORD"
+        local slogan="$ISSUE_SLOGAN"
+        local rendezvous_server="$ISSUE_RENDEZVOUS_SERVER"
+        local relay_server="$ISSUE_RELAY_SERVER"
+        local rs_pub_key="$ISSUE_RS_PUB_KEY"
+        local api_server="$ISSUE_API_SERVER"
+        local lock_network_settings="${ISSUE_LOCK_NETWORK_SETTINGS:-false}"
+        local hide_network_settings="${ISSUE_HIDE_NETWORK_SETTINGS:-false}"
+        local source_patch_debug="${ISSUE_SOURCE_PATCH_DEBUG:-false}"
+        local patch_up_to="$ISSUE_PATCH_UP_TO"
         local trigger_type="issue"
         local issue_number=$(echo "$event_data" | jq -r '.issue.number // empty')
     fi

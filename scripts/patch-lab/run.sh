@@ -29,7 +29,7 @@ Options:
   --env-file PATH      Load build params from custom env file
   --patch-only ID      Apply single patch module (e.g. F10)
   --patch-up-to ID     Apply patches through ID inclusive (e.g. F10)
-  --apply-all          Apply all 17 patches (local debug only)
+  --apply-all          Apply all 16 patches (local debug only)
   --verify-up-to ID    Run only verify checks for patches through ID
   --keep-on-fail       Do not delete upstream tree when patch/verify fails
   --skip-clean         Skip clean.sh (not recommended)

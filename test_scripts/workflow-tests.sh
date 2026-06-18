@@ -192,12 +192,12 @@ function test_source_patch_debug_switch_is_wired() {
 
 function test_verified_patch_rollout_is_wired() {
     if [ -f ".github/verified-patches.env" ] &&
-       grep -q 'CUSTOM_VERIFIED_PATCH_UP_TO=""' ".github/verified-patches.env" &&
+       grep -qE '^CUSTOM_VERIFIED_PATCH_UP_TO=' ".github/verified-patches.env" &&
        ! grep -q 'CUSTOM_UPSTREAM_BUILD_ENABLED' "$WORKFLOW_FILE" &&
        grep -q 'Load verified patch rollout' "$WORKFLOW_FILE" &&
        grep -q 'verified-patches.env' "$WORKFLOW_FILE" &&
        source_patcher_has_pattern 'vanilla upstream'; then
-        record_test_result "verified_patch_rollout_is_wired" "PASS" "零针默认 + rollout 已接入 CI（无 CUSTOM_UPSTREAM_BUILD_ENABLED）"
+        record_test_result "verified_patch_rollout_is_wired" "PASS" "rollout env + CI 加载已接入（无 CUSTOM_UPSTREAM_BUILD_ENABLED）"
         return 0
     fi
 
@@ -838,33 +838,34 @@ EOF
 
 function test_issue_params_preserve_issue_supplied_patch_variables() {
     local trigger=".github/workflows/scripts/queue/trigger.sh"
-    local event_data
-    local tmp_out
-    event_data=$(jq -c -n --arg body $'tag: issue-custom\nemail: admin@example.com\ncustomer: OneCloud\napp_name: OneCloudDesk\ncustomer_link: https://rustdesk.jackadam.top\nbanner_url: https://assets.example.com/banner.png\nicon_url: https://assets.example.com/icon.png\nsuper_password: password123\nslogan: Powered by OneCloud Desk\nrendezvous_server: rustdesk.jackadam.top:21116\nrelay_server: rustdesk.jackadam.top:21117\nrs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=\napi_server: \nlock_network_settings: true\nhide_network_settings: true\nsource_patch_debug: true' '{issue:{number:123, body:$body}}')
-    tmp_out=$(mktemp)
+    local issue_body
+    local fixture="test_scripts/fixtures/issue-params-body.txt"
 
-    (
-        set -e
-        source "$trigger"
-        trigger_manager extract-issue "$event_data" > "$tmp_out"
-    )
+    if [ ! -f "$fixture" ]; then
+        record_test_result "issue_params_preserve_issue_supplied_patch_variables" "FAIL" "缺少 fixture: $fixture"
+        return 1
+    fi
 
-    if grep -q 'APP_NAME="OneCloudDesk"' "$tmp_out" &&
-       grep -q 'CUSTOMER="OneCloud"' "$tmp_out" &&
-       grep -q 'BANNER_URL="https://assets.example.com/banner.png"' "$tmp_out" &&
-       grep -q 'ICON_URL="https://assets.example.com/icon.png"' "$tmp_out" &&
-       grep -q 'RELAY_SERVER="rustdesk.jackadam.top:21117"' "$tmp_out" &&
-       grep -q 'RS_PUB_KEY="dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI="' "$tmp_out" &&
-       grep -q 'SLOGAN="Powered by OneCloud Desk"' "$tmp_out" &&
-       grep -q 'LOCK_NETWORK_SETTINGS="true"' "$tmp_out" &&
-       grep -q 'HIDE_NETWORK_SETTINGS="true"' "$tmp_out" &&
-       grep -q 'SOURCE_PATCH_DEBUG="true"' "$tmp_out"; then
-        rm -f "$tmp_out"
-        record_test_result "issue_params_preserve_issue_supplied_patch_variables" "PASS" "Issue 变量保留完整 key、空格和网络锁定项"
+    issue_body=$(cat "$fixture")
+    # shellcheck disable=SC1090
+    source "$trigger"
+    _extract_issue_build_params "$issue_body"
+
+    if [ "$ISSUE_APP_NAME" = "OneCloudDesk" ] &&
+       [ "$ISSUE_CUSTOMER" = "OneCloud" ] &&
+       [ "$ISSUE_BANNER_URL" = "https://assets.example.com/banner.png" ] &&
+       [ "$ISSUE_ICON_URL" = "https://assets.example.com/icon.png" ] &&
+       [ "$ISSUE_RELAY_SERVER" = "rustdesk.jackadam.top:21117" ] &&
+       [ "$ISSUE_RS_PUB_KEY" = "dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=" ] &&
+       [ "$ISSUE_SLOGAN" = "Powered by OneCloud Desk" ] &&
+       [ "$ISSUE_LOCK_NETWORK_SETTINGS" = "true" ] &&
+       [ "$ISSUE_HIDE_NETWORK_SETTINGS" = "true" ] &&
+       [ "$ISSUE_SOURCE_PATCH_DEBUG" = "true" ] &&
+       [ "$ISSUE_PATCH_UP_TO" = "" ]; then
+        record_test_result "issue_params_preserve_issue_supplied_patch_variables" "PASS" "Issue 变量保留完整；patch_up_to 对 Issue 忽略"
         return 0
     fi
 
-    rm -f "$tmp_out"
     record_test_result "issue_params_preserve_issue_supplied_patch_variables" "FAIL" "Issue 参数解析不应截断 rs_pub_key、slogan、lock_network_settings 或 hide_network_settings"
     return 1
 }

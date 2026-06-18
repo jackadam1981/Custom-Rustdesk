@@ -45,6 +45,23 @@ _custom_should_run_patch() {
     [ "$idx" -le "$up_idx" ]
 }
 
+_custom_validate_source_patch_up_to() {
+    local up_to="${SOURCE_PATCH_UP_TO:-}"
+    local only="${SOURCE_PATCH_ONLY:-}"
+
+    if [ -n "$only" ] && ! _custom_patch_id_index "$only" >/dev/null; then
+        echo "source-patcher: invalid SOURCE_PATCH_ONLY='$only' (valid: ${CUSTOM_PATCH_IDS[*]})" >&2
+        return 1
+    fi
+
+    if [ -n "$up_to" ] && ! _custom_patch_id_index "$up_to" >/dev/null; then
+        echo "source-patcher: invalid SOURCE_PATCH_UP_TO='$up_to' (valid: ${CUSTOM_PATCH_IDS[*]})" >&2
+        return 1
+    fi
+
+    return 0
+}
+
 _custom_run_patch() {
     local id="$1"
     shift

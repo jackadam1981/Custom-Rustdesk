@@ -7,7 +7,7 @@
 | 层 | 文件 | 作用 |
 |----|------|------|
 | ~~Workflow~~ | ~~`CUSTOM_UPSTREAM_BUILD_ENABLED`~~ | **已删除** — 队列通过即 clone + 编译，不再问「编不编译」 |
-| **Rollout** | `.github/verified-patches.env` | `CUSTOM_VERIFIED_PATCH_UP_TO` — 空=零针；patch-lab 通过后改为 `R01`、`R02`… |
+| **Rollout** | `.github/verified-patches.env` | `CUSTOM_VERIFIED_PATCH_UP_TO` — 空=零针；patch-lab 通过后改为 `R01`、`R03`…（无 R02） |
 
 Issue 字段 `patch_up_to` 仅用于**单次 CI 调试**，不要代替 `verified-patches.env` 做生产固化。
 
@@ -59,7 +59,7 @@ patch-lab 验收 R01  →  改 verified-patches.env = "R01"  →  下次 CI 队�
 
 | ID | 本地 patch-lab | 备注 |
 |----|----------------|------|
-| R01 | 待 `--patch-up-to R01` 重跑 | 合并为 r01.sh 后需重验 |
+| R01 | 11/11（合并 r01.sh 后） | bump env 后 CI [27734278366] 待 exe 验收 |
 | R03 | 曾 13/13（旧 R02 单独时） | bump R01 后按新序重验 |
 
 每项：
