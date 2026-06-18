@@ -2,7 +2,7 @@
 # Order matches apply_custom_source_patches.
 
 CUSTOM_PATCH_IDS=(
-    R01 R02 R03
+    R01 R03
     B01 B02
     I01
     F02 F10 F11 F12

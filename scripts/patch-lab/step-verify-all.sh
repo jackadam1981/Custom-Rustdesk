@@ -35,7 +35,7 @@ EOF
     esac
 done
 
-ids=(R01 R02 R03 B01 B02 I01 F02 F10 F11 F12 S10 S12 S13 P01 P02 P03 P04)
+ids=(R01 R03 B01 B02 I01 F02 F10 F11 F12 S10 S12 S13 P01 P02 P03 P04)
 
 echo "step-verify-all: profile=$profile"
 for id in "${ids[@]}"; do

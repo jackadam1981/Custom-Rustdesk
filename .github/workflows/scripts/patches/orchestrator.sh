@@ -144,8 +144,7 @@ apply_custom_source_patches() {
         echo "source-patcher: patch-lab full apply (CUSTOM_PATCH_APPLY_ALL=true)"
     fi
 
-    _custom_run_patch R01 _custom_patch_common_rs
-    _custom_run_patch R02 _custom_patch_hbb_common_config_rs
+    _custom_run_patch R01 _custom_patch_r01
     _custom_run_patch R03 _custom_patch_is_custom_client
 
     _custom_run_patch B01 _custom_patch_brand_files

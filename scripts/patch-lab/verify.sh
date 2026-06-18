@@ -106,7 +106,7 @@ if [ -n "$expected_slogan" ]; then
 fi
 fi
 
-if verify_from R02; then
+if verify_from R01; then
 check "hbb_common APP_NAME stays RustDesk" grep -Fq 'RwLock::new("RustDesk".to_owned())' libs/hbb_common/src/config.rs
 check "hbb_common custom-slogan fallback" grep -q 'custom-slogan' libs/hbb_common/src/config.rs
 fi

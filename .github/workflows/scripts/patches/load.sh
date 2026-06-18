@@ -7,10 +7,8 @@ source "$PATCH_DIR/lib/common.sh"
 source "$PATCH_DIR/lib/sciter-brand.sh"
 # shellcheck source=patches/manifest.sh
 source "$PATCH_DIR/manifest.sh"
-# shellcheck source=patches/core/common-rs.sh
-source "$PATCH_DIR/core/common-rs.sh"
-# shellcheck source=patches/core/hbb-common.sh
-source "$PATCH_DIR/core/hbb-common.sh"
+# shellcheck source=patches/core/r01.sh
+source "$PATCH_DIR/core/r01.sh"
 # shellcheck source=patches/core/is-custom-client.sh
 source "$PATCH_DIR/core/is-custom-client.sh"
 # shellcheck source=patches/brand/brand-files.sh

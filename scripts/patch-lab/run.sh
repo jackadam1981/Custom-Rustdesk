@@ -35,7 +35,7 @@ Options:
   --skip-clean         Skip clean.sh (not recommended)
   -h, --help           Show help
 
-Patch IDs (order): R01 R02 R03 B01 B02 I01 F02 F10 F11 F12 S10 S12 S13 P01 P02 P03 P04
+Patch IDs (order): R01 R03 B01 B02 I01 F02 F10 F11 F12 S10 S12 S13 P01 P02 P03 P04
 
 Environment:
   PATCH_LAB_ROOT       Workspace root (default: ~/patch-lab/custom-rustdesk)

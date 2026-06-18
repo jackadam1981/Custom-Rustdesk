@@ -24,28 +24,43 @@ patch-lab 验收 R01  →  改 verified-patches.env = "R01"  →  下次 CI 队�
 
 ## 验证顺序
 
-### 阶段 0 — Q0 基线（**当前目标，未验收**）
+### 阶段 0 — Q0 基线（**已验收固化**）
 
-保持 `CUSTOM_VERIFIED_PATCH_UP_TO=""`，**禁止** bump 到 R01，直到下面全部打勾。
+`CUSTOM_VERIFIED_PATCH_UP_TO=""` 为已冻结基线；连接插针从阶段 1 起 bump。
 
 **Issue 模板**：新建 Issue 时选 **「Q0 基线构建（零针）」**（`.github/ISSUE_TEMPLATE/q0-baseline.yml`），或复制其中参数块。
 
 - [x] **本地结构**：`bash run-tests.sh workflow-tests`（34/34）
 - [x] **patch-lab 零针**：`scripts/patch-lab/run.sh --profile baixin`（2026-06-17 本机通过）
 - [x] **Q0 exe 抽检**：`downloads/Q0/bin/rustdesk-*-sciter.exe` 窗口标题 `RustDesk`，二进制无「郑州百信」文案
-- [ ] **CI 队列一轮**：Issue（百信 Q0 模板）→ 审批 → upstream 成功
-- [ ] **产物抽检**：当次 Release exe/msi 确认为原版
-- [ ] **固化**：`verified-patches.env` 保持 `""` 直至 CI Q0 打勾
+- [x] **CI 队列一轮**：workflow_dispatch [Run 27700547234](https://github.com/jackadam1981/Custom-Rustdesk/actions/runs/27700547234) 成功
+- [x] **产物抽检**：Release `q0-vanilla-20260617-153212` — 窗口标题 `RustDesk`，无百信定制字符串
+- [x] **固化**：`verified-patches.env` 保持 `""`；**Q0 验收完成**，可开 R01 patch-lab + bump
 
-### patch-lab 预跑（待 CI 固化前）
+### 阶段 1 — 连接插针（R01，单文件 `r01.sh`）
+
+**1 个 rollout 针 = 1 个脚本**，改 2 个上游文件：
+
+| 上游文件 | 作用 |
+|----------|------|
+| `src/common.rs` | 运行时默认 + 连接逻辑 |
+| `libs/hbb_common/src/config.rs` | 设置页 ID/中继/API/Key **预填** |
+
+| 设置页字段 | 变量 | 条件 |
+|------------|------|------|
+| ID 服务器 | `rendezvous_server` | 必填 |
+| 中继 | `relay_server` | 空则同 ID |
+| API | `api_server` | **空则不插** |
+| Key | `rs_pub_key` | 有值才写 |
+
+验收：`patch-lab --patch-up-to R01` → bump env → CI + exe → 设置页四项（无 API 时 API 仍空）→ 再 R03…
+
+### patch-lab 预跑
 
 | ID | 本地 patch-lab | 备注 |
 |----|----------------|------|
-| R01 | 通过 9/9 | 待 Q0 CI 后再 bump env |
-| R02 | 通过 11/11 | |
-| R03 | 通过 13/13 | 核心组 R01–R03 patch-lab 完毕 |
-
-> 说明：`downloads/Q0/` 里若有旧产物，仅代表历史试跑；以**本轮** workflow + 本地 patch-lab 通过为准。
+| R01 | 待 `--patch-up-to R01` 重跑 | 合并为 r01.sh 后需重验 |
+| R03 | 曾 13/13（旧 R02 单独时） | bump R01 后按新序重验 |
 
 每项：
 
