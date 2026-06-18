@@ -46,10 +46,11 @@
 
 | 项 | 要求 |
 |----|------|
-| 性质 | 独立于 **临时密码**、**固定密码** 之外的第三套连接密码（preset / 超级密码） |
+| 性质 | 连接参数之一（preset / 超级密码），与 ID/中继/API/Key 同属 **R01** 插针 |
 | 互不影响 | **不修改、不覆盖、不禁用** 客户端临时密码与固定密码的生成、显示与校验逻辑 |
 | 选填 | **有则插针，无则跳过**，不强制传入 |
 | 行为 | 传入时写入 `HARD_SETTINGS["password"]`（preset）；未传则不插针、不回落 secret 默认值 |
+| Rollout | **R01**（`patches/core/r01.sh`，与 ID/中继/API/Key 同一针） |
 
 ### 5. MSI / 安装身份（不变）
 
@@ -81,12 +82,11 @@
 
 插针完成后生成 `custom-build-config.json`，可作为产物审计依据。
 
-## 插针顺序
+## 插针顺序（Rollout）
 
-`apply_custom_source_patches()` 执行顺序（Sciter 首页 patch 在 `_custom_patch_custom_ui_text` 内调用）：
+R01（`r01.sh`）一次处理连接五项：`common.rs` 含超级密码 preset + `config.rs` 设置页预填。其后按 manifest 顺序 R03 → B01 → …
 
-1. `_custom_patch_common_rs`
-2. `_custom_patch_hbb_common_config_rs`
+旧版 monolith 顺序（已拆分为独立针）：
 3. `_custom_patch_brand_files`
 4. `_custom_patch_flutter_ui_app_name`
 5. `_custom_patch_logo_assets`（仅当 `logo_url` 非空）

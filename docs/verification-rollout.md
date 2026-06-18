@@ -37,29 +37,35 @@ patch-lab 验收 R01  →  改 verified-patches.env = "R01"  →  下次 CI 队�
 - [x] **产物抽检**：Release `q0-vanilla-20260617-153212` — 窗口标题 `RustDesk`，无百信定制字符串
 - [x] **固化**：`verified-patches.env` 保持 `""`；**Q0 验收完成**，可开 R01 patch-lab + bump
 
-### 阶段 1 — 连接插针（R01，单文件 `r01.sh`）
+### 阶段 1 — 连接插针（R01，单文件 `r01.sh`）**已验收**
 
 **1 个 rollout 针 = 1 个脚本**，改 2 个上游文件：
 
 | 上游文件 | 作用 |
 |----------|------|
-| `src/common.rs` | 运行时默认 + 连接逻辑 |
+| `src/common.rs` | 运行时默认 + 连接逻辑 + **超级密码**（`HARD_SETTINGS.password`） |
 | `libs/hbb_common/src/config.rs` | 设置页 ID/中继/API/Key **预填** |
 
-| 设置页字段 | 变量 | 条件 |
-|------------|------|------|
+| 连接参数 | 变量 | 条件 |
+|----------|------|------|
 | ID 服务器 | `rendezvous_server` | 必填 |
-| 中继 | `relay_server` | 空则同 ID |
+| 中继 | `relay_server` | 空则同 ID 主机 |
 | API | `api_server` | **空则不插** |
 | Key | `rs_pub_key` | 有值才写 |
+| 超级密码 | `super_password` | 有值写入 preset password；**无则跳过** |
 
-验收：`patch-lab --patch-up-to R01` → bump env → CI + exe → 设置页四项（无 API 时 API 仍空）→ 再 R03…
+验收：`patch-lab --patch-up-to R01` → bump env → CI + exe → 设置页四项预填 + 超级密码 preset 生效 → 再 R03…
+
+- [x] **patch-lab**：`--patch-up-to R01` 12/12（含 super_password 校验）
+- [x] **CI**：[27734278366](https://github.com/jackadam1981/Custom-Rustdesk/actions/runs/27734278366) success
+- [x] **Release**：`r01-baixin-20260618-031444`
+- [x] **exe UI**：设置页连接四项 + 超级密码（本机验证通过，2026-06-18）
 
 ### patch-lab 预跑
 
 | ID | 本地 patch-lab | 备注 |
 |----|----------------|------|
-| R01 | 11/11（合并 r01.sh 后） | CI [27734278366](https://github.com/jackadam1981/Custom-Rustdesk/actions/runs/27734278366) success；Release `r01-baixin-20260618-031444`；exe UI 待本机验收 |
+| R01 | 12/12 + exe UI | **已固化** `CUSTOM_VERIFIED_PATCH_UP_TO="R01"` |
 | R03 | 曾 13/13（旧 R02 单独时） | bump R01 后按新序重验 |
 
 每项：

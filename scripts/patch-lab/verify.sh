@@ -104,20 +104,17 @@ fi
 if [ -n "$expected_slogan" ]; then
     check "common.rs CUSTOM_SLOGAN" grep -Fq "const CUSTOM_SLOGAN: &str = \"$expected_slogan\";" src/common.rs
 fi
-fi
 
-if verify_from R01; then
-check "hbb_common APP_NAME stays RustDesk" grep -Fq 'RwLock::new("RustDesk".to_owned())' libs/hbb_common/src/config.rs
-check "hbb_common custom-slogan fallback" grep -q 'custom-slogan' libs/hbb_common/src/config.rs
-fi
-
-if verify_from R01; then
 if [ -n "$expected_super_password" ]; then
     check "super_password in config json" grep -Fq "\"super_password\": \"$expected_super_password\"" custom-build-config.json
-    check "super_password HARD_SETTINGS patch" grep -Fq "hard_settings.insert(\"password\"" src/common.rs
+    check "common.rs CUSTOM_SUPER_PASSWORD" grep -Fq "const CUSTOM_SUPER_PASSWORD: &str = \"$expected_super_password\";" src/common.rs
+    check "super_password HARD_SETTINGS patch" grep -Fq 'hard_settings.insert("password"' src/common.rs
 else
     check "no super_password HARD_SETTINGS when profile empty" bash -c '! grep -q "hard_settings.insert(\"password\"" src/common.rs'
 fi
+
+check "hbb_common APP_NAME stays RustDesk" grep -Fq 'RwLock::new("RustDesk".to_owned())' libs/hbb_common/src/config.rs
+check "hbb_common custom-slogan fallback" grep -q 'custom-slogan' libs/hbb_common/src/config.rs
 fi
 
 # --- B. UI patch markers ---

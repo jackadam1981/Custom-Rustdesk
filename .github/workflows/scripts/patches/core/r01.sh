@@ -1,6 +1,7 @@
 # R01 — 连接/服务器默认（1 个 rollout 针 = 1 个脚本）
 # 改 2 个上游文件：src/common.rs + libs/hbb_common/src/config.rs
-# ID/中继/API/Key 按 BUILD_* 条件插；api_server 空则不写 api-server。
+# 连接五项：ID / 中继 / API / Key / 超级密码（super_password → HARD_SETTINGS preset）
+# api_server 空则不写 api-server；super_password 空则不写 password。
 
 _custom_patch_r01() {
     _r01_patch_common_rs
