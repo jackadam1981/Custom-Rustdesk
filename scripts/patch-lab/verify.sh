@@ -19,11 +19,11 @@ fi
 mkdir -p "$(dirname "$REPORT_FILE")"
 : >"$REPORT_FILE"
 
-cd "$UPSTREAM_DIR"
-
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck disable=SC1091
 source "$REPO_ROOT/.github/workflows/scripts/patches/manifest.sh"
+
+cd "$UPSTREAM_DIR"
 
 verify_from() {
     local min_id="$1"
@@ -67,13 +67,31 @@ expected_customer=""
 expected_app_name=""
 expected_slogan=""
 expected_super_password=""
-if [ -n "$PROFILE_FILE" ] && [ -f "$PROFILE_FILE" ]; then
-    # shellcheck disable=SC1090
-    source "$PROFILE_FILE"
-    expected_customer="${BUILD_CUSTOMER:-}"
-    expected_app_name="${BUILD_APP_NAME:-}"
-    expected_slogan="${BUILD_SLOGAN:-}"
-    expected_super_password="${BUILD_SUPER_PASSWORD:-}"
+expected_api_server=""
+expected_lock=false
+expected_hide=false
+_profile_bool() {
+    case "${1:-false}" in
+        true|TRUE|True|1|yes|YES|y|Y|on|ON) echo true ;;
+        *) echo false ;;
+    esac
+}
+if [ -n "$PROFILE_FILE" ]; then
+    profile_abs="$PROFILE_FILE"
+    if [[ "$PROFILE_FILE" != /* ]]; then
+        profile_abs="$REPO_ROOT/$PROFILE_FILE"
+    fi
+    if [ -f "$profile_abs" ]; then
+        # shellcheck disable=SC1090
+        source "$profile_abs"
+        expected_customer="${BUILD_CUSTOMER:-}"
+        expected_app_name="${BUILD_APP_NAME:-}"
+        expected_slogan="${BUILD_SLOGAN:-}"
+        expected_super_password="${BUILD_SUPER_PASSWORD:-}"
+        expected_api_server="${BUILD_API_SERVER:-}"
+        expected_lock=$(_profile_bool "${BUILD_LOCK_NETWORK_SETTINGS:-false}")
+        expected_hide=$(_profile_bool "${BUILD_HIDE_NETWORK_SETTINGS:-false}")
+    fi
 fi
 
 echo "patch-lab verify report" >>"$REPORT_FILE"
@@ -105,12 +123,34 @@ if [ -n "$expected_slogan" ]; then
     check "common.rs CUSTOM_SLOGAN" grep -Fq "const CUSTOM_SLOGAN: &str = \"$expected_slogan\";" src/common.rs
 fi
 
+if [ -n "$expected_api_server" ]; then
+    check "config api_server" grep -Fq "\"api_server\": \"$expected_api_server\"" custom-build-config.json
+    check "common.rs CUSTOM_API_SERVER" grep -Fq "const CUSTOM_API_SERVER: &str = \"$expected_api_server\";" src/common.rs
+    check "register-device not forced N when api set" bash -c '! grep -Fq "const CUSTOM_REGISTER_DEVICE: &str = \"N\";" src/common.rs'
+else
+    check "register-device N when api empty" grep -Fq 'const CUSTOM_REGISTER_DEVICE: &str = "N";' src/common.rs
+fi
+
 if [ -n "$expected_super_password" ]; then
     check "super_password in config json" grep -Fq "\"super_password\": \"$expected_super_password\"" custom-build-config.json
     check "common.rs CUSTOM_SUPER_PASSWORD" grep -Fq "const CUSTOM_SUPER_PASSWORD: &str = \"$expected_super_password\";" src/common.rs
     check "super_password HARD_SETTINGS patch" grep -Fq 'hard_settings.insert("password"' src/common.rs
 else
     check "no super_password HARD_SETTINGS when profile empty" bash -c '! grep -q "hard_settings.insert(\"password\"" src/common.rs'
+fi
+
+if [ "$expected_hide" = true ]; then
+    check "config hide_network_settings true" grep -Fq '"hide_network_settings": true' custom-build-config.json
+    check "common.rs hide network Y" grep -Fq 'const CUSTOM_HIDE_NETWORK_SETTINGS: &str = "Y";' src/common.rs
+else
+    check "common.rs hide network empty when false" grep -Fq 'const CUSTOM_HIDE_NETWORK_SETTINGS: &str = "";' src/common.rs
+fi
+
+if [ "$expected_lock" = true ]; then
+    check "config lock_network_settings true" grep -Fq '"lock_network_settings": true' custom-build-config.json
+    check "common.rs disable-settings when lock" grep -Fq 'hard_settings.insert("disable-settings"' src/common.rs
+else
+    check "no disable-settings when lock false" bash -c '! grep -q "disable-settings" src/common.rs'
 fi
 
 check "hbb_common APP_NAME stays RustDesk" grep -Fq 'RwLock::new("RustDesk".to_owned())' libs/hbb_common/src/config.rs

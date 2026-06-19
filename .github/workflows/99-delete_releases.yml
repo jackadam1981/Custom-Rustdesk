@@ -1,0 +1,89 @@
+name: 99 - Delete Releases
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '操作模式（先模拟确认列表）'
+        required: true
+        default: '模拟模式'
+        type: choice
+        options:
+          - 模拟模式
+          - 删除模式
+      keep_last:
+        description: '保留最新几个 release（不区分 prerelease）'
+        required: true
+        default: 3
+        type: number
+      keep_days:
+        description: '额外保留最近几天内的 release（超出 keep_last 仍保留；0=关闭）'
+        required: true
+        default: 7
+        type: number
+      limit:
+        description: '最多扫描 release 数量'
+        required: false
+        default: 1000
+        type: number
+
+permissions:
+  contents: write
+
+jobs:
+  delete_releases:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup GitHub CLI
+        run: |
+          type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh jq -y
+
+      - name: Authenticate
+        env:
+          BUILD_TOKEN: ${{ secrets.BUILD_TOKEN }}
+        run: |
+          if [ -z "$BUILD_TOKEN" ]; then
+            echo "❌ 未设置 BUILD_TOKEN secret"
+            exit 1
+          fi
+          echo "$BUILD_TOKEN" | gh auth login --with-token
+
+      - name: Delete releases
+        env:
+          MODE: ${{ github.event.inputs.mode }}
+          KEEP_LAST: ${{ github.event.inputs.keep_last }}
+          KEEP_DAYS: ${{ github.event.inputs.keep_days }}
+          LIMIT: ${{ github.event.inputs.limit }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          args=(
+            --repo "$REPO"
+            --keep-last "$KEEP_LAST"
+            --keep-days "$KEEP_DAYS"
+            --limit "$LIMIT"
+          )
+          if [ "$MODE" = "删除模式" ]; then
+            args+=(--execute -y)
+            echo "⚠️ 删除模式：release + git tag 一并删除"
+          else
+            echo "🔍 模拟模式：仅列出将删除的 release"
+          fi
+          bash scripts/delete-github-releases.sh "${args[@]}"
+
+      - name: Summary
+        if: always()
+        env:
+          BUILD_TOKEN: ${{ secrets.BUILD_TOKEN }}
+        run: |
+          echo "$BUILD_TOKEN" | gh auth login --with-token 2>/dev/null || true
+          echo "=== 剩余 release（最新 15 条）==="
+          gh release list --repo "${{ github.repository }}" --limit 15

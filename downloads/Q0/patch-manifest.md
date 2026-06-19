@@ -5,7 +5,7 @@
 
 | 序 | ID | 模块 | 上游目标 | 状态 |
 |----|-----|------|----------|------|
-| 1 | R01 | `patches/core/r01.sh` | `common.rs` + `config.rs`（连接五项：ID/中继/API/Key/超级密码） | **已验收** |
+| 1 | R01 | `patches/core/r01.sh` | `common.rs` + `config.rs`（连接七项：ID/中继/API/Key/超级密码/锁定/隐藏） | **已验收** |
 | 2 | R03 | `patches/core/is-custom-client.sh` | `is_custom_client()` | 待 R01 后 |
 | 3 | B01 | `patches/brand/brand-files.sh` | 各平台显示名 | 未启用 |
 | 4 | B02 | `patches/brand/logo-assets.sh` | logo / icon / tray | 未启用 |

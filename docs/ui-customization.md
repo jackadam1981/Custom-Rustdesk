@@ -72,10 +72,10 @@
 | `customer_link` | Powered by 点击链接 | 默认 `https://zzsn.work` |
 | `logo_url` | 客户 Logo（URL 或仓库内路径） | 空 = 不换 Logo |
 | `slogan` | 首页品牌区第二行文案 | 可空 |
-| `super_password` | 超级密码（见上文 §4） | **选填** |
-| `hide_network_settings` | 隐藏 ID/中继菜单与网络设置项 | `false` |
-| `lock_network_settings` | 锁定网络/设置 | `false` |
-| `rendezvous_server` | ID 服务器 | — |
+| `super_password` | 超级密码（见上文 §4） | **选填**；**R01** |
+| `hide_network_settings` | 隐藏 ID/中继菜单与网络设置项 | `false`；**R01** |
+| `lock_network_settings` | 锁定网络/设置（HARD_SETTINGS） | `false`；**R01** |
+| `rendezvous_server` | ID 服务器 | **R01** |
 | `relay_server` | 中继服务器 | 默认同 rendezvous 主机 |
 | `rs_pub_key` | hbbs 公钥 | 空则用仓库 secret `DEFAULT_RS_PUB_KEY` |
 | `api_server` | API 服务器 | 可空 |
@@ -84,7 +84,7 @@
 
 ## 插针顺序（Rollout）
 
-R01（`r01.sh`）一次处理连接五项：`common.rs` 含超级密码 preset + `config.rs` 设置页预填。其后按 manifest 顺序 R03 → B01 → …
+R01（`r01.sh`）一次处理连接七项：ID/中继/API/Key/超级密码/锁定/隐藏；`common.rs` 写运行时默认与 HARD_SETTINGS，`config.rs` 负责设置页预填。其后按 manifest 顺序 R03 → B01 → …
 
 旧版 monolith 顺序（已拆分为独立针）：
 3. `_custom_patch_brand_files`

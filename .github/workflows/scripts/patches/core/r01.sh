@@ -1,7 +1,9 @@
 # R01 — 连接/服务器默认（1 个 rollout 针 = 1 个脚本）
 # 改 2 个上游文件：src/common.rs + libs/hbb_common/src/config.rs
-# 连接五项：ID / 中继 / API / Key / 超级密码（super_password → HARD_SETTINGS preset）
-# api_server 空则不写 api-server；super_password 空则不写 password。
+# 连接七项：ID / 中继 / API / Key / 超级密码 / 锁定网络 / 隐藏网络
+# api_server 空则不写 api-server；super_password 空则不写 password；
+# lock_network_settings=true → HARD_SETTINGS + disable-settings；
+# hide_network_settings=true → hide-server/network-settings=Y。
 
 _custom_patch_r01() {
     _r01_patch_common_rs

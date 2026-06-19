@@ -53,8 +53,10 @@ patch-lab 验收 R01  →  改 verified-patches.env = "R01"  →  下次 CI 队�
 | API | `api_server` | **空则不插** |
 | Key | `rs_pub_key` | 有值才写 |
 | 超级密码 | `super_password` | 有值写入 preset password；**无则跳过** |
+| 锁定网络/设置 | `lock_network_settings` | `true` → HARD_SETTINGS + `disable-settings` |
+| 隐藏网络设置 | `hide_network_settings` | `true` → `hide-server/network-settings=Y` |
 
-验收：`patch-lab --patch-up-to R01` → bump env → CI + exe → 设置页四项预填 + 超级密码 preset 生效 → 再 R03…
+验收：`patch-lab --patch-up-to R01` → bump env → CI + exe → 设置页连接七项 + 超级密码 preset → 再 R03…
 
 - [x] **patch-lab**：`--patch-up-to R01` 12/12（含 super_password 校验）
 - [x] **CI**：[27734278366](https://github.com/jackadam1981/Custom-Rustdesk/actions/runs/27734278366) success
@@ -103,7 +105,7 @@ slogan: 科技提高效率
 rendezvous_server: rustdesk.jackadam.top:21116
 relay_server: rustdesk.jackadam.top:21117
 rs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=
-api_server:
+api_server: http://rustdesk.jackadam.top:21114
 lock_network_settings: false
 hide_network_settings: false
 source_patch_debug: false
