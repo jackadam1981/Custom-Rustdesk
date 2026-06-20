@@ -11,14 +11,43 @@ _custom_fetch_image_source() {
             echo "source-patcher: failed to download image: $source" >&2
             return 1
         fi
-    elif [ -f "$source" ]; then
-        cp "$source" "$dest"
+        return 0
+    fi
+
+    local resolved=""
+    if [ -f "$source" ]; then
+        resolved="$source"
     elif [ -f "../$source" ]; then
-        cp "../$source" "$dest"
+        resolved="../$source"
     else
+        local repo_root=""
+        if [ -n "${CUSTOM_RUSTDESK_REPO:-}" ] && [ -d "${CUSTOM_RUSTDESK_REPO}" ]; then
+            repo_root="${CUSTOM_RUSTDESK_REPO}"
+        elif [ -n "${GITHUB_WORKSPACE:-}" ] && [ -d "${GITHUB_WORKSPACE}" ]; then
+            repo_root="${GITHUB_WORKSPACE}"
+        fi
+
+        if [ -n "$repo_root" ]; then
+            local stripped="${source#./}"
+            stripped="${stripped#../}"
+            for candidate in \
+                "$repo_root/$source" \
+                "$repo_root/$stripped" \
+                "$repo_root/branding/$(basename "$source")"; do
+                if [ -f "$candidate" ]; then
+                    resolved="$candidate"
+                    break
+                fi
+            done
+        fi
+    fi
+
+    if [ -z "$resolved" ] || [ ! -f "$resolved" ]; then
         echo "source-patcher: image source is neither a URL nor a file: $source" >&2
         return 1
     fi
+
+    cp "$resolved" "$dest"
 }
 
 _custom_patch_logo_assets() {

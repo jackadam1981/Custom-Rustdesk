@@ -146,26 +146,26 @@ apply_custom_source_patches() {
         echo "source-patcher: patch-lab full apply (CUSTOM_PATCH_APPLY_ALL=true)"
     fi
 
-    _custom_run_patch R01 _custom_patch_r01
-    _custom_run_patch R03 _custom_patch_is_custom_client
+    _custom_run_patch R01 _custom_patch_r01 || return 1
+    _custom_run_patch R03 _custom_patch_is_custom_client || return 1
 
-    _custom_run_patch B01 _custom_patch_brand_files
-    _custom_run_patch B02 _custom_patch_logo_assets
-    _custom_run_patch I01 _custom_patch_i18n_ui_strings
+    _custom_run_patch B01 _custom_patch_brand_files || return 1
+    _custom_run_patch B02 _custom_patch_logo_assets || return 1
+    _custom_run_patch I01 _custom_patch_i18n_ui_strings || return 1
 
-    _custom_run_patch F02 _custom_patch_flutter_ui_app_name
-    _custom_run_patch F10 _custom_patch_flutter_home_header
-    _custom_run_patch F11 _custom_patch_flutter_powered_by
-    _custom_run_patch F12 _custom_patch_flutter_about_studio
+    _custom_run_patch F02 _custom_patch_flutter_ui_app_name || return 1
+    _custom_run_patch F10 _custom_patch_flutter_home_header || return 1
+    _custom_run_patch F11 _custom_patch_flutter_powered_by || return 1
+    _custom_run_patch F12 _custom_patch_flutter_about_studio || return 1
 
-    _custom_run_patch S10 _custom_patch_sciter_home_ui
-    _custom_run_patch S12 _custom_patch_sciter_about_studio
-    _custom_run_patch S13 _custom_patch_sciter_index_css
+    _custom_run_patch S10 _custom_patch_sciter_home_ui || return 1
+    _custom_run_patch S12 _custom_patch_sciter_about_studio || return 1
+    _custom_run_patch S13 _custom_patch_sciter_index_css || return 1
 
-    _custom_run_patch P01 _custom_patch_portable_working_dir
-    _custom_run_patch P02 _custom_patch_windows_test_signing
-    _custom_run_patch P03 _custom_patch_msi_preprocess_app_name
-    _custom_run_patch P04 _custom_patch_rust_cache_nonfatal
+    _custom_run_patch P01 _custom_patch_portable_working_dir || return 1
+    _custom_run_patch P02 _custom_patch_windows_test_signing || return 1
+    _custom_run_patch P03 _custom_patch_msi_preprocess_app_name || return 1
+    _custom_run_patch P04 _custom_patch_rust_cache_nonfatal || return 1
 
     echo "source-patcher: custom source patches applied"
 }

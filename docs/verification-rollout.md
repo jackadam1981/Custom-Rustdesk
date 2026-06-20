@@ -1,6 +1,7 @@
 # 渐进验证与固化清单
 
-> 原则：**验证一项、固化一项**。CI 永远编译；插针深度由 rollout 开关决定。
+> 原则：**验证一项、固化一项**。CI 永远编译；插针深度由 rollout 开关决定。  
+> **换工作区**：见 [workspace-handoff.md](./workspace-handoff.md)。
 
 ## 两层开关（已简化）
 
@@ -14,13 +15,45 @@ Issue 字段 `patch_up_to` 仅用于**单次 CI 调试**，不要代替 `verifie
 ## 流程
 
 ```
-patch-lab 验收 R01  →  改 verified-patches.env = "R01"  →  下次 CI 队列自动打到 R01 并编译
+本地 step-verify-all（16 针静态） →  按 milestone bump env  →  每组 1 次 CI 全平台编译  →  exe UI 验收
 ```
 
 | 阶段 | patch-lab | CI |
 |------|-----------|-----|
 | Q0 | `run.sh --profile baixin`（零针验树） | `CUSTOM_VERIFIED_PATCH_UP_TO=""` |
-| R01+ | `run.sh --patch-up-to R01` | bump env 后队列构建带 R01 |
+| 逐针静态 | `step-verify-all.sh`（累计到每 ID，不编译） | — |
+| milestone | `run.sh --patch-up-to <组末 ID>` | bump env → **1 次** CI（2 exe + 1 msi） |
+
+### CI milestone 分组（建议 5～6 次全量编译，不要 16 次）
+
+| 序 | Milestone | bump `CUSTOM_VERIFIED_PATCH_UP_TO` | 包含针 | 本机 exe 验收重点 |
+|----|-----------|-------------------------------------|--------|-------------------|
+| 0 | Q0 基线 | `""` | 零针 | 窗口标题 RustDesk，无百信字符串 |
+| 1 | 连接 | `"R01"` | R01 | 设置页连接七项 + 超级密码 |
+| 2 | 定制判定 | `"R03"` | + R03 | `isCustomClient()` 分支生效 |
+| 3 | 品牌 | `"B02"` | + B01 B02 | 图标/各平台显示名（MSI 仍 RustDesk） |
+| 4 | 文案 | `"I01"` | + I01 | cn/en 定制字符串 |
+| 5 | 双 UI | `"S13"` 或 `"F12"` | + F02 F10 F11 F12 S10 S12 S13 | 首页/Powered/关于（Flutter + Sciter 各验） |
+| 6 | 平台 | `"P04"` | + P01 P02 P03 P04 | 便携目录、签名、MSI 路径 |
+
+**原则**：针之间有依赖（F/S 依赖 R03 的 `isCustomClient()`），rollout 用 **`--patch-up-to` 累计**，不用 `--patch-only` 单独 CI。
+
+### 本地 16 针全量静态验收
+
+不编译，约 16 次 upstream clone + verify（修脚本用，失败可继续）：
+
+```bash
+bash scripts/patch-lab/step-verify-all.sh --profile baixin
+# 报告：~/patch-lab/custom-rustdesk/step-verify-all-report.txt
+# 或 PATCH_LAB_ROOT=.patch-lab 时：.patch-lab/step-verify-all-report.txt
+```
+
+单针调试：
+
+```bash
+scripts/patch-lab/run.sh --profile baixin --patch-up-to F10
+scripts/patch-lab/ui-skill-verify.sh   # UI 组
+```
 
 ## 验证顺序
 
@@ -63,19 +96,42 @@ patch-lab 验收 R01  →  改 verified-patches.env = "R01"  →  下次 CI 队�
 - [x] **Release**：`r01-baixin-20260618-031444`
 - [x] **exe UI**：设置页连接四项 + 超级密码（本机验证通过，2026-06-18）
 
-### patch-lab 预跑
+### patch-lab 预跑（step-verify-all）
 
-| ID | 本地 patch-lab | 备注 |
-|----|----------------|------|
-| R01 | 12/12 + exe UI | **已固化** `CUSTOM_VERIFIED_PATCH_UP_TO="R01"` |
-| R03 | 曾 13/13（旧 R02 单独时） | bump R01 后按新序重验 |
+**最近全量跑**：2026-06-20（二轮）— `PATCH_LAB_ROOT=.patch-lab-test bash scripts/patch-lab/step-verify-all.sh --profile baixin`  
+报告：`.patch-lab-test/step-verify-all-report.txt` — **16/16 PASS**
 
-每项：
+| ID | 结果 | verify | CI milestone | 备注 |
+|----|------|--------|--------------|------|
+| R01 | **PASS** | 17/17 | M1 连接 | 已固化 + exe UI |
+| R03 | **PASS** | 19/19 | M2 | 可 bump |
+| B01 | **PASS** | 19/19 | M3 品牌 | |
+| B02 | **PASS** | 26/26 | M3 | `CUSTOM_RUSTDESK_REPO` + `branding/` 路径 |
+| I01 | **PASS** | 28/28 | M4 | |
+| F02 | **PASS** | 28/28 | M5 UI | |
+| F10 | **PASS** | 32/32 | M5 | Flutter 首页 |
+| F11 | **PASS** | 34/34 | M5 | `getConnectionPageTitle` 锚点（CRLF 安全） |
+| F12 | **PASS** | 38/38 | M5 | Flutter 关于 |
+| S10 | **PASS** | 43/43 | M5 | Sciter 首页 |
+| S12 | **PASS** | 46/46 | M5 | Sciter 关于 |
+| S13 | **PASS** | 46/46 | M5 | 配置菜单 |
+| P01 | **PASS** | 47/47 | M6 平台 | |
+| P02 | **PASS** | 48/48 | M6 | |
+| P03 | **PASS** | 49/49 | M6 | |
+| P04 | **PASS** | 51/51 | M6 | 全针静态 OK |
 
-1. `scripts/patch-lab/run.sh --profile baixin --patch-up-to <ID>`
-2. （UI 针）`ui-skill-verify.sh`
-3. 只改 `.github/verified-patches.env` 一行
-4. CI 队列跑一轮确认
+**已修**：① B02 `logo-assets.sh` 解析仓库内 `branding/`；② F11 `connection_page.dart` 改用 Python + `getConnectionPageTitle` 锚点。
+
+**下一 milestone**：M2 bump `CUSTOM_VERIFIED_PATCH_UP_TO="R03"` → 1 次 CI。
+
+跑完 `step-verify-all.sh` 后在此表更新 PASS/FAIL 与报告日期。
+
+每项 milestone：
+
+1. `bash scripts/patch-lab/step-verify-all.sh`（或单 ID `--patch-up-to`）
+2. （UI milestone）`ui-skill-verify.sh`
+3. 只改 `.github/verified-patches.env` 一行（组末 ID）
+4. **1 次** CI → 下载 2 exe + 1 msi
 5. 本清单打勾
 
 ## 推荐命令（Q0）

@@ -476,6 +476,7 @@ jobs:
           TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           cd rustdesk-source
 
+          export CUSTOM_RUSTDESK_REPO="${GITHUB_WORKSPACE}"
           export BUILD_TAG="$(echo "$TRIGGER_DATA" | jq -r '.build_params.tag // empty')"
           export BUILD_APP_NAME="$(echo "$TRIGGER_DATA" | jq -r '.build_params.app_name // empty')"
           export BUILD_CUSTOMER="$(echo "$TRIGGER_DATA" | jq -r '.build_params.customer // empty')"
@@ -504,7 +505,7 @@ jobs:
           fi
 
           echo "🧩 Apply source patches (verified rollout gate)..."
-          apply_custom_source_patches
+          apply_custom_source_patches || exit 1
 
           mkdir -p .github/workflows
           cat > .github/workflows/custom-rustdesk-upstream-build.yml <<'EOF'

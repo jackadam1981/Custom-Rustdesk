@@ -8,7 +8,31 @@ _custom_patch_flutter_powered_by() {
 
     local connection_file="flutter/lib/desktop/pages/connection_page.dart"
     if [ -f "$connection_file" ] && ! grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$connection_file"; then
-        perl -0pi -e 's/(child: Column\(\n          children: \[\n)/$1            if (bind.isCustomClient())\n              Align(\n                alignment: Alignment.centerLeft,\n                child: loadPowered(context),\n              ).paddingOnly(left: 12, top: 12), \/\/ CUSTOM_RUSTDESK_HOME_POWERED\n/s' "$connection_file"
+        python3 - "$connection_file" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+marker = "CUSTOM_RUSTDESK_HOME_POWERED"
+if marker in text:
+    raise SystemExit(0)
+
+anchor = "getConnectionPageTitle(context, false).marginOnly(bottom: 15),"
+inject = """            if (bind.isCustomClient())
+              Align(
+                alignment: Alignment.centerLeft,
+                child: loadPowered(context),
+              ).paddingOnly(left: 12, top: 12), // CUSTOM_RUSTDESK_HOME_POWERED
+            """
+
+if anchor not in text:
+    raise SystemExit(
+        "source-patcher: getConnectionPageTitle anchor not found in connection_page.dart"
+    )
+
+path.write_text(text.replace(anchor, inject + anchor, 1), encoding="utf-8")
+PY
         if grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$connection_file"; then
             echo "source-patcher: customer powered_by injected above Control Remote Desktop in $connection_file"
         else

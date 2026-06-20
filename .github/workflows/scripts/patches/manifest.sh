@@ -69,5 +69,8 @@ _custom_run_patch() {
         return 0
     fi
     echo "source-patcher: [$id] $*"
-    "$@"
+    if ! "$@"; then
+        echo "source-patcher: [$id] FAILED" >&2
+        return 1
+    fi
 }

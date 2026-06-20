@@ -1,0 +1,16 @@
+---
+description: Custom RustDesk 项目状态与 patch-lab rollout 交接
+alwaysApply: true
+---
+
+# Custom RustDesk 工作区上下文
+
+- 主分支：`codex/linux-appimage-actions-test`；GitHub `jackadam1981/Custom-Rustdesk`。
+- Rollout 开关：`.github/verified-patches.env` → 当前 `"R01"`；下一 milestone bump `"R03"`。
+- 插针模块在 `.github/workflows/scripts/patches/`；顺序无 R02：`R01 R03 B01 B02 I01 F02 F10 F11 F12 S10 S12 S13 P01 P02 P03 P04`。
+- 本地验收：`bash scripts/patch-lab/step-verify-all.sh --profile baixin`（16 针静态，不编译）；详 `docs/verification-rollout.md`、`docs/workspace-handoff.md`。
+- B02 品牌图：仓库 `branding/`；CI/patch-lab 需 `CUSTOM_RUSTDESK_REPO` 或 `GITHUB_WORKSPACE`。
+- F11 Flutter Powered by：改 `flutter/powered-by.sh`，勿用仅匹配 LF 的 perl 锚 `child: Column`（上游 Windows clone 为 CRLF）。
+- 任一针失败应中止：`orchestrator.sh` 已 fail-fast；CI `apply_custom_source_patches || exit 1`。
+- 百信 profile：`scripts/patch-lab/profiles/baixin.env`。
+- CI 红≠必编译失败：查主 run；macOS 常见制品上传 ENOTFOUND，Windows job 可能已成功。
