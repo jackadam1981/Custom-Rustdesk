@@ -22,6 +22,8 @@
 
 ## 本轮已合并修复（2026-06-20）
 
+**Commit**：`a30be3f` — `fix(patch-lab): B02 branding paths, F11 CRLF powered-by, patch fail-fast`
+
 1. **B02** — `logo-assets.sh` 通过 `CUSTOM_RUSTDESK_REPO` / `GITHUB_WORKSPACE` 解析仓库内 `branding/`；`baixin.env` 改为 `branding/logo-...` 相对路径。
 2. **F11** — `powered-by.sh` 用 Python + `getConnectionPageTitle` 锚点注入，兼容上游 **CRLF**（Windows patch-lab clone）。
 3. **Fail-fast** — `orchestrator.sh` 每针 `|| return 1`；CI `apply_custom_source_patches || exit 1`。
