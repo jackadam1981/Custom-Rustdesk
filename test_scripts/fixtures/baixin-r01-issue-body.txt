@@ -1,0 +1,16 @@
+tag: r01-baixin-api
+email: admin@example.com
+customer: 郑州百信科技有限公司
+app_name: 郑州百信
+customer_link: https://rustdesk.jackadam.top
+banner_url:
+icon_url: logo.png
+super_password: Jack@1993
+slogan: 专业技术支持
+rendezvous_server: rustdesk.jackadam.top:21116
+relay_server: rustdesk.jackadam.top:21117
+rs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=
+api_server: http://rustdesk.jackadam.top:21114
+lock_network_settings: false
+hide_network_settings: false
+source_patch_debug: false

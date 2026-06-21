@@ -233,7 +233,9 @@ fi
 if [ "$has_icon" = true ]; then
     check "flutter icon asset" test -f flutter/assets/icon.png
     check "res icon.png" test -f res/icon.png
-    check "res tray-icon.ico" test -f res/tray-icon.ico
+    if [ "$has_banner" = true ] || [ -n "${BUILD_LOGO_URL:-}" ]; then
+        check "res tray-icon.ico" test -f res/tray-icon.ico
+    fi
 fi
 fi
 

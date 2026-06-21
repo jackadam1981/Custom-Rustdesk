@@ -158,45 +158,49 @@ if icon_path and icon_path.is_file():
     ):
         save_png(target, icon, 256)
 
-    windows_icon = Path("flutter/windows/runner/resources/app_icon.ico")
-    if windows_icon.parent.exists():
-        save_ico(windows_icon, icon)
+    home_only = not (banner_path and banner_path.is_file())
+    if home_only:
+        print("source-patcher: icon assets generated (home header only, no tray/app ico)")
+    else:
+        windows_icon = Path("flutter/windows/runner/resources/app_icon.ico")
+        if windows_icon.parent.exists():
+            save_ico(windows_icon, icon)
 
-    tray_icon = Path("res/tray-icon.ico")
-    save_ico(tray_icon, icon)
+        tray_icon = Path("res/tray-icon.ico")
+        save_ico(tray_icon, icon)
 
-    android_sizes = {
-        "mipmap-mdpi": 48,
-        "mipmap-hdpi": 72,
-        "mipmap-xhdpi": 96,
-        "mipmap-xxhdpi": 144,
-        "mipmap-xxxhdpi": 192,
-    }
-    for folder, size in android_sizes.items():
-        base = Path("flutter/android/app/src/main/res") / folder
-        for name in ("ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"):
-            target = base / name
-            if target.exists():
-                save_png(target, icon, size)
-        stat_logo = base / "ic_stat_logo.png"
-        if stat_logo.exists():
-            save_png(stat_logo, icon, max(24, size // 2))
+        android_sizes = {
+            "mipmap-mdpi": 48,
+            "mipmap-hdpi": 72,
+            "mipmap-xhdpi": 96,
+            "mipmap-xxhdpi": 144,
+            "mipmap-xxxhdpi": 192,
+        }
+        for folder, size in android_sizes.items():
+            base = Path("flutter/android/app/src/main/res") / folder
+            for name in ("ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"):
+                target = base / name
+                if target.exists():
+                    save_png(target, icon, size)
+            stat_logo = base / "ic_stat_logo.png"
+            if stat_logo.exists():
+                save_png(stat_logo, icon, max(24, size // 2))
 
-    appicon_dir = Path("flutter/ios/Runner/Assets.xcassets/AppIcon.appiconset")
-    contents = appicon_dir / "Contents.json"
-    if contents.exists():
-        data = json.loads(contents.read_text(encoding="utf-8"))
-        for entry in data.get("images", []):
-            filename = entry.get("filename")
-            size_text = entry.get("size", "")
-            scale_text = entry.get("scale", "1x")
-            if not filename or "x" not in size_text:
-                continue
-            points = float(size_text.split("x", 1)[0])
-            scale = int(re.sub(r"\D", "", scale_text) or "1")
-            save_png(appicon_dir / filename, icon, int(round(points * scale)))
+        appicon_dir = Path("flutter/ios/Runner/Assets.xcassets/AppIcon.appiconset")
+        contents = appicon_dir / "Contents.json"
+        if contents.exists():
+            data = json.loads(contents.read_text(encoding="utf-8"))
+            for entry in data.get("images", []):
+                filename = entry.get("filename")
+                size_text = entry.get("size", "")
+                scale_text = entry.get("scale", "1x")
+                if not filename or "x" not in size_text:
+                    continue
+                points = float(size_text.split("x", 1)[0])
+                scale = int(re.sub(r"\D", "", scale_text) or "1")
+                save_png(appicon_dir / filename, icon, int(round(points * scale)))
 
-    print("source-patcher: icon assets generated (256 square + tray/app icons)")
+        print("source-patcher: icon assets generated (256 square + tray/app icons)")
 PY
 
     rm -rf "$work_dir"
