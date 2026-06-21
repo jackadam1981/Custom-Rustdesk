@@ -16,6 +16,17 @@ text = re.sub(
     text,
 )
 if "CUSTOM_RUSTDESK_HOME_ICON" in text and marker in text:
+    text = re.sub(
+        r"Image\.asset\(\s*'assets/icon\.png',\s*"
+        r"width: Theme\.of\(context\)\.textTheme\.titleLarge\?\.fontSize \?\? 22,\s*"
+        r"height: Theme\.of\(context\)\.textTheme\.titleLarge\?\.fontSize \?\? 22,\s*"
+        r"errorBuilder: \(_, __, ___\) => const SizedBox\.shrink\(\),",
+        "Image.asset(\n                    'assets/icon.png',\n                    "
+        "width: 48,\n                    height: 48,\n                    "
+        "fit: BoxFit.contain,",
+        text,
+        count=1,
+    )
     path.write_text(text, encoding="utf-8")
     raise SystemExit(0)
 
@@ -31,9 +42,9 @@ custom_block = """if (bind.isCustomClient())
                 children: [
                   Image.asset(
                     'assets/icon.png',
-                    width: Theme.of(context).textTheme.titleLarge?.fontSize ?? 22,
-                    height: Theme.of(context).textTheme.titleLarge?.fontSize ?? 22,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.contain,
                   ), // CUSTOM_RUSTDESK_HOME_ICON
                   Flexible(
                     child: Text(

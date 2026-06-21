@@ -160,7 +160,15 @@ if icon_path and icon_path.is_file():
 
     home_only = not (banner_path and banner_path.is_file())
     if home_only:
-        print("source-patcher: icon assets generated (home header only, no tray/app ico)")
+        # 仅 icon：同步写 res/logo.png 供 Sciter S10；Flutter 仍用 icon.png @48px
+        for target in (
+            Path("flutter/assets/logo.png"),
+            Path("flutter/assets/logo_light.png"),
+            Path("flutter/assets/logo_dark.png"),
+            Path("res/logo.png"),
+        ):
+            save_png(target, icon, 48)
+        print("source-patcher: icon assets generated (home header 48px; no tray/app ico)")
     else:
         windows_icon = Path("flutter/windows/runner/resources/app_icon.ico")
         if windows_icon.parent.exists():
