@@ -17,15 +17,16 @@ text = re.sub(
 )
 if "CUSTOM_RUSTDESK_HOME_ICON" in text and marker in text:
     text = re.sub(
-        r"Image\.asset\(\s*'assets/icon\.png',\s*"
-        r"width: Theme\.of\(context\)\.textTheme\.titleLarge\?\.fontSize \?\? 22,\s*"
-        r"height: Theme\.of\(context\)\.textTheme\.titleLarge\?\.fontSize \?\? 22,\s*"
-        r"errorBuilder: \(_, __, ___\) => const SizedBox\.shrink\(\),",
-        "Image.asset(\n                    'assets/icon.png',\n                    "
-        "width: 48,\n                    height: 48,\n                    "
-        "fit: BoxFit.contain,",
+        r"Image\.asset\(\s*'assets/icon\.png',[\s\S]*?// CUSTOM_RUSTDESK_HOME_ICON",
+        "loadIcon(48), // CUSTOM_RUSTDESK_HOME_ICON",
         text,
         count=1,
+    )
+    text = re.sub(
+        r"\s*if \(bind\.mainGetBuildinOption\(key: \"custom-slogan\"\)\.isNotEmpty\)\s*"
+        r"Text\([\s\S]*?// CUSTOM_RUSTDESK_HOME_SLOGAN",
+        "",
+        text,
     )
     path.write_text(text, encoding="utf-8")
     raise SystemExit(0)
@@ -40,12 +41,7 @@ custom_block = """if (bind.isCustomClient())
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Image.asset(
-                    'assets/icon.png',
-                    width: 48,
-                    height: 48,
-                    fit: BoxFit.contain,
-                  ), // CUSTOM_RUSTDESK_HOME_ICON
+                  loadIcon(48), // CUSTOM_RUSTDESK_HOME_ICON
                   Flexible(
                     child: Text(
                       bind.mainGetBuildinOption(key: "app-name"),
@@ -55,11 +51,6 @@ custom_block = """if (bind.isCustomClient())
                   ),
                 ],
               ),
-              if (bind.mainGetBuildinOption(key: "custom-slogan").isNotEmpty)
-                Text(
-                  bind.mainGetBuildinOption(key: "custom-slogan"),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ).marginOnly(top: 2), // CUSTOM_RUSTDESK_HOME_SLOGAN
             ],
           ),
         ), // CUSTOM_RUSTDESK_HOME_HEADER

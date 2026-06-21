@@ -609,15 +609,15 @@ EOF
         grep -q 'custom-customer-link' src/ui/index.tis
         grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'CUSTOM_RUSTDESK_HOME_ICON' flutter/lib/desktop/pages/desktop_home_page.dart
-        grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
-        grep -q 'custom-slogan' flutter/lib/desktop/pages/desktop_home_page.dart
+        ! grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
+        ! grep -q 'custom-slogan' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'custom-customer-name' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/connection_page.dart
         grep -q 'CUSTOM_RUSTDESK_POWERED_LINK' flutter/lib/common.dart
         grep -q 'CUSTOM_RUSTDESK_POWERED_STYLE' flutter/lib/common.dart
         grep -q 'custom-rd-home-header' src/ui/index.tis
         grep -q 'custom-rd-home-powered' src/ui/index.tis
-        grep -q 'custom-slogan' src/ui/index.tis
+        ! grep -q 'custom-slogan' src/ui/index.tis
         grep -q 'custom-customer-name' src/ui/index.tis
         grep -q 'custom-rd-home-powered #powered-by .title' src/ui/index.tis
         grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css

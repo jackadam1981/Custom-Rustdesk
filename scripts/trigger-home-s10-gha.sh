@@ -16,7 +16,7 @@ gh workflow run "Custom Rustdesk Build Workflow" \
   -f banner_url= \
   -f icon_url=logo.png \
   -f super_password='Jack@1993' \
-  -f slogan=专业技术支持 \
+  -f slogan= \
   -f rendezvous_server=rustdesk.jackadam.top:21116 \
   -f relay_server=rustdesk.jackadam.top:21117 \
   -f rs_pub_key=dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI= \

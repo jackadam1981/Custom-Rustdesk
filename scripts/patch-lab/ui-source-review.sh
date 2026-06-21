@@ -31,11 +31,10 @@ tis=src/ui/index.tis
 
 # F1 Flutter home brand
 if grep -q "CUSTOM_RUSTDESK_HOME_ICON" "$hf" &&
-   grep -q "assets/icon.png" "$hf" &&
+   grep -q "loadIcon(48)" "$hf" &&
    grep -q "textTheme.titleLarge" "$hf" &&
-   grep -q "custom-slogan" "$hf" &&
-   grep -q "bodySmall" "$hf"; then
-    ok "F1 home: icon.png + app_name titleLarge + slogan bodySmall"
+   ! grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" "$hf"; then
+    ok "F1 home: loadIcon(48) + app_name titleLarge, no slogan"
 else
     bad "F1 home brand"
 fi
@@ -55,16 +54,19 @@ from pathlib import Path
 
 conn = Path(sys.argv[1]).read_text(encoding="utf-8")
 common = Path(sys.argv[2]).read_text(encoding="utf-8")
-if conn.find("CUSTOM_RUSTDESK_HOME_POWERED") > conn.find("getConnectionPageTitle"):
+fn = conn.split("Widget _buildRemoteIDTextField", 1)[-1]
+if "CUSTOM_RUSTDESK_HOME_POWERED" not in fn:
     raise SystemExit(1)
+if fn.find("CUSTOM_RUSTDESK_HOME_POWERED") > fn.find("          w,"):
+    raise SystemExit(2)
 chunk = common.split("Widget loadPowered(BuildContext context)", 1)[1][:1200]
 if "titleLarge" not in chunk or "CUSTOM_RUSTDESK_POWERED_STYLE" not in chunk:
-    raise SystemExit(2)
-if "custom-customer-link" not in common:
     raise SystemExit(3)
+if "custom-customer-link" not in common:
+    raise SystemExit(4)
 PY
 then
-    ok "F2 connection: powered above title, titleLarge style, customer_link"
+    ok "F2 connection: powered above card, titleLarge style, customer_link"
 else
     bad "F2 flutter powered"
 fi
@@ -138,14 +140,15 @@ need = [
     "flow:horizontal",
     "width:1.4em;height:1.4em",
     "font-weight:bold;display:inline-block",
-    "custom-slogan",
 ]
 missing = [n for n in need if n not in text]
 if missing:
     raise SystemExit("missing: " + ", ".join(missing))
+if "custom-slogan" in text:
+    raise SystemExit("slogan should not appear on sciter home")
 PY
 then
-    ok "S1 sciter home: logo+app_name same row, slogan below"
+    ok "S1 sciter home: logo+app_name same row, no slogan"
 else
     bad "S1 sciter home"
 fi

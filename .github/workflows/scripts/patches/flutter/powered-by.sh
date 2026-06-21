@@ -3,38 +3,95 @@ _custom_patch_flutter_powered_by() {
 
     if [ -f "$home_file" ] && grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$home_file"; then
         perl -0pi -e 's/\n\s*if \(bind\.isCustomClient\(\) && bind\.mainGetBuildinOption\(key: "hide-powered-by-me"\) != '\''Y'\''\)\n\s*GestureDetector\([\s\S]*?\)\.marginOnly\(top: 4\), \/\/ CUSTOM_RUSTDESK_HOME_POWERED//g' "$home_file"
+        perl -0pi -e 's/\n\s*if \(bind\.isCustomClient\(\)\)\s*Align\([\s\S]*?loadPowered\(context\),[\s\S]*?\/\/ CUSTOM_RUSTDESK_HOME_POWERED\s*\n//g' "$home_file"
         echo "source-patcher: removed misplaced customer powered_by from $home_file"
     fi
 
     local connection_file="flutter/lib/desktop/pages/connection_page.dart"
-    if [ -f "$connection_file" ] && ! grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$connection_file"; then
+    if [ -f "$connection_file" ]; then
         python3 - "$connection_file" <<'PY'
+import re
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 marker = "CUSTOM_RUSTDESK_HOME_POWERED"
-if marker in text:
-    raise SystemExit(0)
 
-anchor = "getConnectionPageTitle(context, false).marginOnly(bottom: 15),"
-inject = """            if (bind.isCustomClient())
-              Align(
-                alignment: Alignment.centerLeft,
-                child: loadPowered(context),
-              ).paddingOnly(left: 12, top: 12), // CUSTOM_RUSTDESK_HOME_POWERED
-            """
+powered_block = """          if (bind.isCustomClient() &&
+              bind.mainGetBuildinOption(key: "hide-powered-by-me") != 'Y')
+            Align(
+              alignment: Alignment.centerLeft,
+              child: loadPowered(context),
+            ).paddingOnly(bottom: 8), // CUSTOM_RUSTDESK_HOME_POWERED
+"""
 
-if anchor not in text:
+# Drop legacy in-card placement (above getConnectionPageTitle).
+text = re.sub(
+    r"\s*if \(bind\.isCustomClient\(\)\)\s*"
+    r"Align\(\s*alignment: Alignment\.centerLeft,\s*"
+    r"child: loadPowered\(context\),\s*"
+    r"\)\.paddingOnly\(left: 12, top: 12\), // CUSTOM_RUSTDESK_HOME_POWERED\s*\n",
+    "\n",
+    text,
+)
+text = re.sub(
+    r"\s*if \(bind\.isCustomClient\(\) &&\s*"
+    r'bind\.mainGetBuildinOption\(key: "hide-powered-by-me"\) != \'Y\'\)\s*'
+    r"Align\([\s\S]*?// CUSTOM_RUSTDESK_HOME_POWERED\s*\n",
+    "\n",
+    text,
+)
+
+return_pat = re.compile(
+    r"return Container\(\s*"
+    r"constraints: const BoxConstraints\(maxWidth: 600\),\s*child: w\);\s*",
+    re.MULTILINE,
+)
+return_with_column = re.compile(
+    r"return Container\(\s*"
+    r"constraints: const BoxConstraints\(maxWidth: 600\),\s*"
+    r"child: Column\(\s*"
+    r"crossAxisAlignment: CrossAxisAlignment\.stretch,\s*"
+    r"children: \[\s*"
+    r"[\s\S]*?// CUSTOM_RUSTDESK_HOME_POWERED\s*"
+    r"w,\s*"
+    r"\],\s*"
+    r"\),\s*"
+    r"\);\s*",
+    re.MULTILINE,
+)
+return_with_powered = (
+    "return Container(\n"
+    "      constraints: const BoxConstraints(maxWidth: 600),\n"
+    "      child: Column(\n"
+    "        crossAxisAlignment: CrossAxisAlignment.stretch,\n"
+    "        children: [\n"
+    f"{powered_block}"
+    "          w,\n"
+    "        ],\n"
+    "      ),\n"
+    "    );"
+)
+
+if return_with_column.search(text):
+    pass
+elif return_pat.search(text):
+    text = return_pat.sub(return_with_powered, text, count=1)
+elif marker not in text:
     raise SystemExit(
-        "source-patcher: getConnectionPageTitle anchor not found in connection_page.dart"
+        "source-patcher: _buildRemoteIDTextField return anchor not found in connection_page.dart"
     )
 
-path.write_text(text.replace(anchor, inject + anchor, 1), encoding="utf-8")
+if marker not in text:
+    raise SystemExit(
+        "source-patcher: failed to inject customer powered_by in connection_page.dart"
+    )
+
+path.write_text(text, encoding="utf-8")
 PY
         if grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$connection_file"; then
-            echo "source-patcher: customer powered_by injected above Control Remote Desktop in $connection_file"
+            echo "source-patcher: customer powered_by injected above Control Remote Desktop card in $connection_file"
         else
             echo "source-patcher: failed to inject customer powered_by in $connection_file" >&2
             return 1

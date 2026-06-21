@@ -161,7 +161,8 @@ fi
 if verify_from F10; then
 check "flutter home header" grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home icon" grep -q 'CUSTOM_RUSTDESK_HOME_ICON' flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home slogan" grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home loadIcon" grep -q 'loadIcon(48)' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home no slogan" bash -c '! grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" flutter/lib/desktop/pages/desktop_home_page.dart'
 check "flutter home dart syntax" python3 - flutter/lib/desktop/pages/desktop_home_page.dart <<'PY'
 import re
 import sys
@@ -188,7 +189,7 @@ fi
 if verify_from S10; then
 check "sciter custom brand header" grep -q 'custom-rd-home-header' src/ui/index.tis
 check "sciter logo title same row" grep -q 'custom-rd-home-title-row' src/ui/index.tis
-check "sciter custom slogan markup" grep -q 'custom-slogan' src/ui/index.tis
+check "sciter home no slogan" bash -c '! grep -q "custom-slogan" src/ui/index.tis'
 check "sciter powered title class" grep -q 'custom-rd-home-powered #powered-by .title' src/ui/index.tis
 check "sciter powered above card-connect" python3 - src/ui/index.tis <<'PY'
 import sys
