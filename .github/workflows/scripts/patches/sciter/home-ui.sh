@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-brand = Path(sys.argv[2]).read_text(encoding="utf-8")
+brand = Path(sys.argv[2]).read_text(encoding="utf-8").strip()
 text = path.read_text(encoding="utf-8")
 
 plain_tip = (
@@ -61,10 +61,16 @@ legacy_brand = re.compile(
     r"\{handler\.get_builtin_option\([^)]+\)(?: \|\| handler\.get_builtin_option\([^)]+\))?.*?</div> : \"\"\}",
     re.DOTALL,
 )
-legacy_right_powered = re.compile(
+left_powered_in_brand = re.compile(
     r"\{is_custom_client && handler\.get_builtin_option\(\"hide-powered-by-me\"\) != \"Y\" "
-    r"\? <div \.link \.custom-rd-home-powered #powered-by(?: \.title)? style=\"[^\"]*\">"
-    r"\{translate\('powered_by_me'\)\}</div> : \"\"\}\s*\n\s*"
+    r"\? <div \.link(?: \.custom-rd-home-powered)? #powered-by(?: \.title)? style=\"[^\"]*\">"
+    r"\{translate\('powered_by_me'\)\}</div> : \"\"\}"
+)
+logo_style_pat = re.compile(
+    r"(<img\.custom-rd-home-logo[^>]*style=\")[^\"]*(\")"
+)
+logo_style_new = (
+    r"\1max-width:48px;max-height:48px;width:48px;height:48px;vertical-align:middle\2"
 )
 
 text = text.replace(" <!-- CUSTOM_RUSTDESK_HOME_POWERED -->", "")
@@ -73,57 +79,59 @@ text = re.sub(r"\s*<!-- CUSTOM_RUSTDESK_HOME_LOGO -->", "", text)
 
 changed = False
 
-if old_header in text:
+if wrong_tip in text:
+    text = text.replace(wrong_tip, plain_tip, 1)
+    changed = True
+
+match = legacy_brand.search(text)
+if match:
+    if match.group(0) != brand:
+        text = legacy_brand.sub(brand, text, count=1)
+        changed = True
+elif old_header in text:
     text = text.replace(old_header, brand, 1)
     changed = True
 elif text_only_brand in text and brand != text_only_brand:
     text = text.replace(text_only_brand, brand, 1)
     changed = True
-elif "custom-rd-home-header" not in text and "#custom-brand" in text:
-    match = legacy_brand.search(text)
-    if match and match.group(0) != brand:
-        text = legacy_brand.sub(brand, text, count=1)
-        changed = True
-elif brand not in text:
-    match = legacy_brand.search(text)
-    if match and match.group(0) != brand:
-        text = legacy_brand.sub(brand, text, count=1)
-        changed = True
 
-if wrong_tip in text:
-    text = text.replace(wrong_tip, plain_tip, 1)
+stripped, n = left_powered_in_brand.subn("", text)
+if n:
+    text = stripped
     changed = True
 
-if right_with_powered in text:
-    text = text.replace(right_with_powered, right_anchor, 1)
+if right_with_powered not in text and right_anchor in text:
+    text = text.replace(right_anchor, right_with_powered, 1)
     changed = True
-else:
-    upgraded = legacy_right_powered.sub("", text)
-    if upgraded != text:
-        text = upgraded
-        changed = True
 
 if old_click in text:
     text = text.replace(old_click, new_click, 1)
     changed = True
 
-if brand not in text:
-    match = legacy_brand.search(text)
-    if match and match.group(0) != brand:
-        text = legacy_brand.sub(brand, text, count=1)
-        changed = True
+updated_logo_style, n = logo_style_pat.subn(logo_style_new, text)
+if n:
+    text = updated_logo_style
+    changed = True
 
-if Path("res/logo.png").exists() and "custom-rd-home-logo" not in text:
-    match = legacy_brand.search(text)
-    if match and match.group(0) != brand:
-        text = legacy_brand.sub(brand, text, count=1)
-        changed = True
+header_pos = text.find("custom-rd-home-header")
+if header_pos != -1:
+    header_chunk = text[header_pos : header_pos + 4000]
+    if left_powered_in_brand.search(header_chunk):
+        raise SystemExit("source-patcher: powered-by must not remain inside left brand header")
+
+card = "<div .card-connect>"
+if text.find("#powered-by") == -1 or text.find(card) == -1:
+    raise SystemExit("source-patcher: missing powered-by or card-connect anchor")
+if text.find("#powered-by") > text.find(card):
+    raise SystemExit("source-patcher: powered-by must appear above card-connect")
+
+if "custom-rd-home-header" not in text:
+    raise SystemExit("source-patcher: sciter home brand header missing")
+if "custom-rd-home-slogan" not in brand and "custom-rd-home-slogan" not in text:
+    raise SystemExit("source-patcher: sciter home brand block missing slogan slot")
 
 if not changed and "custom-rd-home-header" not in text:
     raise SystemExit("source-patcher: sciter home UI patch made no changes")
-
-if "custom-rd-home-header" not in text or "custom-rd-home-slogan" not in brand:
-    raise SystemExit("source-patcher: sciter home brand block missing Pro layout markers")
 
 path.write_text(text, encoding="utf-8")
 PY
@@ -131,11 +139,30 @@ PY
 
     if grep -q "custom-rd-home-header" "$index_file" &&
        grep -q "custom-rd-home-title-row" "$index_file" &&
-       grep -q "custom-rd-home-slogan" "$index_file"; then
+       grep -q "custom-rd-home-slogan" "$index_file" &&
+       grep -q "custom-rd-home-powered" "$index_file" &&
+       python3 - "$index_file" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+header = text.find("custom-rd-home-header")
+card = text.find("<div .card-connect>")
+powered = text.find("#powered-by")
+if header == -1 or card == -1 or powered == -1:
+    raise SystemExit(1)
+if powered > card:
+    raise SystemExit(2)
+if "#powered-by" in text[header : header + 4000]:
+    raise SystemExit(3)
+if "max-width:48px" not in text:
+    raise SystemExit(4)
+PY
+    then
         if grep -q "custom-rd-home-logo" "$index_file"; then
-            echo "source-patcher: sciter Pro home header (powered+logo+name+slogan) in $index_file"
+            echo "source-patcher: sciter home header (48px logo+name+slogan) + powered above card in $index_file"
         else
-            echo "source-patcher: sciter Pro home header (powered+name+slogan) in $index_file"
+            echo "source-patcher: sciter home header (name+slogan) + powered above card in $index_file"
         fi
     else
         echo "source-patcher: failed to inject sciter home UI in $index_file" >&2

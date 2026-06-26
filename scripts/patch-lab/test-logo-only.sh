@@ -53,9 +53,10 @@ text = home.read_text(encoding="utf-8")
 for needle in (
     "CUSTOM_RUSTDESK_HOME_HEADER",
     "assets/logo.png",
-    "CUSTOM_RUSTDESK_HOME_POWERED",
+    "width: 48",
 ):
     assert needle in text, f"missing {needle} in home page"
+assert "CUSTOM_RUSTDESK_HOME_POWERED" not in text, "powered-by must not be on home left pane"
 print("OK F10 home header uses assets/logo.png")
 
 tis = (root / "src/ui/index.tis").read_text(encoding="utf-8")

@@ -12,13 +12,9 @@ path = Path(sys.argv[1])
 data = base64.b64encode(path.read_bytes()).decode("ascii")
 print(
     '<img.custom-rd-home-logo src="data:image/png;base64,' + data + '" '
-    'style="max-width:300px;max-height:72px;vertical-align:middle" />'
+    'style="max-width:48px;max-height:48px;width:48px;height:48px;vertical-align:middle" />'
 )
 PY
-}
-
-_custom_sciter_home_powered_markup() {
-    printf '%s' '{is_custom_client && handler.get_builtin_option("hide-powered-by-me") != "Y" ? <div .link #powered-by style="opacity:0.5;font-size:0.8em;text-decoration:underline;margin-bottom:0.35em">{translate('"'"'powered_by_me'"'"')}</div> : ""}'
 }
 
 _custom_sciter_home_slogan_markup() {
@@ -27,10 +23,8 @@ _custom_sciter_home_slogan_markup() {
 
 _custom_sciter_custom_brand_block() {
     local logo_markup=""
-    local powered_markup=""
     local slogan_markup=""
 
-    powered_markup=$(_custom_sciter_home_powered_markup)
     slogan_markup=$(_custom_sciter_home_slogan_markup)
 
     if [ -f "res/logo.png" ]; then
@@ -38,8 +32,8 @@ _custom_sciter_custom_brand_block() {
     fi
 
     if [ -n "$logo_markup" ]; then
-        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\">${powered_markup}<div .custom-rd-home-title-row style=\"flow:horizontal;horizontal-align:center;vertical-align:middle\">${logo_markup}<div .title style=\"font-weight:bold;display:inline-block;vertical-align:middle;margin-left:0.35em\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div></div>${slogan_markup}</div> : \"\"}"
+        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\"><div .custom-rd-home-title-row style=\"flow:horizontal;horizontal-align:center;vertical-align:middle\">${logo_markup}<div .title style=\"font-weight:bold;display:inline-block;vertical-align:middle;margin-left:0.35em\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div></div>${slogan_markup}</div> : \"\"}"
     else
-        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\">${powered_markup}<div .title style=\"font-weight:bold\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div>${slogan_markup}</div> : \"\"}"
+        printf '%s' "{is_custom_client ? <div #custom-brand.custom-rd-home-header style=\"text-align:center;margin-bottom:0.35em\"><div .title style=\"font-weight:bold\">{handler.get_builtin_option(\"app-name\") || handler.get_builtin_option(\"custom-customer-name\")}</div>${slogan_markup}</div> : \"\"}"
     fi
 }

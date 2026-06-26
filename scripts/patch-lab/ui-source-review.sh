@@ -29,35 +29,16 @@ cm=flutter/lib/common.dart
 af=flutter/lib/desktop/pages/desktop_setting_page.dart
 tis=src/ui/index.tis
 
-# F1 Flutter home brand (Pro layout)
+# F1 Flutter home brand (logo + app_name + slogan; no powered-by on left pane)
 if grep -q "CUSTOM_RUSTDESK_HOME_ICON" "$hf" &&
    grep -q "assets/logo.png" "$hf" &&
-   grep -q "BoxConstraints(maxWidth: 300, maxHeight: 72)" "$hf" &&
+   grep -q "width: 48" "$hf" &&
    grep -q "textTheme.titleLarge" "$hf" &&
-   grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$hf" &&
    grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" "$hf" &&
-   grep -q "fontSize: 9" "$hf"; then
-    ok "F1 home: powered 9px + logo/app_name row + slogan slot"
+   ! grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$hf"; then
+    ok "F1 home: logo/app_name row + slogan slot, no powered on left"
 else
     bad "F1 home brand"
-fi
-
-if grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$hf" &&
-   python3 - "$hf" <<'PY'
-import sys
-from pathlib import Path
-
-text = Path(sys.argv[1]).read_text(encoding="utf-8")
-header = text.find("CUSTOM_RUSTDESK_HOME_HEADER")
-powered = text.find("CUSTOM_RUSTDESK_HOME_POWERED")
-icon = text.find("CUSTOM_RUSTDESK_HOME_ICON")
-if header == -1 or powered == -1 or icon == -1 or not (powered < icon):
-    raise SystemExit(1)
-PY
-then
-    ok "F1 home: powered above logo row"
-else
-    bad "F1 home powered order"
 fi
 
 # F2 Flutter connection powered
@@ -90,10 +71,10 @@ fi
 if grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$af" &&
    grep -q "https://zzsn.work" "$af" &&
    grep -q "CUSTOM_RUSTDESK_ABOUT_LAYOUT" "$af" &&
-   grep -q "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN" "$af" &&
+   ! grep -q "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN" "$af" &&
    ! grep -q "CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT" "$af" &&
    ! grep -q "height: 2.0" "$af"; then
-    ok "F3 about: studio below Slogan_tip, zzsn.work, no line-height hack"
+    ok "F3 about: studio below Slogan_tip, zzsn.work, original row spacing"
 else
     bad "F3 flutter about"
 fi
@@ -154,31 +135,35 @@ need = [
     "custom-rd-home-title-row",
     "custom-rd-home-slogan",
     "flow:horizontal",
-    "max-width:300px;max-height:72px",
-    "font-size:0.8em",
+    "max-width:48px;max-height:48px;width:48px;height:48px",
     "font-weight:bold;display:inline-block",
 ]
 missing = [n for n in need if n not in text]
 if missing:
     raise SystemExit("missing: " + ", ".join(missing))
-if "custom-rd-home-powered" in text:
-    raise SystemExit("powered should not stay on right card")
-card = "<div .card-connect>"
-if text.find("#powered-by") == -1 or text.find(card) == -1:
-    raise SystemExit("missing powered or card anchor")
-if text.find("#powered-by") > text.find(card):
-    raise SystemExit("powered must be on left home header")
+if "custom-rd-home-powered" not in text:
+    raise SystemExit("missing custom-rd-home-powered on right pane")
+brand = text.find("custom-rd-home-header")
+powered = text.find("#powered-by")
+card = text.find("<div .card-connect>")
+if brand == -1 or powered == -1 or card == -1:
+    raise SystemExit("missing brand, powered, or card anchor")
+if not (powered < card):
+    raise SystemExit("powered must be above card-connect, not in left brand block")
+header_block = text[brand:brand + 4000]
+if "#powered-by" in header_block:
+    raise SystemExit("powered must not appear inside left brand header")
 PY
 then
-    ok "S1 sciter home: powered+logo+app_name+slogan (Pro layout)"
+    ok "S1 sciter home: logo+app_name+slogan; powered above card-connect"
 else
     bad "S1 sciter home"
 fi
 
 # S2 Sciter powered click + no duplicate on card
 if grep -q 'custom-customer-link' "$tis" &&
-   ! grep -q 'custom-rd-home-powered' "$tis"; then
-    ok "S2 sciter powered: customer link, not on card-connect"
+   grep -q 'custom-rd-home-powered' "$tis"; then
+    ok "S2 sciter powered: customer link, above card-connect"
 else
     bad "S2 sciter powered"
 fi

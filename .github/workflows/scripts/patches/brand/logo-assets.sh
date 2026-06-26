@@ -150,11 +150,19 @@ def is_wide_banner(img: Image.Image) -> bool:
     return aspect_ratio(img) >= WIDE_BANNER_RATIO
 
 def write_home_logo_square(img: Image.Image) -> None:
+    square = square_canvas(img, HOME_LOGO_SQUARE)
     for target in (
         Path("flutter/assets/logo.png"),
         Path("res/logo.png"),
     ):
-        save_png(target, img, HOME_LOGO_SQUARE)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        square.save(target)
+    for target in (
+        Path("flutter/assets/logo_light.png"),
+        Path("flutter/assets/logo_dark.png"),
+    ):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        square.save(target)
 
 def write_wide_banner_assets(img: Image.Image) -> None:
     for target in (

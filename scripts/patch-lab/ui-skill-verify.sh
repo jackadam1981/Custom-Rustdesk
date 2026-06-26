@@ -23,12 +23,12 @@ echo "========== Flutter skill (patched source) =========="
 if ! grep -q 'isCustomClient()))' flutter/lib/desktop/pages/desktop_home_page.dart; then ok 'F13 no isCustomClient()))'; else bad 'F13 no isCustomClient()))'; fi
 grep -q CUSTOM_RUSTDESK_HOME_ICON flutter/lib/desktop/pages/desktop_home_page.dart && ok 'F10 HOME_ICON' || bad 'F10 HOME_ICON'
 grep -q CUSTOM_RUSTDESK_HOME_HEADER flutter/lib/desktop/pages/desktop_home_page.dart && ok 'F10 HOME_HEADER' || bad 'F10 HOME_HEADER'
-grep -q CUSTOM_RUSTDESK_HOME_POWERED flutter/lib/desktop/pages/desktop_home_page.dart && ok 'F10 HOME_POWERED on home' || bad 'F10 HOME_POWERED on home'
+! grep -q CUSTOM_RUSTDESK_HOME_POWERED flutter/lib/desktop/pages/desktop_home_page.dart && ok 'F10 no HOME_POWERED on home' || bad 'F10 no HOME_POWERED on home'
 grep -q CUSTOM_RUSTDESK_HOME_SLOGAN flutter/lib/desktop/pages/desktop_home_page.dart && ok 'F10 HOME_SLOGAN slot' || bad 'F10 HOME_SLOGAN slot'
 grep -q CUSTOM_RUSTDESK_HOME_POWERED flutter/lib/desktop/pages/connection_page.dart && ok 'F11 POWERED on connection' || bad 'F11 POWERED on connection'
 grep -q CUSTOM_RUSTDESK_POWERED_STYLE flutter/lib/common.dart && ok 'F11 POWERED_STYLE' || bad 'F11 POWERED_STYLE'
 grep -q CUSTOM_RUSTDESK_STUDIO_LINK flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 STUDIO_LINK' || bad 'F12 STUDIO_LINK'
-grep -q CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 about row spacing' || bad 'F12 about row spacing'
+! grep -q CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 about original spacing' || bad 'F12 about original spacing'
 grep -q CUSTOM_RUSTDESK_UI_APP_NAME flutter/lib/common.dart && ok 'F02 UI_APP_NAME' || bad 'F02 UI_APP_NAME'
 
 echo ""
@@ -38,8 +38,8 @@ grep -Fq 'flow:horizontal' src/ui/index.tis && ok 'S10 flow horizontal' || bad '
 grep -Fq 'font-weight:bold;display:inline-block' src/ui/index.tis && ok 'S10 inline-block title' || bad 'S10 inline-block title'
 ! grep -Fq 'display:block;margin:0 auto' src/ui/index.tis && ok 'S10 no display:block logo stack' || bad 'S10 no display:block logo stack'
 grep -Fq 'custom-rd-home-slogan' src/ui/index.tis && ok 'S10 slogan row' || bad 'S10 slogan row'
-! grep -Fq 'custom-rd-home-powered' src/ui/index.tis && ok 'S10 powered not on card' || bad 'S10 powered not on card'
-if python3 -c "from pathlib import Path;t=Path('src/ui/index.tis').read_text(encoding='utf-8');assert t.find('#powered-by')<t.find('<div .card-connect>')"; then ok 'S10 powered on left home'; else bad 'S10 powered on left home'; fi
+grep -Fq 'custom-rd-home-powered' src/ui/index.tis && ok 'S10 powered on right pane' || bad 'S10 powered on right pane'
+if python3 -c "from pathlib import Path;t=Path('src/ui/index.tis').read_text(encoding='utf-8');h=t.find('custom-rd-home-header');assert t.find('#powered-by')<t.find('<div .card-connect>') and '#powered-by' not in t[h:h+4000]"; then ok 'S10 powered above card, not in left brand'; else bad 'S10 powered placement'; fi
 grep -Fq 'max-height: 72vh' src/ui/index.css && ok 'S13 menu max-height vh' || bad 'S13 menu max-height vh'
 grep -Fq 'overflow-y: scroll-indicator' src/ui/index.css && ok 'S13 menu scroll' || bad 'S13 menu scroll'
 ! grep -Fq 'menu.context#config-options > li' src/ui/index.css && ok 'S13 menu single column' || bad 'S13 menu single column'

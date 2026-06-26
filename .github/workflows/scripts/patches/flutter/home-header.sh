@@ -10,40 +10,13 @@ from pathlib import Path
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 marker = "CUSTOM_RUSTDESK_HOME_HEADER"
-logo_widget = """Container(
-                    constraints: const BoxConstraints(maxWidth: 300, maxHeight: 72),
-                    child: Image.asset(
-                      'assets/logo.png',
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                    ),
+logo_widget = """Image.asset(
+                    'assets/logo.png',
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.contain,
+                    errorBuilder: (ctx, error, stackTrace) => loadIcon(48),
                   ), // CUSTOM_RUSTDESK_HOME_ICON"""
-powered_widget = """if (bind.isCustomClient() &&
-                  bind.mainGetBuildinOption(key: "hide-powered-by-me") != 'Y')
-                Align(
-                  alignment: Alignment.center,
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: () {
-                        final link =
-                            bind.mainGetBuildinOption(key: "custom-customer-link");
-                        if (link.isNotEmpty) {
-                          launchUrl(Uri.parse(link));
-                        }
-                      },
-                      child: Opacity(
-                        opacity: 0.5,
-                        child: Text(
-                          translate("powered_by_me"),
-                          overflow: TextOverflow.clip,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontSize: 9, decoration: TextDecoration.underline),
-                        ),
-                      ),
-                    ),
-                  ).marginOnly(top: 6),
-                ), // CUSTOM_RUSTDESK_HOME_POWERED"""
 slogan_widget = """if (bind.mainGetBuildinOption(key: "custom-slogan").isNotEmpty)
                 Text(
                   bind.mainGetBuildinOption(key: "custom-slogan"),
@@ -62,7 +35,6 @@ custom_block = f"""if (bind.isCustomClient())
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              {powered_widget}
               Row(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -87,6 +59,16 @@ custom_block = f"""if (bind.isCustomClient())
           child: loadLogo(),
         ),"""
 
+# Strip legacy powered-by row from home header (belongs on connection page only).
+legacy_powered = re.compile(
+    r"\s*if \(bind\.isCustomClient\(\) &&\s*"
+    r"bind\.mainGetBuildinOption\(key: \"hide-powered-by-me\"\) != 'Y'\)\s*"
+    r"Align\([\s\S]*?\), // CUSTOM_RUSTDESK_HOME_POWERED\s*",
+    re.MULTILINE,
+)
+if legacy_powered.search(text):
+    text = legacy_powered.sub("\n              ", text, count=1)
+
 if "CUSTOM_RUSTDESK_HOME_ICON" in text and marker in text:
     text = re.sub(
         r"loadIcon\(48\), // CUSTOM_RUSTDESK_HOME_ICON",
@@ -95,18 +77,20 @@ if "CUSTOM_RUSTDESK_HOME_ICON" in text and marker in text:
         count=1,
     )
     text = re.sub(
-        r"Image\.asset\(\s*'assets/icon\.png',[\s\S]*?// CUSTOM_RUSTDESK_HOME_ICON",
+        r"Container\(\s*"
+        r"constraints: const BoxConstraints\(maxWidth: 300, maxHeight: 72\),\s*"
+        r"child: Image\.asset\([\s\S]*?// CUSTOM_RUSTDESK_HOME_ICON",
         logo_widget,
         text,
         count=1,
     )
-    if "CUSTOM_RUSTDESK_HOME_POWERED" not in text:
-        text = re.sub(
-            r"(mainAxisSize: MainAxisSize\.min,\s*children: \[\s*)",
-            r"\1" + powered_widget + "\n              ",
-            text,
-            count=1,
-        )
+    text = re.sub(
+        r"Image\.asset\(\s*"
+        r"'assets/logo\.png',[\s\S]*?// CUSTOM_RUSTDESK_HOME_ICON",
+        logo_widget,
+        text,
+        count=1,
+    )
     if "CUSTOM_RUSTDESK_HOME_SLOGAN" not in text:
         text = re.sub(
             r"(</Row>,\s*)",
@@ -151,23 +135,29 @@ else:
 required = (
     marker,
     "CUSTOM_RUSTDESK_HOME_ICON",
-    "CUSTOM_RUSTDESK_HOME_POWERED",
     "CUSTOM_RUSTDESK_HOME_SLOGAN",
     "assets/logo.png",
+    "loadIcon(48)",
 )
+forbidden = ("CUSTOM_RUSTDESK_HOME_POWERED", "loadPowered(context)")
 missing = [item for item in required if item not in text]
 if missing:
     raise SystemExit(
         "source-patcher: failed to inject custom home header in desktop_home_page.dart: "
         + ", ".join(missing)
     )
+if any(item in text for item in forbidden):
+    raise SystemExit(
+        "source-patcher: home header must not include powered-by (connection page only)"
+    )
+
 path.write_text(text, encoding="utf-8")
 PY
         if grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file" &&
            grep -q "CUSTOM_RUSTDESK_HOME_ICON" "$home_file" &&
-           grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$home_file" &&
            grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" "$home_file" &&
-           grep -q "assets/logo.png" "$home_file"; then
+           grep -q "assets/logo.png" "$home_file" &&
+           ! grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$home_file"; then
             echo "source-patcher: custom home header injected in $home_file"
         else
             echo "source-patcher: failed to inject custom home header in $home_file" >&2

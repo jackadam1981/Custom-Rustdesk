@@ -161,10 +161,9 @@ fi
 if verify_from F10; then
 check "flutter home header" grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home logo" grep -q "assets/logo.png" flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home loadLogo mode" grep -q 'BoxConstraints(maxWidth: 300, maxHeight: 72)' flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home powered" grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home logo size" grep -q 'width: 48' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home no powered" ! grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home slogan" grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home powered small" grep -q 'fontSize: 9' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home dart syntax" python3 - flutter/lib/desktop/pages/desktop_home_page.dart <<'PY'
 import re
 import sys
@@ -185,19 +184,18 @@ if verify_from F12; then
 check "flutter studio zzsn.work" grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
 check "flutter studio zzsn.work url" grep -q 'https://zzsn.work' flutter/lib/desktop/pages/desktop_setting_page.dart
 check "flutter about layout" grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
-check "flutter about row spacing" grep -q 'CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN' flutter/lib/desktop/pages/desktop_setting_page.dart
+check "flutter about no row-margin hack" ! grep -q 'CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN' flutter/lib/desktop/pages/desktop_setting_page.dart
 fi
 
 if verify_from S10; then
 check "sciter custom brand header" grep -q 'custom-rd-home-header' src/ui/index.tis
 check "sciter logo title same row" grep -q 'custom-rd-home-title-row' src/ui/index.tis
 check "sciter home slogan" grep -q 'custom-rd-home-slogan' src/ui/index.tis
-check "sciter home powered left" grep -q 'font-size:0.8em' src/ui/index.tis
-check "sciter powered not on card" python3 - src/ui/index.tis <<'PY'
+check "sciter powered above card" python3 - src/ui/index.tis <<'PY'
 import sys
 from pathlib import Path
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-if "custom-rd-home-powered" in text:
+if "custom-rd-home-powered" not in text:
     raise SystemExit(1)
 card = "<div .card-connect>"
 header = "custom-rd-home-header"
@@ -205,8 +203,13 @@ if text.find(header) == -1 or text.find(card) == -1:
     raise SystemExit(2)
 if text.find("#powered-by") == -1:
     raise SystemExit(3)
-if text.find("#powered-by") > text.find(card):
+if not (text.find("#powered-by") < text.find(card)):
     raise SystemExit(4)
+header_pos = text.find(header)
+if "#powered-by" in text[header_pos:header_pos + 4000]:
+    raise SystemExit(5)
+if "max-width:48px" not in text:
+    raise SystemExit(6)
 PY
 fi
 
