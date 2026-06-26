@@ -14,10 +14,20 @@ path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 block = """/* CUSTOM_RUSTDESK_CONFIG_MENU_FLOW */
 menu.context#config-options {
+  flow: horizontal-flow;
+  width: 520px;
+  max-width: 90vw;
   height: max-content;
   max-height: 72vh;
   overflow-y: scroll-indicator;
   vertical-scrollbar: my-scrollbar;
+}
+menu.context#config-options > li {
+  width: 48%;
+  min-width: 200px;
+}
+menu.context#config-options > div.separator {
+  width: 100%;
 }
 @media (height < 720px) {
   menu.context#config-options {
@@ -42,12 +52,14 @@ else:
 path.write_text(text, encoding="utf-8")
 PY
     if grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_FLOW" "$css_file" &&
+       grep -q 'flow: horizontal-flow' "$css_file" &&
+       grep -q 'menu.context#config-options > li' "$css_file" &&
+       grep -q 'width: 48%' "$css_file" &&
        grep -q 'overflow-y: scroll-indicator' "$css_file" &&
-       grep -q 'max-height: 72vh' "$css_file" &&
-       ! grep -q 'menu.context#config-options > li' "$css_file"; then
-        echo "source-patcher: sciter config menu scroll patched in $css_file"
+       grep -q 'max-height: 72vh' "$css_file"; then
+        echo "source-patcher: sciter config menu two-column flow patched in $css_file"
     else
-        echo "source-patcher: failed to patch sciter config menu scroll in $css_file" >&2
+        echo "source-patcher: failed to patch sciter config menu flow in $css_file" >&2
         return 1
     fi
 
