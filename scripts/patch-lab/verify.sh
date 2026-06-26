@@ -216,7 +216,7 @@ fi
 if verify_from S12; then
 check "sciter studio zzsn.work" grep -q "url='https://zzsn.work'" src/ui/index.tis
 check "sciter studio-about p tag" grep -q "<p class='link custom-event studio-about'" src/ui/index.tis
-check "sciter about dialog height" grep -q 'CUSTOM_RUSTDESK_ABOUT_HEIGHT' src/ui/index.tis
+check "sciter about height" grep -q '480, get_msgbox_width()); // CUSTOM_RUSTDESK_ABOUT_HEIGHT' src/ui/index.tis
 fi
 
 if verify_from S13; then

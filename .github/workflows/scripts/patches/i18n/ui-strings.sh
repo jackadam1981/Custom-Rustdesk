@@ -11,13 +11,17 @@ _custom_patch_i18n_ui_strings() {
 
     if [ -f "src/lang/cn.rs" ]; then
         perl -0pi -e "s/(\(\"powered_by_me\", )\"[^\"]*\"/\1$powered_by_cn_json/" "src/lang/cn.rs"
-        if ! grep -q 'custom_studio_attribution' "src/lang/cn.rs"; then
+        if grep -q 'custom_studio_attribution' "src/lang/cn.rs"; then
+            perl -0pi -e "s/(\(\"custom_studio_attribution\", )\"[^\"]*\"/\1$studio_text_json/" "src/lang/cn.rs"
+        else
             perl -0pi -e "s{(\(\"powered_by_me\", \"[^\"]*\"\),)}{\1\n        (\"custom_studio_attribution\", $studio_text_json),}" "src/lang/cn.rs"
         fi
     fi
     if [ -f "src/lang/en.rs" ]; then
         perl -0pi -e "s/(\(\"powered_by_me\", )\"[^\"]*\"/\1$powered_by_en_json/" "src/lang/en.rs"
-        if ! grep -q 'custom_studio_attribution' "src/lang/en.rs"; then
+        if grep -q 'custom_studio_attribution' "src/lang/en.rs"; then
+            perl -0pi -e "s/(\(\"custom_studio_attribution\", )\"[^\"]*\"/\1$studio_text_json/" "src/lang/en.rs"
+        else
             perl -0pi -e "s{(\(\"powered_by_me\", \"[^\"]*\"\),)}{\1\n        (\"custom_studio_attribution\", $studio_text_json),}" "src/lang/en.rs"
         fi
     fi
