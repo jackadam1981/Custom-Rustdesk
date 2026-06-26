@@ -20,7 +20,7 @@
 
 编译由 `upstream-build` job 触发内层 `custom-rustdesk-upstream-build.yml`（RustDesk 原版 `flutter-build.yml`）完成，本仓库不再维护自编 compile job。
 
-**Rollout / patch-lab / 交接**：见 [docs/verification-rollout.md](docs/verification-rollout.md)、[docs/workspace-handoff.md](docs/workspace-handoff.md)。
+**Rollout / patch-lab / 交接**：见 [docs/experiment-verification.md](docs/experiment-verification.md)（M0–M6 实验验证）、[docs/verification-rollout.md](docs/verification-rollout.md)、[docs/workspace-handoff.md](docs/workspace-handoff.md)。
 
 ## 触发构建
 
@@ -38,7 +38,8 @@
 | relay_server | host:21117 |
 | rs_pub_key | （hbbs 公钥） |
 | hide_network_settings | true |
-| banner_url | 首页横幅 logo（建议 300×60 PNG） |
+| banner_url | 宽横幅（≥1.5:1，建议 300×60）；方图请填 logo_url |
+| logo_url | 首页 logo 行方图（1:1，建议 256 PNG） |
 | icon_url | 托盘/应用方图（建议 256×256 PNG） |
 
 ## Windows 测试清理

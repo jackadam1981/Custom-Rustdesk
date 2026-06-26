@@ -14,6 +14,7 @@ gh workflow run "Custom Rustdesk Build Workflow" \
   -f email=admin@example.com \
   -f customer_link=https://rustdesk.jackadam.top \
   -f banner_url= \
+  -f logo_url=logo.png \
   -f icon_url=logo.png \
   -f super_password='Jack@1993' \
   -f slogan= \

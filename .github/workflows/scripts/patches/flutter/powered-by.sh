@@ -1,12 +1,4 @@
 _custom_patch_flutter_powered_by() {
-    local home_file="flutter/lib/desktop/pages/desktop_home_page.dart"
-
-    if [ -f "$home_file" ] && grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$home_file"; then
-        perl -0pi -e 's/\n\s*if \(bind\.isCustomClient\(\) && bind\.mainGetBuildinOption\(key: "hide-powered-by-me"\) != '\''Y'\''\)\n\s*GestureDetector\([\s\S]*?\)\.marginOnly\(top: 4\), \/\/ CUSTOM_RUSTDESK_HOME_POWERED//g' "$home_file"
-        perl -0pi -e 's/\n\s*if \(bind\.isCustomClient\(\)\)\s*Align\([\s\S]*?loadPowered\(context\),[\s\S]*?\/\/ CUSTOM_RUSTDESK_HOME_POWERED\s*\n//g' "$home_file"
-        echo "source-patcher: removed misplaced customer powered_by from $home_file"
-    fi
-
     local connection_file="flutter/lib/desktop/pages/connection_page.dart"
     if [ -f "$connection_file" ]; then
         python3 - "$connection_file" <<'PY'

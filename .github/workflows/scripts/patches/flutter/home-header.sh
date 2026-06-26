@@ -10,38 +10,64 @@ from pathlib import Path
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 marker = "CUSTOM_RUSTDESK_HOME_HEADER"
+logo_widget = """Container(
+                    constraints: const BoxConstraints(maxWidth: 300, maxHeight: 72),
+                    child: Image.asset(
+                      'assets/logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
+                  ), // CUSTOM_RUSTDESK_HOME_ICON"""
+powered_widget = """if (bind.isCustomClient() &&
+                  bind.mainGetBuildinOption(key: "hide-powered-by-me") != 'Y')
+                Align(
+                  alignment: Alignment.center,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () {
+                        final link =
+                            bind.mainGetBuildinOption(key: "custom-customer-link");
+                        if (link.isNotEmpty) {
+                          launchUrl(Uri.parse(link));
+                        }
+                      },
+                      child: Opacity(
+                        opacity: 0.5,
+                        child: Text(
+                          translate("powered_by_me"),
+                          overflow: TextOverflow.clip,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontSize: 9, decoration: TextDecoration.underline),
+                        ),
+                      ),
+                    ),
+                  ).marginOnly(top: 6),
+                ), // CUSTOM_RUSTDESK_HOME_POWERED"""
+slogan_widget = """if (bind.mainGetBuildinOption(key: "custom-slogan").isNotEmpty)
+                Text(
+                  bind.mainGetBuildinOption(key: "custom-slogan"),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ).marginOnly(top: 2), // CUSTOM_RUSTDESK_HOME_SLOGAN"""
+
 text = re.sub(
     r"if \(bind\.isCustomClient\(\)\)\)\s*\n",
     "if (bind.isCustomClient())\n",
     text,
 )
-if "CUSTOM_RUSTDESK_HOME_ICON" in text and marker in text:
-    text = re.sub(
-        r"Image\.asset\(\s*'assets/icon\.png',[\s\S]*?// CUSTOM_RUSTDESK_HOME_ICON",
-        "loadIcon(48), // CUSTOM_RUSTDESK_HOME_ICON",
-        text,
-        count=1,
-    )
-    text = re.sub(
-        r"\s*if \(bind\.mainGetBuildinOption\(key: \"custom-slogan\"\)\.isNotEmpty\)\s*"
-        r"Text\([\s\S]*?// CUSTOM_RUSTDESK_HOME_SLOGAN",
-        "",
-        text,
-    )
-    path.write_text(text, encoding="utf-8")
-    raise SystemExit(0)
 
-custom_block = """if (bind.isCustomClient())
+custom_block = f"""if (bind.isCustomClient())
         Align(
           alignment: Alignment.center,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              {powered_widget}
               Row(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  loadIcon(48), // CUSTOM_RUSTDESK_HOME_ICON
+                  {logo_widget}
                   Flexible(
                     child: Text(
                       bind.mainGetBuildinOption(key: "app-name"),
@@ -51,6 +77,7 @@ custom_block = """if (bind.isCustomClient())
                   ),
                 ],
               ),
+              {slogan_widget}
             ],
           ),
         ), // CUSTOM_RUSTDESK_HOME_HEADER
@@ -59,6 +86,37 @@ custom_block = """if (bind.isCustomClient())
           alignment: Alignment.center,
           child: loadLogo(),
         ),"""
+
+if "CUSTOM_RUSTDESK_HOME_ICON" in text and marker in text:
+    text = re.sub(
+        r"loadIcon\(48\), // CUSTOM_RUSTDESK_HOME_ICON",
+        logo_widget,
+        text,
+        count=1,
+    )
+    text = re.sub(
+        r"Image\.asset\(\s*'assets/icon\.png',[\s\S]*?// CUSTOM_RUSTDESK_HOME_ICON",
+        logo_widget,
+        text,
+        count=1,
+    )
+    if "CUSTOM_RUSTDESK_HOME_POWERED" not in text:
+        text = re.sub(
+            r"(mainAxisSize: MainAxisSize\.min,\s*children: \[\s*)",
+            r"\1" + powered_widget + "\n              ",
+            text,
+            count=1,
+        )
+    if "CUSTOM_RUSTDESK_HOME_SLOGAN" not in text:
+        text = re.sub(
+            r"(</Row>,\s*)",
+            r"\1\n              " + slogan_widget + "\n",
+            text,
+            count=1,
+        )
+    path.write_text(text, encoding="utf-8")
+    raise SystemExit(0)
+
 legacy_custom_block = re.compile(
     r"if \(bind\.isCustomClient\(\)\)\)?\s*"
     r"Align\([\s\S]*?// CUSTOM_RUSTDESK_HOME_HEADER\s*"
@@ -90,12 +148,26 @@ elif upstream_block.search(text):
 else:
     raise SystemExit("source-patcher: home header anchor not found in desktop_home_page.dart")
 
-if marker not in text or "CUSTOM_RUSTDESK_HOME_ICON" not in text:
-    raise SystemExit("source-patcher: failed to inject custom home header in desktop_home_page.dart")
+required = (
+    marker,
+    "CUSTOM_RUSTDESK_HOME_ICON",
+    "CUSTOM_RUSTDESK_HOME_POWERED",
+    "CUSTOM_RUSTDESK_HOME_SLOGAN",
+    "assets/logo.png",
+)
+missing = [item for item in required if item not in text]
+if missing:
+    raise SystemExit(
+        "source-patcher: failed to inject custom home header in desktop_home_page.dart: "
+        + ", ".join(missing)
+    )
 path.write_text(text, encoding="utf-8")
 PY
         if grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file" &&
-           grep -q "CUSTOM_RUSTDESK_HOME_ICON" "$home_file"; then
+           grep -q "CUSTOM_RUSTDESK_HOME_ICON" "$home_file" &&
+           grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$home_file" &&
+           grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" "$home_file" &&
+           grep -q "assets/logo.png" "$home_file"; then
             echo "source-patcher: custom home header injected in $home_file"
         else
             echo "source-patcher: failed to inject custom home header in $home_file" >&2

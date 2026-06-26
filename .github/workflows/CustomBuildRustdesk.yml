@@ -25,7 +25,11 @@ on:
         required: false
         default: ''
       banner_url:
-        description: 'Home banner logo (300x60 PNG recommended); URL or repo path'
+        description: 'Home banner (300x60 PNG recommended); URL or repo path'
+        required: false
+        default: ''
+      logo_url:
+        description: 'Home row logo square (1:1, ~256 PNG recommended); URL or repo path'
         required: false
         default: ''
       icon_url:
@@ -404,10 +408,8 @@ jobs:
           echo "  - customer: $customer"
           echo "  - customer_link: $customer_link"
           echo "  - banner_url: ${banner_url:+[provided]}"
+          echo "  - logo_url: ${logo_url:+[provided]}"
           echo "  - icon_url: ${icon_url:+[provided]}"
-          if [ -n "$logo_url" ]; then
-            echo "  - logo_url(deprecated): [provided]"
-          fi
           echo "  - slogan: $slogan"
           echo "  - email: $email"
           echo "  - rendezvous_server: $rendezvous_server"

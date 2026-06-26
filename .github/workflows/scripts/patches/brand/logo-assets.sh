@@ -52,22 +52,33 @@ _custom_fetch_image_source() {
 
 _custom_patch_logo_assets() {
     local banner_source="${CUSTOM_BANNER_URL:-}"
+    local logo_source="${CUSTOM_LOGO_URL:-}"
     local icon_source="${CUSTOM_ICON_URL:-}"
 
-    if [ -z "$banner_source" ] && [ -z "$icon_source" ]; then
-        echo "source-patcher: no banner_url/icon_url configured, skipping logo assets"
+    if [ -z "$banner_source" ] && [ -z "$logo_source" ] && [ -z "$icon_source" ]; then
+        echo "source-patcher: no banner_url/logo_url/icon_url configured, skipping logo assets"
         return 0
     fi
 
     local work_dir
     work_dir=$(mktemp -d)
     local banner_input=""
+    local logo_input=""
     local icon_input=""
 
     if [ -n "$banner_source" ]; then
         banner_input="$work_dir/custom-banner"
         echo "source-patcher: banner_url configured"
         if ! _custom_fetch_image_source "$banner_source" "$banner_input"; then
+            rm -rf "$work_dir"
+            return 1
+        fi
+    fi
+
+    if [ -n "$logo_source" ]; then
+        logo_input="$work_dir/custom-logo"
+        echo "source-patcher: logo_url configured"
+        if ! _custom_fetch_image_source "$logo_source" "$logo_input"; then
             rm -rf "$work_dir"
             return 1
         fi
@@ -90,7 +101,7 @@ PY
         python3 -m pip install --user pillow
     fi
 
-    python3 - "$banner_input" "$icon_input" <<'PY'
+    python3 - "$banner_input" "$logo_input" "$icon_input" <<'PY'
 import json
 import re
 import sys
@@ -99,7 +110,14 @@ from pathlib import Path
 from PIL import Image
 
 banner_path = Path(sys.argv[1]) if sys.argv[1] else None
-icon_path = Path(sys.argv[2]) if sys.argv[2] else None
+logo_path = Path(sys.argv[2]) if sys.argv[2] else None
+icon_path = Path(sys.argv[3]) if sys.argv[3] else None
+
+HOME_LOGO_SQUARE = 72
+ICON_ONLY_HOME_LOGO = 72
+BANNER_MAX = (300, 60)
+# ratio >= WIDE_BANNER_RATIO → 300×60 横幅；否则按方图处理（避免方图压进 60px 高几乎看不见）
+WIDE_BANNER_RATIO = 1.5
 
 def open_image(path: Path) -> Image.Image:
     try:
@@ -120,9 +138,42 @@ def save_png(path: Path, img: Image.Image, size: int) -> None:
 
 def save_fit_png(path: Path, img: Image.Image, max_width: int, max_height: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    banner = img.copy()
-    banner.thumbnail((max_width, max_height), Image.LANCZOS)
-    banner.save(path)
+    fitted = img.copy()
+    fitted.thumbnail((max_width, max_height), Image.LANCZOS)
+    fitted.save(path)
+
+def aspect_ratio(img: Image.Image) -> float:
+    w, h = img.size
+    return w / h if h else 1.0
+
+def is_wide_banner(img: Image.Image) -> bool:
+    return aspect_ratio(img) >= WIDE_BANNER_RATIO
+
+def write_home_logo_square(img: Image.Image) -> None:
+    for target in (
+        Path("flutter/assets/logo.png"),
+        Path("res/logo.png"),
+    ):
+        save_png(target, img, HOME_LOGO_SQUARE)
+
+def write_wide_banner_assets(img: Image.Image) -> None:
+    for target in (
+        Path("flutter/assets/banner.png"),
+        Path("res/banner.png"),
+    ):
+        save_fit_png(target, img, *BANNER_MAX)
+    for target in (
+        Path("flutter/assets/logo_light.png"),
+        Path("flutter/assets/logo_dark.png"),
+    ):
+        save_fit_png(target, img, *BANNER_MAX)
+
+def write_home_logo_wide(img: Image.Image) -> None:
+    for target in (
+        Path("flutter/assets/logo.png"),
+        Path("res/logo.png"),
+    ):
+        save_fit_png(target, img, *BANNER_MAX)
 
 def save_ico(path: Path, img: Image.Image) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -139,16 +190,76 @@ def save_ico(path: Path, img: Image.Image) -> None:
     ]
     square_canvas(img, 256).save(path, sizes=sizes)
 
+def write_platform_icons(icon: Image.Image) -> None:
+    windows_icon = Path("flutter/windows/runner/resources/app_icon.ico")
+    if windows_icon.parent.exists():
+        save_ico(windows_icon, icon)
+
+    save_ico(Path("res/tray-icon.ico"), icon)
+
+    android_sizes = {
+        "mipmap-mdpi": 48,
+        "mipmap-hdpi": 72,
+        "mipmap-xhdpi": 96,
+        "mipmap-xxhdpi": 144,
+        "mipmap-xxxhdpi": 192,
+    }
+    for folder, size in android_sizes.items():
+        base = Path("flutter/android/app/src/main/res") / folder
+        for name in ("ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"):
+            target = base / name
+            if target.exists():
+                save_png(target, icon, size)
+        stat_logo = base / "ic_stat_logo.png"
+        if stat_logo.exists():
+            save_png(stat_logo, icon, max(24, size // 2))
+
+    appicon_dir = Path("flutter/ios/Runner/Assets.xcassets/AppIcon.appiconset")
+    contents = appicon_dir / "Contents.json"
+    if contents.exists():
+        data = json.loads(contents.read_text(encoding="utf-8"))
+        for entry in data.get("images", []):
+            filename = entry.get("filename")
+            size_text = entry.get("size", "")
+            scale_text = entry.get("scale", "1x")
+            if not filename or "x" not in size_text:
+                continue
+            points = float(size_text.split("x", 1)[0])
+            scale = int(re.sub(r"\D", "", scale_text) or "1")
+            save_png(appicon_dir / filename, icon, int(round(points * scale)))
+
 if banner_path and banner_path.is_file():
     banner = open_image(banner_path)
-    for target in (
-        Path("flutter/assets/logo.png"),
-        Path("flutter/assets/logo_light.png"),
-        Path("flutter/assets/logo_dark.png"),
-        Path("res/logo.png"),
-    ):
-        save_fit_png(target, banner, 300, 60)
-    print("source-patcher: banner assets generated (300x60 fit)")
+    ratio = aspect_ratio(banner)
+    if is_wide_banner(banner):
+        write_wide_banner_assets(banner)
+        print(
+            f"source-patcher: banner_url -> banner.png + logo_light/dark "
+            f"(300x60 fit, ratio={ratio:.2f})"
+        )
+    else:
+        write_home_logo_square(banner)
+        for target in (
+            Path("flutter/assets/banner.png"),
+            Path("res/banner.png"),
+            Path("flutter/assets/logo_light.png"),
+            Path("flutter/assets/logo_dark.png"),
+        ):
+            save_png(target, banner, HOME_LOGO_SQUARE)
+        print(
+            f"source-patcher: banner_url square/portrait (ratio={ratio:.2f}) "
+            f"-> logo assets {HOME_LOGO_SQUARE}px square (use logo_url for home row)"
+        )
+
+if logo_path and logo_path.is_file():
+    logo = open_image(logo_path)
+    write_home_logo_square(logo)
+    print(f"source-patcher: logo_url -> logo.png ({HOME_LOGO_SQUARE}px square, home row)")
+elif banner_path and banner_path.is_file():
+    banner = open_image(banner_path)
+    if is_wide_banner(banner):
+        write_home_logo_wide(banner)
+        print("source-patcher: banner_url -> logo.png (300x60 fit, no logo_url)")
 
 if icon_path and icon_path.is_file():
     icon = open_image(icon_path)
@@ -158,57 +269,18 @@ if icon_path and icon_path.is_file():
     ):
         save_png(target, icon, 256)
 
-    home_only = not (banner_path and banner_path.is_file())
-    if home_only:
-        # 仅 icon：同步写 res/logo.png 供 Sciter S10；Flutter 仍用 icon.png @48px
+    if not (logo_path and logo_path.is_file()) and not (banner_path and banner_path.is_file()):
         for target in (
             Path("flutter/assets/logo.png"),
-            Path("flutter/assets/logo_light.png"),
-            Path("flutter/assets/logo_dark.png"),
             Path("res/logo.png"),
         ):
-            save_png(target, icon, 48)
-        print("source-patcher: icon assets generated (home header 48px; no tray/app ico)")
-    else:
-        windows_icon = Path("flutter/windows/runner/resources/app_icon.ico")
-        if windows_icon.parent.exists():
-            save_ico(windows_icon, icon)
+            save_png(target, icon, ICON_ONLY_HOME_LOGO)
+        print(
+            f"source-patcher: icon_url only -> logo.png ({ICON_ONLY_HOME_LOGO}px square fallback)"
+        )
 
-        tray_icon = Path("res/tray-icon.ico")
-        save_ico(tray_icon, icon)
-
-        android_sizes = {
-            "mipmap-mdpi": 48,
-            "mipmap-hdpi": 72,
-            "mipmap-xhdpi": 96,
-            "mipmap-xxhdpi": 144,
-            "mipmap-xxxhdpi": 192,
-        }
-        for folder, size in android_sizes.items():
-            base = Path("flutter/android/app/src/main/res") / folder
-            for name in ("ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"):
-                target = base / name
-                if target.exists():
-                    save_png(target, icon, size)
-            stat_logo = base / "ic_stat_logo.png"
-            if stat_logo.exists():
-                save_png(stat_logo, icon, max(24, size // 2))
-
-        appicon_dir = Path("flutter/ios/Runner/Assets.xcassets/AppIcon.appiconset")
-        contents = appicon_dir / "Contents.json"
-        if contents.exists():
-            data = json.loads(contents.read_text(encoding="utf-8"))
-            for entry in data.get("images", []):
-                filename = entry.get("filename")
-                size_text = entry.get("size", "")
-                scale_text = entry.get("scale", "1x")
-                if not filename or "x" not in size_text:
-                    continue
-                points = float(size_text.split("x", 1)[0])
-                scale = int(re.sub(r"\D", "", scale_text) or "1")
-                save_png(appicon_dir / filename, icon, int(round(points * scale)))
-
-        print("source-patcher: icon assets generated (256 square + tray/app icons)")
+    write_platform_icons(icon)
+    print("source-patcher: icon_url -> icon.png (256 square + tray/app icons)")
 PY
 
     rm -rf "$work_dir"

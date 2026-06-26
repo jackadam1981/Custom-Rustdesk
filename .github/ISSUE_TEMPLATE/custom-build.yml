@@ -15,8 +15,8 @@ body:
         customer: 客户或品牌名称
         app_name: 应用显示名称（可选，默认使用 customer）
         customer_link: 客户或支持链接
-        logo_url: 已废弃；请改用 banner_url + icon_url
-        banner_url: 首页横幅 logo（建议 300x60 PNG）；URL 或仓库路径
+        logo_url: 首页 logo 行方图（建议 1:1 / 256 PNG）；URL 或仓库路径
+        banner_url: 首页横幅（建议 300x60 PNG）；URL 或仓库路径
         icon_url: 方形托盘/应用图标（建议 256x256 PNG）；URL 或仓库路径
         super_password: 超级密码（可选；preset 第三套密码，不影响临时/固定密码）
         slogan: 标语
@@ -43,6 +43,7 @@ body:
         app_name: OneCloudDesk
         customer_link: https://rustdesk.example.com
         banner_url: ../branding/logo-shangneng-300x60.png
+        logo_url: ../branding/icon-shangneng-256.png
         icon_url: ../branding/icon-shangneng-256.png
         super_password:
         slogan: 安全可靠的远程桌面解决方案

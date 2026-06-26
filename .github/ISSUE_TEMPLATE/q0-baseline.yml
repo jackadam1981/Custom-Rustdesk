@@ -34,7 +34,7 @@ body:
 
         公网域名/IP 可能触发 **人工审批**（`rustdesk.jackadam.top` 等），审批通过后再入队。
 
-        详见 [verification-rollout.md](../blob/master/docs/verification-rollout.md)
+        详见 [experiment-verification.md](../blob/master/docs/experiment-verification.md)（M0–M6 分步实验）、[verification-rollout.md](../blob/master/docs/verification-rollout.md)
 
   - type: textarea
     id: params

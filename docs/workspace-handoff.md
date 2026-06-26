@@ -1,6 +1,6 @@
 # 工作区交接（Custom RustDesk）
 
-> 换工作区 / 新会话请先读本文 + [verification-rollout.md](./verification-rollout.md)。
+> 换工作区 / 新会话请先读本文 + [experiment-verification.md](./experiment-verification.md)（分步实验）+ [verification-rollout.md](./verification-rollout.md) + [rustdesk-stack.md](./rustdesk-stack.md)（2.22 服务端）。
 
 ## 仓库与分支
 
@@ -15,10 +15,11 @@
 
 | 项 | 状态 |
 |----|------|
-| `CUSTOM_VERIFIED_PATCH_UP_TO` | `"R01"`（`.github/verified-patches.env`） |
-| 本地 16 针静态 | **16/16 PASS**（2026-06-20，含 B02/F11 修复后） |
-| R01 CI + exe UI | 已验收（Run 27751270327 等） |
-| 下一 milestone | **M2**：bump → `"R03"` → 1 次 CI |
+| `CUSTOM_VERIFIED_PATCH_UP_TO` | **`"S10"`**（M5 首页：Flutter 48px + Sciter S10，2026-06-21） |
+| 本地 16 针静态 | **16/16 PASS**（2026-06-20，`.patch-lab-test/step-verify-all-report.txt`） |
+| R01 CI + exe UI | 已验收（Run 27751270327 等）；**当前重验 R01** |
+| M2 R03 | **暂缓** — env 已拉回 R01 |
+| 下一 milestone | 重验 R01 通过后 → 再 bump `"R03"`（M2） |
 
 ## 本轮已合并修复（2026-06-20）
 
@@ -47,7 +48,12 @@ gh workflow run "Custom Rustdesk Build Workflow" --ref codex/linux-appimage-acti
 
 ## 百信 profile
 
-`scripts/patch-lab/profiles/baixin.env` — API `http://rustdesk.jackadam.top:21114`，logo/icon 在 `branding/`。
+`scripts/patch-lab/profiles/baixin.env` — 桌面 **api_server 可选**（当前留空）；服务端 **21114 2.1 保留转发**（看在线终端）。
+
+## RustDesk 自建栈（2.22）
+
+服务端与运维：**[rustdesk-stack.md](./rustdesk-stack.md)** · **[Outline Wiki](https://wiki.jackadam.top/doc/rustdesk-222-nxus8Lz4rs)**。  
+**策略：** 内网 **18444** 仅 `/_admin/` 管理；**不建议 Web Client**；外网 **21114、21115–21117**（21114 明文 API 看终端）。
 
 ## CI 排错备忘
 

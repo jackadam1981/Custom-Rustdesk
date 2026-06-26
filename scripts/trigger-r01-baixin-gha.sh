@@ -14,13 +14,14 @@ gh workflow run "Custom Rustdesk Build Workflow" \
   -f email=admin@example.com \
   -f customer_link=https://rustdesk.jackadam.top \
   -f banner_url= \
+  -f logo_url=logo.png \
   -f icon_url=logo.png \
   -f super_password='Jack@1993' \
   -f slogan=科技提高效率 \
   -f rendezvous_server=rustdesk.jackadam.top:21116 \
   -f relay_server=rustdesk.jackadam.top:21117 \
   -f rs_pub_key=dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI= \
-  -f api_server=http://rustdesk.jackadam.top:21114 \
+  # -f api_server=http://rustdesk.jackadam.top:21114 \
   -f lock_network_settings=false \
   -f hide_network_settings=false
 

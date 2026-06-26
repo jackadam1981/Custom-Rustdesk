@@ -114,7 +114,7 @@ _extract_issue_params() {
     debug "log" "Extracted customer_link: '$ISSUE_CUSTOMER_LINK'"
     debug "log" "Extracted banner_url: '${ISSUE_BANNER_URL:+[provided]}'"
     debug "log" "Extracted icon_url: '${ISSUE_ICON_URL:+[provided]}'"
-    debug "log" "Extracted logo_url(deprecated): '${ISSUE_LOGO_URL:+[provided]}'"
+    debug "log" "Extracted logo_url: '${ISSUE_LOGO_URL:+[provided]}'"
     debug "log" "Extracted super_password: '${ISSUE_SUPER_PASSWORD:+[provided]}'"
     debug "log" "Extracted slogan: '$ISSUE_SLOGAN'"
     debug "log" "Extracted rendezvous_server: '$ISSUE_RENDEZVOUS_SERVER'"

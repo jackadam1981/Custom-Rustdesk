@@ -552,6 +552,7 @@ EOF
         grep -q '"app_name": "FixtureApp"' custom-build-config.json
         grep -q '"customer": "FixtureCustomer"' custom-build-config.json
         grep -q '"banner_url": null' custom-build-config.json
+        grep -q '"logo_url": null' custom-build-config.json
         grep -q '"icon_url": null' custom-build-config.json
         grep -q '"rendezvous_server": "192.168.2.22:21117"' custom-build-config.json
         grep -q '"custom_rendezvous_server": "192.168.2.22"' custom-build-config.json
@@ -609,17 +610,16 @@ EOF
         grep -q 'custom-customer-link' src/ui/index.tis
         grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'CUSTOM_RUSTDESK_HOME_ICON' flutter/lib/desktop/pages/desktop_home_page.dart
-        ! grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
-        ! grep -q 'custom-slogan' flutter/lib/desktop/pages/desktop_home_page.dart
-        grep -q 'custom-customer-name' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'custom-slogan' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/connection_page.dart
         grep -q 'CUSTOM_RUSTDESK_POWERED_LINK' flutter/lib/common.dart
         grep -q 'CUSTOM_RUSTDESK_POWERED_STYLE' flutter/lib/common.dart
         grep -q 'custom-rd-home-header' src/ui/index.tis
-        grep -q 'custom-rd-home-powered' src/ui/index.tis
-        ! grep -q 'custom-slogan' src/ui/index.tis
-        grep -q 'custom-customer-name' src/ui/index.tis
-        grep -q 'custom-rd-home-powered #powered-by .title' src/ui/index.tis
+        grep -q 'custom-rd-home-slogan' src/ui/index.tis
+        ! grep -q 'custom-rd-home-powered' src/ui/index.tis
+        grep -q 'font-size:0.8em' src/ui/index.tis
         grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
         grep -q 'max-height: 72vh' src/ui/index.css
         grep -q 'overflow-y: scroll-indicator' src/ui/index.css
@@ -628,14 +628,15 @@ EOF
         ! grep -q 'fontSize: 14' flutter/lib/common.dart
         ! grep -q 'color:#000;font-size:1.15em' src/ui/index.tis
         ! grep -q 'SizedBox(height: 12)' flutter/lib/desktop/pages/desktop_setting_page.dart
-        ! grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
         python3 - src/ui/index.tis <<'PY'
 import sys
 from pathlib import Path
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-marker = "custom-rd-home-powered"
-card = "<div .card-connect>"
-if text.find(marker) == -1 or text.find(card) == -1 or text.find(marker) > text.find(card):
+if "custom-rd-home-powered" in text:
+    raise SystemExit(1)
+if text.find("#powered-by") == -1 or text.find("<div .card-connect>") == -1:
+    raise SystemExit(1)
+if text.find("#powered-by") > text.find("<div .card-connect>"):
     raise SystemExit(1)
 PY
         python3 - src/ui/index.tis <<'PY'

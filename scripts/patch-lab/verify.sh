@@ -160,9 +160,11 @@ fi
 # --- B. UI patch markers ---
 if verify_from F10; then
 check "flutter home header" grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home icon" grep -q 'CUSTOM_RUSTDESK_HOME_ICON' flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home loadIcon" grep -q 'loadIcon(48)' flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home no slogan" bash -c '! grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" flutter/lib/desktop/pages/desktop_home_page.dart'
+check "flutter home logo" grep -q "assets/logo.png" flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home loadLogo mode" grep -q 'BoxConstraints(maxWidth: 300, maxHeight: 72)' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home powered" grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home slogan" grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home powered small" grep -q 'fontSize: 9' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home dart syntax" python3 - flutter/lib/desktop/pages/desktop_home_page.dart <<'PY'
 import re
 import sys
@@ -189,16 +191,22 @@ fi
 if verify_from S10; then
 check "sciter custom brand header" grep -q 'custom-rd-home-header' src/ui/index.tis
 check "sciter logo title same row" grep -q 'custom-rd-home-title-row' src/ui/index.tis
-check "sciter home no slogan" bash -c '! grep -q "custom-slogan" src/ui/index.tis'
-check "sciter powered title class" grep -q 'custom-rd-home-powered #powered-by .title' src/ui/index.tis
-check "sciter powered above card-connect" python3 - src/ui/index.tis <<'PY'
+check "sciter home slogan" grep -q 'custom-rd-home-slogan' src/ui/index.tis
+check "sciter home powered left" grep -q 'font-size:0.8em' src/ui/index.tis
+check "sciter powered not on card" python3 - src/ui/index.tis <<'PY'
 import sys
 from pathlib import Path
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-marker = "custom-rd-home-powered"
-card = "<div .card-connect>"
-if text.find(marker) == -1 or text.find(card) == -1 or text.find(marker) > text.find(card):
+if "custom-rd-home-powered" in text:
     raise SystemExit(1)
+card = "<div .card-connect>"
+header = "custom-rd-home-header"
+if text.find(header) == -1 or text.find(card) == -1:
+    raise SystemExit(2)
+if text.find("#powered-by") == -1:
+    raise SystemExit(3)
+if text.find("#powered-by") > text.find(card):
+    raise SystemExit(4)
 PY
 fi
 
@@ -218,25 +226,31 @@ fi
 
 if verify_from B02; then
 has_banner=false
+has_logo=false
 has_icon=false
-if [ -n "${BUILD_BANNER_URL:-}" ] || [ -n "${BUILD_LOGO_URL:-}" ]; then
+if [ -n "${BUILD_BANNER_URL:-}" ]; then
     has_banner=true
 fi
-if [ -n "${BUILD_ICON_URL:-}" ] || [ -n "${BUILD_LOGO_URL:-}" ]; then
+if [ -n "${BUILD_LOGO_URL:-}" ]; then
+    has_logo=true
+fi
+if [ -n "${BUILD_ICON_URL:-}" ]; then
     has_icon=true
 fi
 if [ "$has_banner" = true ]; then
-    check "flutter logo asset" test -f flutter/assets/logo.png
+    check "flutter banner asset" test -f flutter/assets/banner.png
+    check "res banner.png" test -f res/banner.png
     check "flutter logo light asset" test -f flutter/assets/logo_light.png
     check "flutter logo dark asset" test -f flutter/assets/logo_dark.png
+fi
+if [ "$has_logo" = true ] || [ "$has_banner" = true ] || [ "$has_icon" = true ]; then
+    check "flutter logo asset" test -f flutter/assets/logo.png
     check "res logo.png" test -f res/logo.png
 fi
 if [ "$has_icon" = true ]; then
     check "flutter icon asset" test -f flutter/assets/icon.png
     check "res icon.png" test -f res/icon.png
-    if [ "$has_banner" = true ] || [ -n "${BUILD_LOGO_URL:-}" ]; then
-        check "res tray-icon.ico" test -f res/tray-icon.ico
-    fi
+    check "res tray-icon.ico" test -f res/tray-icon.ico
 fi
 fi
 

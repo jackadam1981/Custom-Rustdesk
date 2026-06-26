@@ -6,7 +6,8 @@
 
 - **Flutter 与 Sciter 两套桌面 UI 定制内容必须一致**（布局、字号、文案、链接行为对齐；**不分版本，两套 UI 同一规范**）。
 - **`app_name` 仅影响 UI 显示名**：MSI 产品名、安装路径（`C:\Program Files\RustDesk\`）、服务名与注册表卸载项 **保持 RustDesk**，保证 `scripts/clean-rustdesk-windows.ps1` 可正常清理。
-- **`logo_url` 建议填写**：未填则跳过 Logo 替换，界面仍显示 RustDesk 默认 Logo。
+- **品牌图三资源**：`banner_url`（横幅）、`logo_url`（首页 logo 行方图）、`icon_url`（系统图标）；B02 分别写入 `banner.png` / `logo.png` / `icon.png`。
+- **`logo_url` 建议填写**（或与 `icon_url` 同图）：未填且无 `banner_url`/`icon_url` 则跳过 Logo 替换。
 
 ## 双 UI 统一规范（Flutter + Sciter）
 
@@ -21,7 +22,7 @@
 | 第一行字号 | 与「控制远程桌面」标题 **相同** |
 | 第二行 | `slogan`（换行显示） |
 | 第二行字号 | 比「控制远程桌面」 **小 2 号** |
-| 数据来源 | `logo_url` → Logo 资源；`app_name` → `app-name`；`slogan` → `custom-slogan` |
+| 数据来源 | `logo_url` → 首页 `logo.png`；`banner_url` → `banner.png`；`icon_url` → 系统图标；`app_name` → `app-name`；`slogan` → `custom-slogan` |
 
 ### 2. 连接页 Powered by（两套 UI 均有）
 
@@ -70,7 +71,9 @@
 | `customer` | 客户全称；Powered by、工作室署名中的 `{customer}` | 建议必填 |
 | `app_name` | **界面显示名称**（可短于 customer） | 默认 = `customer` |
 | `customer_link` | Powered by 点击链接 | 默认 `https://zzsn.work` |
-| `logo_url` | 客户 Logo（URL 或仓库内路径） | 空 = 不换 Logo |
+| `banner_url` | 首页**宽横幅**（宽高比 ≥ 1.5，建议 300×60）→ `banner.png` | 方图请用 `logo_url`；误传方图时 B02 自动按 72px 方图处理 |
+| `logo_url` | 首页 logo 行**方图**（1:1，72px 画布）→ `logo.png` | 可空；无则 banner（宽）或 icon 回写 |
+| `icon_url` | 系统方图（建议 256×256）→ `icon.png`、托盘/安装图标 | 可空 |
 | `slogan` | 首页品牌区第二行文案 | 可空 |
 | `super_password` | 超级密码（见上文 §4） | **选填**；**R01** |
 | `hide_network_settings` | 隐藏 ID/中继菜单与网络设置项 | `false`；**R01** |
@@ -89,7 +92,7 @@ R01（`r01.sh`）一次处理连接七项：ID/中继/API/Key/超级密码/锁�
 旧版 monolith 顺序（已拆分为独立针）：
 3. `_custom_patch_brand_files`
 4. `_custom_patch_flutter_ui_app_name`
-5. `_custom_patch_logo_assets`（仅当 `logo_url` 非空）
+5. `_custom_patch_logo_assets`（当 `banner_url` / `logo_url` / `icon_url` 任一非空）
 6. `_custom_patch_custom_ui_text`（文案、Powered by、关于页、Flutter/Sciter 首页）
 7. `_custom_patch_portable_working_dir`
 8. `_custom_patch_windows_test_signing`

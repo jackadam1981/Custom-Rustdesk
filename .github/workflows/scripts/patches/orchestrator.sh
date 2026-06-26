@@ -27,6 +27,7 @@ _custom_resolve_build_inputs() {
     CUSTOM_CUSTOMER="${BUILD_CUSTOMER:-定制客户}"
     CUSTOM_CUSTOMER_LINK="${BUILD_CUSTOMER_LINK:-https://zzsn.work}"
     CUSTOM_BANNER_URL="${BUILD_BANNER_URL:-}"
+    CUSTOM_LOGO_URL="${BUILD_LOGO_URL:-}"
     CUSTOM_ICON_URL="${BUILD_ICON_URL:-}"
     CUSTOM_SLOGAN="${BUILD_SLOGAN:-}"
     CUSTOM_RENDEZVOUS_INPUT="${BUILD_RENDEZVOUS_SERVER:-}"
@@ -45,6 +46,7 @@ _custom_resolve_build_inputs() {
     _custom_trace_value "BUILD_APP_NAME" "${BUILD_APP_NAME:-}"
     _custom_trace_value "CUSTOM_APP_NAME(resolved)" "$CUSTOM_APP_NAME"
     _custom_trace_value "BUILD_BANNER_URL" "${BUILD_BANNER_URL:+[provided]}"
+    _custom_trace_value "BUILD_LOGO_URL" "${BUILD_LOGO_URL:+[provided]}"
     _custom_trace_value "BUILD_ICON_URL" "${BUILD_ICON_URL:+[provided]}"
     _custom_trace_value "BUILD_RENDEZVOUS_SERVER(raw)" "${BUILD_RENDEZVOUS_SERVER:-}"
     _custom_trace_value "CUSTOM_RENDEZVOUS_SERVER(normalized)" "$CUSTOM_RENDEZVOUS_SERVER"
@@ -85,6 +87,7 @@ _custom_write_build_config_json() {
         --arg customer "$BUILD_CUSTOMER" \
         --arg customer_link "$CUSTOM_CUSTOMER_LINK" \
         --arg banner_url "$CUSTOM_BANNER_URL" \
+        --arg logo_url "$CUSTOM_LOGO_URL" \
         --arg icon_url "$CUSTOM_ICON_URL" \
         --arg slogan "$CUSTOM_SLOGAN" \
         --arg rendezvous_server "$CUSTOM_RENDEZVOUS_INPUT" \
@@ -104,6 +107,7 @@ _custom_write_build_config_json() {
             customer: $customer,
             customer_link: $customer_link,
             banner_url: (if ($banner_url | length) > 0 then $banner_url else null end),
+            logo_url: (if ($logo_url | length) > 0 then $logo_url else null end),
             icon_url: (if ($icon_url | length) > 0 then $icon_url else null end),
             source_patches_enabled: ($source_patches_enabled == "true"),
             verified_patch_up_to: (if ($verified_patch_up_to | length) > 0 then $verified_patch_up_to else null end),

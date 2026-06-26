@@ -10,7 +10,7 @@ slogan: 专业技术支持
 rendezvous_server: rustdesk.jackadam.top:21116
 relay_server: rustdesk.jackadam.top:21117
 rs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=
-api_server: http://rustdesk.jackadam.top:21114
+# api_server: http://rustdesk.jackadam.top:21114
 lock_network_settings: false
 hide_network_settings: false
 source_patch_debug: false
