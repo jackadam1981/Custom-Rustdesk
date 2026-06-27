@@ -15,6 +15,19 @@ text = path.read_text(encoding="utf-8")
 marker = "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION"
 row_marker = "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN"
 
+def normalize_about_layout_close(text: str) -> str:
+    text = re.sub(
+        r"\), // CUSTOM_RUSTDESK_ABOUT_LAYOUT\],",
+        "), // CUSTOM_RUSTDESK_ABOUT_LAYOUT\n                          ],",
+        text,
+    )
+    text = re.sub(
+        r"// CUSTOM_RUSTDESK_ABOUT_LAYOUT\],",
+        "// CUSTOM_RUSTDESK_ABOUT_LAYOUT\n                          ],",
+        text,
+    )
+    return text
+
 studio_block = """
                           // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION
                           InkWell(
@@ -67,10 +80,7 @@ text = re.sub(
     ")",
     text,
 )
-text = text.replace(
-    "// CUSTOM_RUSTDESK_ABOUT_LAYOUT],",
-    "// CUSTOM_RUSTDESK_ABOUT_LAYOUT\n                          ],",
-)
+text = normalize_about_layout_close(text)
 
 if marker not in text:
     anchors = [
@@ -113,12 +123,14 @@ else:
         r"style: (?:const )?TextStyle\([\s\S]*?"
         r"decoration: TextDecoration\.underline\),\s*"
         r"\),\s*"
-        r"\)(?:\.marginSymmetric\(vertical: 4\.0\))?, // CUSTOM_RUSTDESK_ABOUT_LAYOUT",
+        r"\)(?:\.marginSymmetric\(vertical: 4\.0\))?, // CUSTOM_RUSTDESK_ABOUT_LAYOUT(?:\],)?",
     )
     text = studio_pat.sub(studio_block.strip(), text, count=1)
 
 if marker not in text:
     raise SystemExit("source-patcher: failed to inject studio attribution in desktop_setting_page.dart")
+
+text = normalize_about_layout_close(text)
 
 path.write_text(text, encoding="utf-8")
 PY
@@ -126,6 +138,7 @@ PY
     if grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file" &&
        grep -q "https://zzsn.work" "$about_file" &&
        grep -q "CUSTOM_RUSTDESK_ABOUT_LAYOUT" "$about_file" &&
+       ! grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT\],' "$about_file" &&
        ! grep -q "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN" "$about_file" &&
        ! grep -q "height: 2.0" "$about_file"; then
         echo "source-patcher: studio attribution aligned below Slogan_tip in $about_file"

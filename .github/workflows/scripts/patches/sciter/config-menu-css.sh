@@ -17,10 +17,6 @@ menu.context#config-options {
   flow: horizontal-flow;
   width: 520px;
   max-width: 90vw;
-  height: max-content;
-  max-height: 72vh;
-  overflow-y: scroll-indicator;
-  vertical-scrollbar: my-scrollbar;
 }
 menu.context#config-options > li {
   width: 48%;
@@ -28,11 +24,6 @@ menu.context#config-options > li {
 }
 menu.context#config-options > div.separator {
   width: 100%;
-}
-@media (height < 720px) {
-  menu.context#config-options {
-    max-height: 65vh;
-  }
 }
 """
 pattern = re.compile(
@@ -55,8 +46,8 @@ PY
        grep -q 'flow: horizontal-flow' "$css_file" &&
        grep -q 'menu.context#config-options > li' "$css_file" &&
        grep -q 'width: 48%' "$css_file" &&
-       grep -q 'overflow-y: scroll-indicator' "$css_file" &&
-       grep -q 'max-height: 72vh' "$css_file"; then
+       ! grep -q 'overflow-y: scroll-indicator' "$css_file" &&
+       ! grep -q 'max-height: 72vh' "$css_file"; then
         echo "source-patcher: sciter config menu two-column flow patched in $css_file"
     else
         echo "source-patcher: failed to patch sciter config menu flow in $css_file" >&2
@@ -74,19 +65,6 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-inject_body = """// CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT
-var (_, __, ___, viewH) = view.box(#dimension, #border, #view);
-var maxMenuHDip = ((viewH / scaleFactor) * 72 / 100).toInteger();
-if (maxMenuHDip < 240) maxMenuHDip = 240;
-menu.style.set {
-  "max-height": maxMenuHDip + "dip",
-  "overflow-y": "scroll-indicator",
-};"""
-
-def build_replacement(match: re.Match[str]) -> str:
-    indent = match.group("indent")
-    injected = "\n".join(indent + line for line in inject_body.splitlines()) + "\n"
-    return f"{indent}var menu = this.$(menu#config-options);\n{injected}{indent}this.$(svg#menu).popup(menu);"
 
 tis_pattern = re.compile(
     r"(?P<indent>[ \t]*)var menu = this\.\$\(menu#config-options\);\n"
@@ -100,22 +78,28 @@ tis_pattern = re.compile(
     r"[ \t]*\};\n)?"
     r"(?P=indent)this\.\$\(svg#menu\)\.popup\(menu\);",
 )
-if "CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT" in text:
-    if not tis_pattern.search(text):
-        raise SystemExit(
-            "source-patcher: config menu max-height marker found but block shape unexpected"
-        )
+
+def build_replacement(match: re.Match[str]) -> str:
+    indent = match.group("indent")
+    return f"{indent}var menu = this.$(menu#config-options);\n{indent}this.$(svg#menu).popup(menu);"
+
+if tis_pattern.search(text):
     text = tis_pattern.sub(build_replacement, text, count=1)
-elif tis_pattern.search(text):
-    text = tis_pattern.sub(build_replacement, text, count=1)
-else:
-    raise SystemExit("source-patcher: showSettingMenu anchor not found in src/ui/index.tis")
+elif "CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT" in text:
+    raise SystemExit(
+        "source-patcher: config menu max-height marker found but showSettingMenu anchor unexpected"
+    )
+
 path.write_text(text, encoding="utf-8")
 PY
     if grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT" "src/ui/index.tis"; then
-        echo "source-patcher: sciter config menu max-height hook patched in src/ui/index.tis"
-    else
-        echo "source-patcher: failed to patch sciter config menu max-height in src/ui/index.tis" >&2
+        echo "source-patcher: failed to remove sciter config menu max-height hook in src/ui/index.tis" >&2
         return 1
     fi
+    if ! grep -q 'var menu = this\.\$(menu#config-options);' "src/ui/index.tis" ||
+       ! grep -q 'this\.\$(svg#menu)\.popup(menu);' "src/ui/index.tis"; then
+        echo "source-patcher: showSettingMenu anchor missing after config menu patch in src/ui/index.tis" >&2
+        return 1
+    fi
+    echo "source-patcher: sciter config menu uses upstream showSettingMenu popup (no runtime style hook)"
 }

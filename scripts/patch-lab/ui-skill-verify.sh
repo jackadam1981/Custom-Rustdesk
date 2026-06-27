@@ -40,12 +40,10 @@ grep -Fq 'font-weight:bold;display:inline-block' src/ui/index.tis && ok 'S10 inl
 grep -Fq 'custom-rd-home-slogan' src/ui/index.tis && ok 'S10 slogan row' || bad 'S10 slogan row'
 grep -Fq 'custom-rd-home-powered' src/ui/index.tis && ok 'S10 powered on right pane' || bad 'S10 powered on right pane'
 if python3 -c "from pathlib import Path;t=Path('src/ui/index.tis').read_text(encoding='utf-8');h=t.find('custom-rd-home-header');assert t.find('#powered-by')<t.find('<div .card-connect>') and '#powered-by' not in t[h:h+4000]"; then ok 'S10 powered above card, not in left brand'; else bad 'S10 powered placement'; fi
-grep -Fq 'max-height: 72vh' src/ui/index.css && ok 'S13 menu max-height vh' || bad 'S13 menu max-height vh'
-grep -Fq 'overflow-y: scroll-indicator' src/ui/index.css && ok 'S13 menu scroll' || bad 'S13 menu scroll'
 grep -Fq 'menu.context#config-options > li' src/ui/index.css && ok 'S13 menu two-column li' || bad 'S13 menu two-column li'
 grep -Fq 'width: 48%' src/ui/index.css && ok 'S13 menu li width 48%' || bad 'S13 menu li width 48%'
 grep -Fq 'flow: horizontal-flow' src/ui/index.css && ok 'S13 menu horizontal-flow' || bad 'S13 menu horizontal-flow'
-grep -Fq 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' src/ui/index.tis && ok 'S13 menu max-height hook' || bad 'S13 menu max-height hook'
+! grep -Fq 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' src/ui/index.tis && ok 'S13 menu no runtime style hook' || bad 'S13 menu no runtime style hook'
 grep -Fq 'studio-about' src/ui/index.tis && ok 'S12 studio-about' || bad 'S12 studio-about'
 grep -Fq 'CUSTOM_RUSTDESK_ABOUT_HEIGHT' src/ui/index.tis && ok 'S12 about height' || bad 'S12 about height'
 

@@ -621,12 +621,10 @@ EOF
         ! grep -q 'custom-rd-home-powered' src/ui/index.tis
         grep -q 'font-size:0.8em' src/ui/index.tis
         grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
-        grep -q 'max-height: 72vh' src/ui/index.css
-        grep -q 'overflow-y: scroll-indicator' src/ui/index.css
         grep -q 'menu.context#config-options > li' src/ui/index.css
         grep -q 'width: 48%' src/ui/index.css
         grep -q 'flow: horizontal-flow' src/ui/index.css
-        grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' src/ui/index.tis
+        ! grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' src/ui/index.tis
         ! grep -q 'fontSize: 14' flutter/lib/common.dart
         ! grep -q 'color:#000;font-size:1.15em' src/ui/index.tis
         ! grep -q 'SizedBox(height: 12)' flutter/lib/desktop/pages/desktop_setting_page.dart
