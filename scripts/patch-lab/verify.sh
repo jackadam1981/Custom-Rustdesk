@@ -225,8 +225,10 @@ check "sciter config menu flow" grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/u
 check "sciter config menu two-column" grep -q 'menu.context#config-options > li' src/ui/index.css
 check "sciter config menu li width 48%" grep -q 'width: 48%' src/ui/index.css
 check "sciter config menu horizontal-flow" grep -q 'flow: horizontal-flow' src/ui/index.css
-check "sciter config menu no scroll css" bash -c '! grep -q "overflow-y: scroll-indicator" src/ui/index.css'
-check "sciter config menu no max-height hook" bash -c '! grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT" src/ui/index.tis'
+check "sciter config menu max-height css" grep -q 'max-height: 80vh' src/ui/index.css
+check "sciter config menu scroll css" grep -q 'overflow-y: scroll-indicator' src/ui/index.css
+check "sciter config menu width hook" grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_WIDTH' src/ui/index.tis
+check "sciter config menu no overflow hook" bash -c '! grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT" src/ui/index.tis'
 fi
 
 if verify_from B02; then

@@ -43,7 +43,10 @@ if python3 -c "from pathlib import Path;t=Path('src/ui/index.tis').read_text(enc
 grep -Fq 'menu.context#config-options > li' src/ui/index.css && ok 'S13 menu two-column li' || bad 'S13 menu two-column li'
 grep -Fq 'width: 48%' src/ui/index.css && ok 'S13 menu li width 48%' || bad 'S13 menu li width 48%'
 grep -Fq 'flow: horizontal-flow' src/ui/index.css && ok 'S13 menu horizontal-flow' || bad 'S13 menu horizontal-flow'
-! grep -Fq 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' src/ui/index.tis && ok 'S13 menu no runtime style hook' || bad 'S13 menu no runtime style hook'
+grep -Fq 'max-height: 80vh' src/ui/index.css && ok 'S13 menu max-height css' || bad 'S13 menu max-height css'
+grep -Fq 'overflow-y: scroll-indicator' src/ui/index.css && ok 'S13 menu scroll css' || bad 'S13 menu scroll css'
+grep -Fq 'CUSTOM_RUSTDESK_CONFIG_MENU_WIDTH' src/ui/index.tis && ok 'S13 menu width hook' || bad 'S13 menu width hook'
+! grep -Fq 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' src/ui/index.tis && ok 'S13 menu no overflow hook' || bad 'S13 menu no overflow hook'
 grep -Fq 'studio-about' src/ui/index.tis && ok 'S12 studio-about' || bad 'S12 studio-about'
 grep -Fq 'CUSTOM_RUSTDESK_ABOUT_HEIGHT' src/ui/index.tis && ok 'S12 about height' || bad 'S12 about height'
 
