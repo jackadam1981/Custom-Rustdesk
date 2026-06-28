@@ -13,7 +13,6 @@ from pathlib import Path
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 marker = "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION"
-row_marker = "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN"
 
 def normalize_about_layout_close(text: str) -> str:
     text = re.sub(
@@ -28,20 +27,38 @@ def normalize_about_layout_close(text: str) -> str:
     )
     return text
 
-studio_block = """
-                          // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION
-                          InkWell(
-                            onTap: () {
-                              launchUrlString('https://zzsn.work'); // CUSTOM_RUSTDESK_STUDIO_LINK
-                            },
-                            child: Text(
-                              translate('custom_studio_attribution'),
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  decoration: TextDecoration.underline),
-                            ),
-                          ), // CUSTOM_RUSTDESK_ABOUT_LAYOUT"""
+# One Text.rich block: Slogan_tip + newline + studio link share the same line
+# spacing as Copyright's internal "\n" breaks (original about blue-box rhythm).
+studio_rich_block = (
+    "\n                          // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION\n"
+    "                          Text.rich(\n"
+    "                            TextSpan(\n"
+    "                              children: [\n"
+    "                                TextSpan(\n"
+    "                                  text: translate('Slogan_tip'),\n"
+    "                                  style: TextStyle(\n"
+    "                                      fontWeight: FontWeight.w800,\n"
+    "                                      color: Colors.white),\n"
+    "                                ),\n"
+    "                                const TextSpan(text: '\\n'),\n"
+    "                                TextSpan(\n"
+    "                                  text: translate('custom_studio_attribution'),\n"
+    "                                  style: TextStyle(\n"
+    "                                      fontWeight: FontWeight.w800,\n"
+    "                                      color: Colors.white,\n"
+    "                                      decoration: TextDecoration.underline),\n"
+    "                                  recognizer: TapGestureRecognizer()\n"
+    "                                    ..onTap = () => launchUrlString('https://zzsn.work'), // CUSTOM_RUSTDESK_STUDIO_LINK\n"
+    "                                ),\n"
+    "                              ],\n"
+    "                            ),\n"
+    "                          ), // CUSTOM_RUSTDESK_ABOUT_LAYOUT"
+)
+
+def fix_dart_newline_escape(text: str) -> str:
+    broken = "const TextSpan(text: '" + chr(10) + "'),"
+    fixed = "const TextSpan(text: '" + chr(92) + "n'),"
+    return text.replace(broken, fixed)
 
 text = re.sub(
     r"final link = bind\.mainGetBuildinOption\(key: \"custom-customer-link\"\);\s*"
@@ -50,7 +67,7 @@ text = re.sub(
     text,
 )
 
-# Remove legacy line-height hack and row-margin injections inside the blue about box.
+# Remove legacy spacing hacks from older F12 attempts.
 text = text.replace(
     "style: const TextStyle(color: Colors.white, height: 2.0), // CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT",
     "style: const TextStyle(color: Colors.white)",
@@ -80,64 +97,54 @@ text = re.sub(
     ")",
     text,
 )
-text = normalize_about_layout_close(text)
 
-if marker not in text:
-    anchors = [
-        re.compile(
-            r"(Text\(\s*"
-            r"translate\('Slogan_tip'\),\s*"
-            r"style: TextStyle\([\s\S]*?"
-            r"color: Colors\.white\),\s*"
-            r"\)\s*)"
-        ),
-        re.compile(
-            r"(translate\('Slogan_tip'\),\s*"
-            r"style: TextStyle\([\s\S]*?"
-            r"color: Colors\.white\),\s*"
-            r"\),)"
-        ),
-    ]
-    matched = False
-    for anchor in anchors:
-        if anchor.search(text):
-            def _inject_studio(match, block=studio_block):
-                chunk = match.group(1).rstrip()
-                if not chunk.endswith(","):
-                    chunk += ","
-                return chunk + block
-
-            text = anchor.sub(_inject_studio, text, count=1)
-            matched = True
-            break
-    if not matched:
-        raise SystemExit("source-patcher: Slogan_tip anchor not found in desktop_setting_page.dart")
-else:
+legacy_combined = re.compile(
+    r"Text\(\s*translate\('Slogan_tip'\),\s*"
+    r"style: TextStyle\([\s\S]*?"
+    r"color: Colors\.white\),\s*"
+    r"\)\s*,?\s*"
+    r"// CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION[\s\S]*?"
+    r"\), // CUSTOM_RUSTDESK_ABOUT_LAYOUT",
+)
+if legacy_combined.search(text):
+    text = legacy_combined.sub(studio_rich_block.strip(), text, count=1)
+elif marker in text:
     studio_pat = re.compile(
-        r"InkWell\(\s*"
-        r"onTap: \(\) \{\s*"
-        r"launchUrlString\('https://zzsn\.work'\); // CUSTOM_RUSTDESK_STUDIO_LINK\s*"
-        r"\},\s*"
-        r"child: Text\(\s*"
-        r"translate\('custom_studio_attribution'\),\s*"
-        r"style: (?:const )?TextStyle\([\s\S]*?"
-        r"decoration: TextDecoration\.underline\),\s*"
-        r"\),\s*"
-        r"\)(?:\.marginSymmetric\(vertical: 4\.0\))?, // CUSTOM_RUSTDESK_ABOUT_LAYOUT(?:\],)?",
+        r"// CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION[\s\S]*?"
+        r"\), // CUSTOM_RUSTDESK_ABOUT_LAYOUT",
     )
-    text = studio_pat.sub(studio_block.strip(), text, count=1)
+    text = studio_pat.sub(studio_rich_block.strip(), text, count=1)
+else:
+    slogan_only = re.compile(
+        r"Text\(\s*translate\('Slogan_tip'\),\s*"
+        r"style: TextStyle\([\s\S]*?"
+        r"color: Colors\.white\),\s*"
+        r"\)\s*,?"
+    )
+    if not slogan_only.search(text):
+        raise SystemExit("source-patcher: Slogan_tip anchor not found in desktop_setting_page.dart")
+    text = slogan_only.sub(studio_rich_block.strip(), text, count=1)
 
 if marker not in text:
     raise SystemExit("source-patcher: failed to inject studio attribution in desktop_setting_page.dart")
 
-text = normalize_about_layout_close(text)
+if "package:flutter/gestures.dart" not in text:
+    text = text.replace(
+        "import 'package:flutter/material.dart';",
+        "import 'package:flutter/gestures.dart';\nimport 'package:flutter/material.dart';",
+        1,
+    )
 
+text = normalize_about_layout_close(text)
+text = fix_dart_newline_escape(text)
 path.write_text(text, encoding="utf-8")
 PY
 
     if grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file" &&
        grep -q "https://zzsn.work" "$about_file" &&
        grep -q "CUSTOM_RUSTDESK_ABOUT_LAYOUT" "$about_file" &&
+       grep -q "Text.rich" "$about_file" &&
+       grep -q "TapGestureRecognizer" "$about_file" &&
        ! grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT\],' "$about_file" &&
        ! grep -q "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN" "$about_file" &&
        ! grep -q "height: 2.0" "$about_file"; then

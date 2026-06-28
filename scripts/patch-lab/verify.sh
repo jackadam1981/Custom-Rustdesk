@@ -163,7 +163,7 @@ check "flutter home header" grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/de
 check "flutter home logo" grep -q "base64Decode" flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home logo memory" grep -q "Image.memory" flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home logo size" grep -q 'width: 48' flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home no powered" ! grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home no powered" bash -c '! grep -q "CUSTOM_RUSTDESK_HOME_POWERED" flutter/lib/desktop/pages/desktop_home_page.dart'
 check "flutter home slogan" grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home dart syntax" python3 - flutter/lib/desktop/pages/desktop_home_page.dart <<'PY'
 import re
@@ -186,7 +186,7 @@ check "flutter studio zzsn.work" grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/l
 check "flutter studio zzsn.work url" grep -q 'https://zzsn.work' flutter/lib/desktop/pages/desktop_setting_page.dart
 check "flutter about layout" grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
 check "flutter about no merged bracket comment" bash -c '! grep -q "CUSTOM_RUSTDESK_ABOUT_LAYOUT\\]," flutter/lib/desktop/pages/desktop_setting_page.dart'
-check "flutter about no row-margin hack" ! grep -q 'CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN' flutter/lib/desktop/pages/desktop_setting_page.dart
+check "flutter about no row-margin hack" bash -c '! grep -q "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN" flutter/lib/desktop/pages/desktop_setting_page.dart'
 fi
 
 if verify_from S10; then

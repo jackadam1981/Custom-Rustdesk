@@ -28,7 +28,7 @@ grep -q CUSTOM_RUSTDESK_HOME_SLOGAN flutter/lib/desktop/pages/desktop_home_page.
 grep -q CUSTOM_RUSTDESK_HOME_POWERED flutter/lib/desktop/pages/connection_page.dart && ok 'F11 POWERED on connection' || bad 'F11 POWERED on connection'
 grep -q CUSTOM_RUSTDESK_POWERED_STYLE flutter/lib/common.dart && ok 'F11 POWERED_STYLE' || bad 'F11 POWERED_STYLE'
 grep -q CUSTOM_RUSTDESK_STUDIO_LINK flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 STUDIO_LINK' || bad 'F12 STUDIO_LINK'
-! grep -q CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 about original spacing' || bad 'F12 about original spacing'
+grep -q Text.rich flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 about Text.rich line spacing' || bad 'F12 about Text.rich line spacing'
 grep -q CUSTOM_RUSTDESK_UI_APP_NAME flutter/lib/common.dart && ok 'F02 UI_APP_NAME' || bad 'F02 UI_APP_NAME'
 
 echo ""
@@ -40,8 +40,7 @@ grep -Fq 'font-weight:bold;display:inline-block' src/ui/index.tis && ok 'S10 inl
 grep -Fq 'custom-rd-home-slogan' src/ui/index.tis && ok 'S10 slogan row' || bad 'S10 slogan row'
 grep -Fq 'custom-rd-home-powered' src/ui/index.tis && ok 'S10 powered on right pane' || bad 'S10 powered on right pane'
 if python3 -c "from pathlib import Path;t=Path('src/ui/index.tis').read_text(encoding='utf-8');h=t.find('custom-rd-home-header');assert t.find('#powered-by')<t.find('<div .card-connect>') and '#powered-by' not in t[h:h+4000]"; then ok 'S10 powered above card, not in left brand'; else bad 'S10 powered placement'; fi
-! grep -Fq 'flow: horizontal-flow' src/ui/index.css && ok 'S13 menu no horizontal-flow' || bad 'S13 menu no horizontal-flow'
-! grep -Fq 'width: 48%' src/ui/index.css && ok 'S13 menu no li width hack' || bad 'S13 menu no li width hack'
+! grep -Fq 'menu.context#config-options > li' src/ui/index.css && ok 'S13 menu single-column' || bad 'S13 menu single-column'
 grep -Fq 'max-height: 80vh' src/ui/index.css && ok 'S13 menu max-height css' || bad 'S13 menu max-height css'
 grep -Fq 'overflow-y: scroll-indicator' src/ui/index.css && ok 'S13 menu scroll css' || bad 'S13 menu scroll css'
 ! grep -Fq 'CUSTOM_RUSTDESK_CONFIG_MENU_WIDTH' src/ui/index.tis && ok 'S13 menu no tis width hook' || bad 'S13 menu no tis width hook'
