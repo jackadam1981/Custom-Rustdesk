@@ -160,8 +160,8 @@ fi
 # --- B. UI patch markers ---
 if verify_from F10; then
 check "flutter home header" grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home logo" grep -q "assets/logo.png" flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home icon fallback" grep -q "assets/icon.png" flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home logo" grep -q "base64Decode" flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home logo memory" grep -q "Image.memory" flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home logo size" grep -q 'width: 48' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home no powered" ! grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home slogan" grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart

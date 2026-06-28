@@ -1,33 +1,50 @@
 _custom_patch_flutter_home_header() {
     local home_file="flutter/lib/desktop/pages/desktop_home_page.dart"
+    local logo_file="flutter/assets/logo.png"
+
+    if [ ! -f "$logo_file" ]; then
+        echo "source-patcher: $logo_file missing — apply B02 logo_url before F10" >&2
+        return 1
+    fi
 
     if [ -f "$home_file" ]; then
-        python3 - "$home_file" <<'PY'
+        python3 - "$home_file" "$logo_file" <<'PY'
+import base64
 import re
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
+logo_file = Path(sys.argv[2])
 text = path.read_text(encoding="utf-8")
 marker = "CUSTOM_RUSTDESK_HOME_HEADER"
-logo_widget = """Image.asset(
-                    'assets/logo.png',
+
+if not logo_file.is_file():
+    raise SystemExit(f"source-patcher: logo asset missing for F10: {logo_file}")
+
+logo_b64 = base64.b64encode(logo_file.read_bytes()).decode("ascii")
+logo_widget = f"""Image.memory(
+                    base64Decode('{logo_b64}'),
                     width: 48,
                     height: 48,
                     fit: BoxFit.contain,
-                    errorBuilder: (ctx, error, stackTrace) => Image.asset(
-                          'assets/icon.png',
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.contain,
-                          errorBuilder: (ctx, e, s) => loadIcon(48),
-                        ),
+                    errorBuilder: (ctx, error, stackTrace) => loadIcon(48),
                   ), // CUSTOM_RUSTDESK_HOME_ICON"""
 slogan_widget = """if (bind.mainGetBuildinOption(key: "custom-slogan").isNotEmpty)
                 Text(
                   bind.mainGetBuildinOption(key: "custom-slogan"),
                   style: Theme.of(context).textTheme.bodySmall,
                 ).marginOnly(top: 2), // CUSTOM_RUSTDESK_HOME_SLOGAN"""
+
+if "import 'dart:convert';" not in text:
+    if "import 'dart:async';" in text:
+        text = text.replace(
+            "import 'dart:async';",
+            "import 'dart:async';\nimport 'dart:convert';",
+            1,
+        )
+    else:
+        raise SystemExit("source-patcher: cannot inject dart:convert import in desktop_home_page.dart")
 
 text = re.sub(
     r"if \(bind\.isCustomClient\(\)\)\)\s*\n",
@@ -65,7 +82,6 @@ custom_block = f"""if (bind.isCustomClient())
           child: loadLogo(),
         ),"""
 
-# Strip legacy powered-by row from home header (belongs on connection page only).
 legacy_powered = re.compile(
     r"\s*if \(bind\.isCustomClient\(\) &&\s*"
     r"bind\.mainGetBuildinOption\(key: \"hide-powered-by-me\"\) != 'Y'\)\s*"
@@ -75,28 +91,18 @@ legacy_powered = re.compile(
 if legacy_powered.search(text):
     text = legacy_powered.sub("\n              ", text, count=1)
 
+legacy_home_icon = re.compile(
+    r"(?:Image\.memory\([\s\S]*?|Image\.asset\([\s\S]*?|Container\(\s*"
+    r"constraints: const BoxConstraints\(maxWidth: 300, maxHeight: 72\),\s*"
+    r"child: Image\.asset\([\s\S]*?)"
+    r"// CUSTOM_RUSTDESK_HOME_ICON",
+    re.MULTILINE,
+)
+
 if "CUSTOM_RUSTDESK_HOME_ICON" in text and marker in text:
-    text = re.sub(
-        r"loadIcon\(48\), // CUSTOM_RUSTDESK_HOME_ICON",
-        logo_widget,
-        text,
-        count=1,
-    )
-    text = re.sub(
-        r"Container\(\s*"
-        r"constraints: const BoxConstraints\(maxWidth: 300, maxHeight: 72\),\s*"
-        r"child: Image\.asset\([\s\S]*?// CUSTOM_RUSTDESK_HOME_ICON",
-        logo_widget,
-        text,
-        count=1,
-    )
-    text = re.sub(
-        r"Image\.asset\(\s*"
-        r"'assets/logo\.png',[\s\S]*?// CUSTOM_RUSTDESK_HOME_ICON",
-        logo_widget,
-        text,
-        count=1,
-    )
+    if not legacy_home_icon.search(text):
+        raise SystemExit("source-patcher: F10 home icon marker found but block shape unexpected")
+    text = legacy_home_icon.sub(logo_widget, text, count=1)
     if "CUSTOM_RUSTDESK_HOME_SLOGAN" not in text:
         text = re.sub(
             r"(</Row>,\s*)",
@@ -142,8 +148,8 @@ required = (
     marker,
     "CUSTOM_RUSTDESK_HOME_ICON",
     "CUSTOM_RUSTDESK_HOME_SLOGAN",
-    "assets/logo.png",
-    "assets/icon.png",
+    "base64Decode(",
+    "Image.memory(",
     "loadIcon(48)",
 )
 forbidden = ("CUSTOM_RUSTDESK_HOME_POWERED", "loadPowered(context)")
@@ -163,10 +169,10 @@ PY
         if grep -q "CUSTOM_RUSTDESK_HOME_HEADER" "$home_file" &&
            grep -q "CUSTOM_RUSTDESK_HOME_ICON" "$home_file" &&
            grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" "$home_file" &&
-           grep -q "assets/logo.png" "$home_file" &&
-           grep -q "assets/icon.png" "$home_file" &&
+           grep -q "base64Decode" "$home_file" &&
+           grep -q "Image.memory" "$home_file" &&
            ! grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$home_file"; then
-            echo "source-patcher: custom home header injected in $home_file"
+            echo "source-patcher: custom home header (base64 logo embed) injected in $home_file"
         else
             echo "source-patcher: failed to inject custom home header in $home_file" >&2
             return 1

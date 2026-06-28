@@ -128,9 +128,9 @@ for needle in (
 
     "CUSTOM_RUSTDESK_HOME_HEADER",
 
-    "assets/logo.png",
+    "base64Decode",
 
-    "assets/icon.png",
+    "Image.memory",
 
     "width: 48",
 
@@ -140,7 +140,7 @@ for needle in (
 
 assert "CUSTOM_RUSTDESK_HOME_POWERED" not in text, "powered-by must not be on home left pane"
 
-print("OK F10 home header uses logo.png with icon.png fallback")
+print("OK F10 home header embeds logo.png as base64 Image.memory")
 
 
 

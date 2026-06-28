@@ -31,7 +31,8 @@ tis=src/ui/index.tis
 
 # F1 Flutter home brand (logo + app_name + slogan; no powered-by on left pane)
 if grep -q "CUSTOM_RUSTDESK_HOME_ICON" "$hf" &&
-   grep -q "assets/logo.png" "$hf" &&
+   grep -q "base64Decode" "$hf" &&
+   grep -q "Image.memory" "$hf" &&
    grep -q "width: 48" "$hf" &&
    grep -q "textTheme.titleLarge" "$hf" &&
    grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" "$hf" &&
