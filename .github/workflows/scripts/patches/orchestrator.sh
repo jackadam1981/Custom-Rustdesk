@@ -29,6 +29,10 @@ _custom_resolve_build_inputs() {
     CUSTOM_BANNER_URL="${BUILD_BANNER_URL:-}"
     CUSTOM_LOGO_URL="${BUILD_LOGO_URL:-}"
     CUSTOM_ICON_URL="${BUILD_ICON_URL:-}"
+    if [ -z "$CUSTOM_ICON_URL" ]; then
+        CUSTOM_ICON_URL="${DEFAULT_RUSTDESK_ICON_URL:-branding/icon-rustdesk.png}"
+        echo "source-patcher: icon_url not set, using default RustDesk icon: $CUSTOM_ICON_URL"
+    fi
     CUSTOM_SLOGAN="${BUILD_SLOGAN:-}"
     CUSTOM_RENDEZVOUS_INPUT="${BUILD_RENDEZVOUS_SERVER:-}"
     CUSTOM_RENDEZVOUS_SERVER=$(_custom_address_host "$CUSTOM_RENDEZVOUS_INPUT")

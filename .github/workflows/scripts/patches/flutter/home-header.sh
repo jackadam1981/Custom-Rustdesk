@@ -15,7 +15,13 @@ logo_widget = """Image.asset(
                     width: 48,
                     height: 48,
                     fit: BoxFit.contain,
-                    errorBuilder: (ctx, error, stackTrace) => loadIcon(48),
+                    errorBuilder: (ctx, error, stackTrace) => Image.asset(
+                          'assets/icon.png',
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.contain,
+                          errorBuilder: (ctx, e, s) => loadIcon(48),
+                        ),
                   ), // CUSTOM_RUSTDESK_HOME_ICON"""
 slogan_widget = """if (bind.mainGetBuildinOption(key: "custom-slogan").isNotEmpty)
                 Text(
@@ -137,6 +143,7 @@ required = (
     "CUSTOM_RUSTDESK_HOME_ICON",
     "CUSTOM_RUSTDESK_HOME_SLOGAN",
     "assets/logo.png",
+    "assets/icon.png",
     "loadIcon(48)",
 )
 forbidden = ("CUSTOM_RUSTDESK_HOME_POWERED", "loadPowered(context)")
@@ -157,6 +164,7 @@ PY
            grep -q "CUSTOM_RUSTDESK_HOME_ICON" "$home_file" &&
            grep -q "CUSTOM_RUSTDESK_HOME_SLOGAN" "$home_file" &&
            grep -q "assets/logo.png" "$home_file" &&
+           grep -q "assets/icon.png" "$home_file" &&
            ! grep -q "CUSTOM_RUSTDESK_HOME_POWERED" "$home_file"; then
             echo "source-patcher: custom home header injected in $home_file"
         else

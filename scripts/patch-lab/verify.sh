@@ -161,6 +161,7 @@ fi
 if verify_from F10; then
 check "flutter home header" grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home logo" grep -q "assets/logo.png" flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home icon fallback" grep -q "assets/icon.png" flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home logo size" grep -q 'width: 48' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home no powered" ! grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home slogan" grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
@@ -242,6 +243,8 @@ if [ -n "${BUILD_LOGO_URL:-}" ]; then
     has_logo=true
 fi
 if [ -n "${BUILD_ICON_URL:-}" ]; then
+    has_icon=true
+elif verify_from B02; then
     has_icon=true
 fi
 if [ "$has_banner" = true ]; then

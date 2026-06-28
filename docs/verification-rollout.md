@@ -50,7 +50,7 @@ scripts/patch-lab/ui-skill-verify.sh   # UI 组
 
 M0–M6 分档 checklist、16 针静态表、每档 5 步操作 → **[experiment-verification.md](./experiment-verification.md)**。
 
-**当前**：rollout 已拉回 **`"R01"`**（2026-06-21 重验）；M2 `"R03"` 暂缓。
+**当前**：rollout **`"S13"`**；**Sciter UI 已固化**（2026-06-28）；Flutter M5 仍待 exe 验收。
 
 ## 推荐命令（Q0）
 

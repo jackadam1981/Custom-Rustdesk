@@ -6,8 +6,8 @@
 
 - **Flutter 与 Sciter 两套桌面 UI 定制内容必须一致**（布局、字号、文案、链接行为对齐；**不分版本，两套 UI 同一规范**）。
 - **`app_name` 仅影响 UI 显示名**：MSI 产品名、安装路径（`C:\Program Files\RustDesk\`）、服务名与注册表卸载项 **保持 RustDesk**，保证 `scripts/clean-rustdesk-windows.ps1` 可正常清理。
-- **品牌图三资源**：`banner_url`（横幅）、`logo_url`（首页 logo 行方图）、`icon_url`（系统图标）；B02 分别写入 `banner.png` / `logo.png` / `icon.png`。
-- **`logo_url` 建议填写**（或与 `icon_url` 同图）：未填且无 `banner_url`/`icon_url` 则跳过 Logo 替换。
+- **品牌图三资源**：`banner_url`（横幅）、`logo_url`（首页 logo 行方图）、`icon_url`（Tab/托盘/窗口图标）；B02 分别写入 `banner.png` / `logo.png` / `icon.png`。
+- **`icon_url` 默认** `branding/icon-rustdesk.png`（上游 RustDesk 图标）；仅设 `logo_url` 时首页用定制 logo，系统图标保持原版。
 
 ## 双 UI 统一规范（Flutter + Sciter）
 

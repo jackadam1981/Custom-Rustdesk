@@ -33,7 +33,7 @@ on:
         required: false
         default: ''
       icon_url:
-        description: 'Square tray/app icon (256x256 PNG recommended); URL or repo path'
+        description: 'Square tray/app icon (256x256 PNG); empty = branding/icon-rustdesk.png (upstream RustDesk default)'
         required: false
         default: ''
       slogan:

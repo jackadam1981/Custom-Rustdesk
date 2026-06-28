@@ -6,7 +6,7 @@ alwaysApply: true
 # Custom RustDesk 工作区上下文
 
 - 主分支：`codex/linux-appimage-actions-test`；GitHub `jackadam1981/Custom-Rustdesk`。
-- Rollout 开关：`.github/verified-patches.env` → 当前 `"R01"`（M1 重验）；下一 milestone bump `"R03"`。
+- Rollout 开关：`.github/verified-patches.env` → 当前 **`"S13"`**；**Sciter S10/S12/S13 已固化**（2026-06-28）；Flutter F 组仍待验收。
 - 插针模块在 `.github/workflows/scripts/patches/`；顺序无 R02：`R01 R03 B01 B02 I01 F02 F10 F11 F12 S10 S12 S13 P01 P02 P03 P04`。
 - 本地验收：`bash scripts/patch-lab/step-verify-all.sh --profile baixin`（16 针静态，不编译）；详 `docs/verification-rollout.md`、`docs/workspace-handoff.md`。
 - B02 品牌图：仓库 `branding/`；CI/patch-lab 需 `CUSTOM_RUSTDESK_REPO` 或 `GITHUB_WORKSPACE`。
