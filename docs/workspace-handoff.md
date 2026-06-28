@@ -16,7 +16,7 @@
 | 项 | 状态 |
 |----|------|
 | `CUSTOM_VERIFIED_PATCH_UP_TO` | **`"S13"`**（Sciter 组末，2026-06-28 固化） |
-| **Sciter UI** | **已验收固化** — S10 首页 / S12 关于 / S13 配置菜单两列 |
+| **Sciter UI** | **已验收固化** — S10 首页 / S12 关于 / S13 配置菜单单列+滚动 |
 | **Flutter UI** | 待验收 — F10 首页 logo、F11 Powered by、F12 关于；Tab loadIcon 待修 |
 | 本地 16 针静态 | 16/16 PASS（patch-lab）；CI 前仍跑 `step-verify-all.sh` |
 | 下一 milestone | Flutter exe 验收通过后 → 可 bump 至 `"F12"` 或继续 P 组 |
@@ -25,7 +25,7 @@
 
 | Release | Run | 验收项 |
 |---------|-----|--------|
-| `baixin-menu-20260627-20260627-140756` | [28291552327](https://github.com/jackadam1981/Custom-Rustdesk/actions/runs/28291552327) | 首页品牌、Powered by、关于 studio-about、**三点菜单两列+滚动** |
+| `baixin-menu-20260627-20260627-140756` | [28291552327](https://github.com/jackadam1981/Custom-Rustdesk/actions/runs/28291552327) | 首页品牌、Powered by、关于 studio-about、三点菜单（后改 **单列+滚动**，见 S13 最新 commit） |
 | `baixin-logo-only-20260621-20260627-150957` | [28293035144](https://github.com/jackadam1981/Custom-Rustdesk/actions/runs/28293035144) | logo/icon 分离：仅 logo_url 时首页品牌正常、任务栏保持上游 |
 
 本地包：`downloads/Baixin-28291552327/`、`downloads/Baixin-28293035144/`（Sciter `x86-sciter.exe`）。

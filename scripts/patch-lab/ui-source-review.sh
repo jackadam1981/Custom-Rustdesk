@@ -174,14 +174,14 @@ if grep -q "<p class='link custom-event studio-about'" "$tis" &&
    grep -q "CUSTOM_RUSTDESK_ABOUT_HEIGHT" "$tis" &&
    grep -q '<p style='"'"'font-weight: bold'"'"'>\" + translate(\"Slogan_tip\")' "$tis" &&
    grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_FLOW" src/ui/index.css &&
-   grep -q 'menu.context#config-options > li' src/ui/index.css &&
-   grep -q 'width: 48%' src/ui/index.css &&
-   grep -q 'flow: horizontal-flow' src/ui/index.css &&
+   ! grep -q 'menu.context#config-options > li' src/ui/index.css &&
+   ! grep -q 'width: 48%' src/ui/index.css &&
+   ! grep -q 'flow: horizontal-flow' src/ui/index.css &&
    grep -q 'max-height: 80vh' src/ui/index.css &&
    grep -q 'overflow-y: scroll-indicator' src/ui/index.css &&
-   grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_WIDTH' "$tis" &&
+   ! grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_WIDTH' "$tis" &&
    ! grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' "$tis"; then
-    ok "S3 sciter about p-tag + taller dialog + menu two-column css"
+    ok "S3 sciter about p-tag + taller dialog + menu single-column scroll css"
 else
     bad "S3 sciter about/menu"
 fi
