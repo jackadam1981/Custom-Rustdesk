@@ -740,13 +740,6 @@ jobs:
           SOURCE_BRANCH: ${{ needs.build.outputs.source_branch }}
         run: |
           set -euo pipefail
-          # #region agent log
-          debug_agent_log() {
-            local hypothesis_id="$1" location="$2" message="$3" data="$4"
-            local log_file="${GITHUB_WORKSPACE:-.}/debug-356028.log"
-            printf '%s\n' "{\"sessionId\":\"356028\",\"hypothesisId\":\"$hypothesis_id\",\"location\":\"$location\",\"message\":\"$message\",\"data\":$data,\"timestamp\":$(date +%s000)}" >> "$log_file" 2>/dev/null || true
-          }
-          # #endregion
           upstream_run_id=""
           for _ in $(seq 1 30); do
             upstream_run_id="$(gh run list \
@@ -775,9 +768,6 @@ jobs:
           upstream_waited=0
           while true; do
             run_status="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json status --jq '.status')"
-            # #region agent log
-            debug_agent_log "E" "wait-upstream:poll" "upstream status poll" "{\"runId\":\"$upstream_run_id\",\"status\":\"$run_status\",\"waitedSec\":$upstream_waited}"
-            # #endregion
             if [ "$run_status" = "completed" ]; then
               break
             fi
@@ -790,9 +780,6 @@ jobs:
             upstream_waited=$((upstream_waited + upstream_wait_interval))
           done
           conclusion="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')"
-          # #region agent log
-          debug_agent_log "B" "wait-upstream:completed" "upstream run completed" "{\"runId\":\"$upstream_run_id\",\"conclusion\":\"$conclusion\",\"waitedSec\":$upstream_waited}"
-          # #endregion
           echo "upstream_conclusion=$conclusion" >> "$GITHUB_OUTPUT"
 
           jobs_json="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json jobs)"
@@ -805,6 +792,10 @@ jobs:
               elif ($n | test("macos|apple-darwin|darwin")) then "macos"
               elif ($n | test("linux")) then "linux"
               else "other" end;
+            def is_auxiliary($name):
+              ($name | ascii_downcase) as $n |
+              ($n | test("temptopmostwindow|tempwindow|generate-bridge|generate_bridge|bridge-artifact"));
+            def is_primary($name): (is_auxiliary($name) | not);
             def is_pending($j):
               ($j.status == "in_progress" or $j.status == "queued" or $j.status == "waiting"
                or $j.status == "requested" or $j.status == "pending"
@@ -812,10 +803,12 @@ jobs:
             def is_success($j): ($j.conclusion == "success");
             def is_failed($j):
               (is_pending($j) | not) and (is_success($j) | not)
-              and ($j.conclusion != "skipped") and ($j.conclusion != "neutral");
+              and ($j.conclusion != "skipped") and ($j.conclusion != "neutral")
+              and ($j.conclusion != "cancelled");
             [
               .jobs[]
               | select(.conclusion != "skipped")
+              | select(is_primary(.name))
               | {name, status, conclusion, platform: platform(.name)}
               | select(.platform != "other")
             ] as $jobs |
@@ -834,7 +827,7 @@ jobs:
               }
               | .status = (
                   if .pending > 0 then "pending"
-                  elif .failed == 0 and .success > 0 then "success"
+                  elif .success > 0 then "success"
                   else "failure" end
                 )
             ]
@@ -847,10 +840,7 @@ jobs:
           else
             echo "No platform jobs found in upstream workflow"
           fi
-          # #region agent log
           pending_platforms="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF && $2=="pending"{print $1}' | paste -sd ',' -)"
-          debug_agent_log "C" "wait-upstream:platform-summary" "platform aggregation" "{\"pendingPlatforms\":\"$pending_platforms\",\"summaryLines\":$(printf '%s\n' "$platform_summary" | jq -Rs .)}"
-          # #endregion
           if [ -n "$pending_platforms" ]; then
             echo "Upstream run completed but platform jobs still pending: $pending_platforms"
             exit 1

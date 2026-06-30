@@ -1095,6 +1095,7 @@ function test_upstream_build_uses_platform_result_summary() {
        grep -q 'platform_results' "$WORKFLOW_FILE" &&
        grep -q 'run_status="$(gh run view "$upstream_run_id"' "$WORKFLOW_FILE" &&
        grep -q 'def is_pending($j):' "$WORKFLOW_FILE" &&
+       grep -q 'def is_auxiliary($name):' "$WORKFLOW_FILE" &&
        grep -q 'gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json jobs' "$WORKFLOW_FILE" &&
        grep -q 'def platform($name):' "$WORKFLOW_FILE" &&
        grep -q 'partial_success' "$WORKFLOW_FILE" &&

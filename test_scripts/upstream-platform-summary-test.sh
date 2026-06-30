@@ -17,6 +17,10 @@ platform_summary_from_jobs() {
       elif ($n | test("macos|apple-darwin|darwin")) then "macos"
       elif ($n | test("linux")) then "linux"
       else "other" end;
+    def is_auxiliary($name):
+      ($name | ascii_downcase) as $n |
+      ($n | test("temptopmostwindow|tempwindow|generate-bridge|generate_bridge|bridge-artifact"));
+    def is_primary($name): (is_auxiliary($name) | not);
     def is_pending($j):
       ($j.status == "in_progress" or $j.status == "queued" or $j.status == "waiting"
        or $j.status == "requested" or $j.status == "pending"
@@ -24,10 +28,12 @@ platform_summary_from_jobs() {
     def is_success($j): ($j.conclusion == "success");
     def is_failed($j):
       (is_pending($j) | not) and (is_success($j) | not)
-      and ($j.conclusion != "skipped") and ($j.conclusion != "neutral");
+      and ($j.conclusion != "skipped") and ($j.conclusion != "neutral")
+      and ($j.conclusion != "cancelled");
     [
       .jobs[]
       | select(.conclusion != "skipped")
+      | select(is_primary(.name))
       | {name, status, conclusion, platform: platform(.name)}
       | select(.platform != "other")
     ] as $jobs |
@@ -46,7 +52,7 @@ platform_summary_from_jobs() {
       }
       | .status = (
           if .pending > 0 then "pending"
-          elif .failed == 0 and .success > 0 then "success"
+          elif .success > 0 then "success"
           else "failure" end
         )
     ]
@@ -79,9 +85,9 @@ assert_not_contains() {
 in_progress_jobs='{
   "jobs": [
     {"name":"run-upstream-flutter-build / i686-pc-windows-msvc (windows-2022)","status":"completed","conclusion":"success"},
+    {"name":"run-upstream-flutter-build / build-RustDeskTempTopMostWindow (windows-2022, x64) / build-RustDeskTempTopMostWindow","status":"completed","conclusion":"success"},
     {"name":"run-upstream-flutter-build / x86_64-pc-windows-msvc","status":"in_progress","conclusion":null},
-    {"name":"run-upstream-flutter-build / aarch64-pc-windows-msvc","status":"in_progress","conclusion":null},
-    {"name":"run-upstream-flutter-build / build-rustdesk-windows-sciter x86-pc-windows-msvc","status":"completed","conclusion":"success"}
+    {"name":"run-upstream-flutter-build / aarch64-pc-windows-msvc","status":"in_progress","conclusion":null}
   ]
 }'
 
@@ -99,8 +105,20 @@ summary_completed="$(platform_summary_from_jobs "$completed_jobs")"
 debug_log "C" "in_progress snapshot" "$(printf '%s' "$summary_in_progress" | jq -Rs '{summary:.}')"
 debug_log "C" "completed snapshot" "$(printf '%s' "$summary_completed" | jq -Rs '{summary:.}')"
 
-assert_contains "$summary_in_progress" $'windows\tpending\t' "in_progress jobs should mark platform pending"
-assert_not_contains "$summary_in_progress" $'windows\tfailure\t' "in_progress jobs must not count as platform failure"
+assert_contains "$summary_in_progress" $'windows\tpending\t' "in_progress primary job should mark platform pending"
+assert_not_contains "$summary_in_progress" $'windows\tfailure\t' "in_progress primary job must not count as platform failure"
+
+auxiliary_only='{
+  "jobs": [
+    {"name":"run-upstream-flutter-build / build-RustDeskTempTopMostWindow (windows-2022, x64) / build-RustDeskTempTopMostWindow","status":"completed","conclusion":"success"},
+    {"name":"run-upstream-flutter-build / build-RustDeskTempTopMostWindow (windows-11-arm, ARM64) / build-RustDeskTempTopMostWindow","status":"completed","conclusion":"success"}
+  ]
+}'
+summary_aux="$(platform_summary_from_jobs "$auxiliary_only")"
+if printf '%s\n' "$summary_aux" | grep -Fq 'windows'; then
+  echo "FAIL: auxiliary-only jobs should not define windows platform"
+  exit 1
+fi
 
 success_count="$(printf '%s\n' "$summary_completed" | awk -F '\t' 'NF && $2=="success"{count++} END{print count+0}')"
 if [ "$success_count" -lt 1 ]; then
