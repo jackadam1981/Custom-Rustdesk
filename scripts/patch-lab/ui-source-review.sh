@@ -72,6 +72,7 @@ fi
 if grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$af" &&
    grep -q "https://zzsn.work" "$af" &&
    grep -q "CUSTOM_RUSTDESK_ABOUT_LAYOUT" "$af" &&
+   grep -q "CUSTOM_RUSTDESK_ABOUT_UNIFIED_RICH" "$af" &&
    grep -q "Text.rich" "$af" &&
    grep -q "const TextSpan(text: '\\\\n')" "$af" &&
    ! grep -q "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN" "$af" &&

@@ -27,38 +27,81 @@ def normalize_about_layout_close(text: str) -> str:
     )
     return text
 
-# One Text.rich block: Slogan_tip + newline + studio link share the same line
-# spacing as Copyright's internal "\n" breaks (original about blue-box rhythm).
-studio_rich_block = (
-    "\n                          // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION\n"
-    "                          Text.rich(\n"
-    "                            TextSpan(\n"
-    "                              children: [\n"
-    "                                TextSpan(\n"
-    "                                  text: translate('Slogan_tip'),\n"
-    "                                  style: TextStyle(\n"
-    "                                      fontWeight: FontWeight.w800,\n"
-    "                                      color: Colors.white),\n"
-    "                                ),\n"
-    "                                const TextSpan(text: '\\n'),\n"
-    "                                TextSpan(\n"
-    "                                  text: translate('custom_studio_attribution'),\n"
-    "                                  style: TextStyle(\n"
-    "                                      fontWeight: FontWeight.w800,\n"
-    "                                      color: Colors.white,\n"
-    "                                      decoration: TextDecoration.underline),\n"
-    "                                  recognizer: TapGestureRecognizer()\n"
-    "                                    ..onTap = () => launchUrlString('https://zzsn.work'), // CUSTOM_RUSTDESK_STUDIO_LINK\n"
-    "                                ),\n"
-    "                              ],\n"
-    "                            ),\n"
-    "                          ), // CUSTOM_RUSTDESK_ABOUT_LAYOUT"
-)
-
 def fix_dart_newline_escape(text: str) -> str:
     broken = "const TextSpan(text: '" + chr(10) + "'),"
     fixed = "const TextSpan(text: '" + chr(92) + "n'),"
-    return text.replace(broken, fixed)
+    text = text.replace(broken, fixed)
+    # Heredoc can turn Copyright \\n into a literal line break inside the string.
+    bad = (
+        "'Copyright © ${DateTime.now().toString().substring(0, 4)} "
+    )
+    idx = 0
+    while True:
+        start = text.find(bad, idx)
+        if start < 0:
+            break
+        end = text.find("$license'", start)
+        if end < 0:
+            break
+        chunk = text[start : end + len("$license'")]
+        if chr(10) in chunk and chr(92) + "n" not in chunk:
+            fixed_chunk = chunk.replace(chr(10), chr(92) + "n")
+            text = text[:start] + fixed_chunk + text[end + len("$license'") :]
+        idx = end + 1
+    return text
+
+def build_unified_blue_box() -> str:
+    dart_nl = chr(92) + "n"
+    copyright_text = (
+        "'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Ltd."
+        + dart_nl
+        + "$license'"
+    )
+    return (
+        "\n                          // CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION\n"
+        "                          // CUSTOM_RUSTDESK_ABOUT_UNIFIED_RICH\n"
+        "                          Text.rich(\n"
+        "                            TextSpan(\n"
+        "                              style: const TextStyle(color: Colors.white),\n"
+        "                              children: [\n"
+        "                                TextSpan(\n"
+        "                                  text: "
+        + copyright_text
+        + ",\n"
+        "                                ),\n"
+        "                                const TextSpan(text: '"
+        + dart_nl
+        + "'),\n"
+        "                                TextSpan(\n"
+        "                                  text: translate('Slogan_tip'),\n"
+        "                                  style: const TextStyle(\n"
+        "                                      fontWeight: FontWeight.w800),\n"
+        "                                ),\n"
+        "                                const TextSpan(text: '"
+        + dart_nl
+        + "'),\n"
+        "                                TextSpan(\n"
+        "                                  text: translate('custom_studio_attribution'),\n"
+        "                                  style: const TextStyle(\n"
+        "                                      fontWeight: FontWeight.w800,\n"
+        "                                      decoration: TextDecoration.underline),\n"
+        "                                  recognizer: TapGestureRecognizer()\n"
+        "                                    ..onTap = () => launchUrlString('https://zzsn.work'), // CUSTOM_RUSTDESK_STUDIO_LINK\n"
+        "                                ),\n"
+        "                              ],\n"
+        "                            ),\n"
+        "                          ), // CUSTOM_RUSTDESK_ABOUT_LAYOUT"
+    )
+
+def preserve_company_name(block: str, text: str) -> str:
+    m = re.search(
+        r"'Copyright © \$\{DateTime\.now\(\)\.toString\(\)\.substring\(0, 4\)\} ([^'\\]+)\\n\$license'",
+        text,
+    )
+    if not m:
+        return block
+    company = m.group(1)
+    return block.replace("Purslane Ltd.", company, 1)
 
 text = re.sub(
     r"final link = bind\.mainGetBuildinOption\(key: \"custom-customer-link\"\);\s*"
@@ -98,32 +141,41 @@ text = re.sub(
     text,
 )
 
-legacy_combined = re.compile(
-    r"Text\(\s*translate\('Slogan_tip'\),\s*"
-    r"style: TextStyle\([\s\S]*?"
-    r"color: Colors\.white\),\s*"
-    r"\)\s*,?\s*"
-    r"// CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION[\s\S]*?"
-    r"\), // CUSTOM_RUSTDESK_ABOUT_LAYOUT",
-)
-if legacy_combined.search(text):
-    text = legacy_combined.sub(studio_rich_block.strip(), text, count=1)
-elif marker in text:
-    studio_pat = re.compile(
+unified = preserve_company_name(build_unified_blue_box(), text).strip()
+
+# Re-apply: replace prior partial Text.rich (Copyright still separate) or full upstream pair.
+patterns = [
+    re.compile(
+        r"Text\(\s*'Copyright © \$\{DateTime\.now\(\)\.toString\(\)\.substring\(0, 4\)\} [^']+\\n\$license',\s*"
+        r"style: const TextStyle\(color: Colors\.white\),\s*"
+        r"\),\s*"
         r"// CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION[\s\S]*?"
         r"\), // CUSTOM_RUSTDESK_ABOUT_LAYOUT",
-    )
-    text = studio_pat.sub(studio_rich_block.strip(), text, count=1)
-else:
-    slogan_only = re.compile(
+    ),
+    re.compile(
+        r"Text\(\s*'Copyright © \$\{DateTime\.now\(\)\.toString\(\)\.substring\(0, 4\)\} [^']+\\n\$license',\s*"
+        r"style: const TextStyle\(color: Colors\.white\),\s*"
+        r"\),\s*"
         r"Text\(\s*translate\('Slogan_tip'\),\s*"
         r"style: TextStyle\([\s\S]*?"
         r"color: Colors\.white\),\s*"
-        r"\)\s*,?"
-    )
-    if not slogan_only.search(text):
-        raise SystemExit("source-patcher: Slogan_tip anchor not found in desktop_setting_page.dart")
-    text = slogan_only.sub(studio_rich_block.strip(), text, count=1)
+        r"\)\s*,?",
+    ),
+    re.compile(
+        r"// CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION[\s\S]*?"
+        r"\), // CUSTOM_RUSTDESK_ABOUT_LAYOUT",
+    ),
+]
+
+replaced = False
+for pat in patterns:
+    if pat.search(text):
+        text = pat.sub(unified, text, count=1)
+        replaced = True
+        break
+
+if not replaced and marker not in text:
+    raise SystemExit("source-patcher: about blue-box anchor not found in desktop_setting_page.dart")
 
 if marker not in text:
     raise SystemExit("source-patcher: failed to inject studio attribution in desktop_setting_page.dart")
@@ -145,6 +197,8 @@ PY
        grep -q "CUSTOM_RUSTDESK_ABOUT_LAYOUT" "$about_file" &&
        grep -q "Text.rich" "$about_file" &&
        grep -q "TapGestureRecognizer" "$about_file" &&
+       grep -q "CUSTOM_RUSTDESK_ABOUT_UNIFIED_RICH" "$about_file" &&
+       grep -q "custom_studio_attribution" "$about_file" &&
        ! grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT\],' "$about_file" &&
        ! grep -q "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN" "$about_file" &&
        ! grep -q "height: 2.0" "$about_file"; then
