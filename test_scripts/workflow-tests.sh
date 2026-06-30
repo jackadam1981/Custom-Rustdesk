@@ -1066,7 +1066,8 @@ function test_workflow_builds_real_client_artifact() {
        grep -q -- '--workflow custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
        grep -q -- '--branch "$SOURCE_BRANCH"' "$WORKFLOW_FILE" &&
        ! grep -q 'gh workflow run custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
-       grep -q 'gh run watch "$upstream_run_id"' "$WORKFLOW_FILE" &&
+       grep -q 'run_status="$(gh run view "$upstream_run_id"' "$WORKFLOW_FILE" &&
+       grep -q 'if \[ "$run_status" = "completed" \]; then' "$WORKFLOW_FILE" &&
        grep -Fq 'upstream_run_url=https://github.com/${{ github.repository }}/actions/runs/$upstream_run_id' "$WORKFLOW_FILE" &&
        ! grep -q '^  compile-client:' "$WORKFLOW_FILE" &&
        grep -q 'finish:' "$WORKFLOW_FILE" &&
@@ -1079,10 +1080,21 @@ function test_workflow_builds_real_client_artifact() {
     return 1
 }
 
+function test_upstream_platform_summary_logic() {
+    if bash test_scripts/upstream-platform-summary-test.sh >/dev/null; then
+        record_test_result "upstream_platform_summary_logic" "PASS" "in_progress job 不计入 failed，completed 后至少一平台可 success"
+        return 0
+    fi
+
+    record_test_result "upstream_platform_summary_logic" "FAIL" "upstream 平台汇总逻辑回归失败"
+    return 1
+}
+
 function test_upstream_build_uses_platform_result_summary() {
     if grep -q 'upstream_platform_conclusion' "$WORKFLOW_FILE" &&
        grep -q 'platform_results' "$WORKFLOW_FILE" &&
-       grep -q 'gh run watch "$upstream_run_id" --repo "${{ github.repository }}" --interval 60 || true' "$WORKFLOW_FILE" &&
+       grep -q 'run_status="$(gh run view "$upstream_run_id"' "$WORKFLOW_FILE" &&
+       grep -q 'def is_pending($j):' "$WORKFLOW_FILE" &&
        grep -q 'gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json jobs' "$WORKFLOW_FILE" &&
        grep -q 'def platform($name):' "$WORKFLOW_FILE" &&
        grep -q 'partial_success' "$WORKFLOW_FILE" &&
@@ -1218,6 +1230,7 @@ function run_workflow_tests() {
     test_build_uploads_patched_source_artifact || failed=1
     test_workflow_builds_real_client_artifact || failed=1
     test_upstream_build_uses_platform_result_summary || failed=1
+    test_upstream_platform_summary_logic || failed=1
     test_upstream_android_universal_apk_has_diagnostics_injection || failed=1
     test_linux_build_uses_official_sciter_flow || failed=1
     test_windows_build_uses_official_sciter_inline_resources || failed=1

@@ -740,6 +740,13 @@ jobs:
           SOURCE_BRANCH: ${{ needs.build.outputs.source_branch }}
         run: |
           set -euo pipefail
+          # #region agent log
+          debug_agent_log() {
+            local hypothesis_id="$1" location="$2" message="$3" data="$4"
+            local log_file="${GITHUB_WORKSPACE:-.}/debug-356028.log"
+            printf '%s\n' "{\"sessionId\":\"356028\",\"hypothesisId\":\"$hypothesis_id\",\"location\":\"$location\",\"message\":\"$message\",\"data\":$data,\"timestamp\":$(date +%s000)}" >> "$log_file" 2>/dev/null || true
+          }
+          # #endregion
           upstream_run_id=""
           for _ in $(seq 1 30); do
             upstream_run_id="$(gh run list \
@@ -762,8 +769,30 @@ jobs:
 
           echo "upstream_run_id=$upstream_run_id" >> "$GITHUB_OUTPUT"
           echo "upstream_run_url=https://github.com/${{ github.repository }}/actions/runs/$upstream_run_id" >> "$GITHUB_OUTPUT"
-          gh run watch "$upstream_run_id" --repo "${{ github.repository }}" --interval 60 || true
+          # Poll until upstream run is completed; do not rely on gh run watch (can exit early on API errors).
+          upstream_wait_interval=60
+          upstream_max_wait=$((6 * 60 * 60))
+          upstream_waited=0
+          while true; do
+            run_status="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json status --jq '.status')"
+            # #region agent log
+            debug_agent_log "E" "wait-upstream:poll" "upstream status poll" "{\"runId\":\"$upstream_run_id\",\"status\":\"$run_status\",\"waitedSec\":$upstream_waited}"
+            # #endregion
+            if [ "$run_status" = "completed" ]; then
+              break
+            fi
+            if [ "$upstream_waited" -ge "$upstream_max_wait" ]; then
+              echo "Timed out waiting for upstream workflow after ${upstream_max_wait}s (last status=$run_status)"
+              exit 1
+            fi
+            echo "Upstream run $upstream_run_id status=$run_status, waiting ${upstream_wait_interval}s..."
+            sleep "$upstream_wait_interval"
+            upstream_waited=$((upstream_waited + upstream_wait_interval))
+          done
           conclusion="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')"
+          # #region agent log
+          debug_agent_log "B" "wait-upstream:completed" "upstream run completed" "{\"runId\":\"$upstream_run_id\",\"conclusion\":\"$conclusion\",\"waitedSec\":$upstream_waited}"
+          # #endregion
           echo "upstream_conclusion=$conclusion" >> "$GITHUB_OUTPUT"
 
           jobs_json="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json jobs)"
@@ -776,6 +805,14 @@ jobs:
               elif ($n | test("macos|apple-darwin|darwin")) then "macos"
               elif ($n | test("linux")) then "linux"
               else "other" end;
+            def is_pending($j):
+              ($j.status == "in_progress" or $j.status == "queued" or $j.status == "waiting"
+               or $j.status == "requested" or $j.status == "pending"
+               or ($j.conclusion == null) or ($j.conclusion == ""));
+            def is_success($j): ($j.conclusion == "success");
+            def is_failed($j):
+              (is_pending($j) | not) and (is_success($j) | not)
+              and ($j.conclusion != "skipped") and ($j.conclusion != "neutral");
             [
               .jobs[]
               | select(.conclusion != "skipped")
@@ -790,13 +827,18 @@ jobs:
               {
                 platform: $p,
                 total: ($pjobs | length),
-                success: ($pjobs | map(select(.conclusion == "success")) | length),
-                failed: ($pjobs | map(select(.conclusion != "success")) | length),
-                failed_jobs: ($pjobs | map(select(.conclusion != "success") | .name) | join(" | "))
+                success: ($pjobs | map(select(is_success(.))) | length),
+                pending: ($pjobs | map(select(is_pending(.))) | length),
+                failed: ($pjobs | map(select(is_failed(.))) | length),
+                failed_jobs: ($pjobs | map(select(is_failed(.)) | .name) | join(" | "))
               }
-              | .status = (if .failed == 0 and .success > 0 then "success" else "failure" end)
+              | .status = (
+                  if .pending > 0 then "pending"
+                  elif .failed == 0 and .success > 0 then "success"
+                  else "failure" end
+                )
             ]
-            | .[] | [.platform, .status, ("success=" + (.success|tostring)), ("failed=" + (.failed|tostring)), .failed_jobs] | @tsv
+            | .[] | [.platform, .status, ("success=" + (.success|tostring)), ("failed=" + (.failed|tostring)), ("pending=" + (.pending|tostring)), .failed_jobs] | @tsv
           ')"
 
           echo "Platform result summary:"
@@ -805,12 +847,20 @@ jobs:
           else
             echo "No platform jobs found in upstream workflow"
           fi
+          # #region agent log
+          pending_platforms="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF && $2=="pending"{print $1}' | paste -sd ',' -)"
+          debug_agent_log "C" "wait-upstream:platform-summary" "platform aggregation" "{\"pendingPlatforms\":\"$pending_platforms\",\"summaryLines\":$(printf '%s\n' "$platform_summary" | jq -Rs .)}"
+          # #endregion
+          if [ -n "$pending_platforms" ]; then
+            echo "Upstream run completed but platform jobs still pending: $pending_platforms"
+            exit 1
+          fi
 
           success_count="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF && $2=="success"{count++} END{print count+0}')"
           failure_count="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF && $2=="failure"{count++} END{print count+0}')"
           platform_successes="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF && $2=="success"{print $1}' | paste -sd ',' -)"
           platform_failures="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF && $2=="failure"{print $1}' | paste -sd ',' -)"
-          platform_results="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF{printf "%s=%s", $1, $2; if ($5 != "") printf "(%s)", $5; printf ";"}')"
+          platform_results="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF{printf "%s=%s", $1, $2; if ($6 != "") printf "(%s)", $6; printf ";"}')"
 
           if [ "$success_count" -gt 0 ]; then
             if [ "$failure_count" -gt 0 ]; then
