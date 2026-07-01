@@ -159,12 +159,12 @@ fi
 
 # --- B. UI patch markers ---
 if verify_from F10; then
-check "flutter home header" grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home logo" grep -q "base64Decode" flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home logo memory" grep -q "Image.memory" flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home header shell" grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home logo" grep -q 'CUSTOM_RUSTDESK_HOME_ICON' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home logo memory" grep -q "base64Decode" flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home logo size" grep -q 'width: 48' flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home no powered" bash -c '! grep -q "CUSTOM_RUSTDESK_HOME_POWERED" flutter/lib/desktop/pages/desktop_home_page.dart'
-check "flutter home slogan" grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home title row" grep -q 'CUSTOM_RUSTDESK_HOME_TITLE_ROW' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home no powered on home" bash -c '! grep -q "CUSTOM_RUSTDESK_HOME_POWERED" flutter/lib/desktop/pages/desktop_home_page.dart'
 check "flutter home dart syntax" python3 - flutter/lib/desktop/pages/desktop_home_page.dart <<'PY'
 import re
 import sys
@@ -177,11 +177,20 @@ PY
 fi
 
 if verify_from F11; then
+check "flutter home title" grep -Fq '), // CUSTOM_RUSTDESK_HOME_TITLE' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home app-name" grep -q 'bind.mainGetBuildinOption(key: "app-name")' flutter/lib/desktop/pages/desktop_home_page.dart
+fi
+
+if verify_from F12; then
+check "flutter home slogan" grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
+fi
+
+if verify_from F13; then
 check "flutter connection powered by" grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/connection_page.dart
 check "flutter powered by titleLarge" grep -q 'CUSTOM_RUSTDESK_POWERED_STYLE' flutter/lib/common.dart
 fi
 
-if verify_from F12; then
+if verify_from F14; then
 check "flutter studio zzsn.work" grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
 check "flutter studio zzsn.work url" grep -q 'https://zzsn.work' flutter/lib/desktop/pages/desktop_setting_page.dart
 check "flutter about layout" grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
@@ -192,7 +201,20 @@ fi
 if verify_from S10; then
 check "sciter custom brand header" grep -q 'custom-rd-home-header' src/ui/index.tis
 check "sciter logo title same row" grep -q 'custom-rd-home-title-row' src/ui/index.tis
+check "sciter home logo" grep -q 'custom-rd-home-logo' src/ui/index.tis
+check "sciter home logo 48px" grep -q 'max-width:48px' src/ui/index.tis
+fi
+
+if verify_from S11; then
+check "sciter home title marker" grep -q 'CUSTOM_RUSTDESK_SCITER_HOME_TITLE' src/ui/index.tis
+check "sciter home app-name" grep -q 'handler.get_builtin_option("app-name")' src/ui/index.tis
+fi
+
+if verify_from S12; then
 check "sciter home slogan" grep -q 'custom-rd-home-slogan' src/ui/index.tis
+fi
+
+if verify_from S13; then
 check "sciter powered above card" python3 - src/ui/index.tis <<'PY'
 import sys
 from pathlib import Path
@@ -210,18 +232,16 @@ if not (text.find("#powered-by") < text.find(card)):
 header_pos = text.find(header)
 if "#powered-by" in text[header_pos:header_pos + 4000]:
     raise SystemExit(5)
-if "max-width:48px" not in text:
-    raise SystemExit(6)
 PY
 fi
 
-if verify_from S12; then
+if verify_from S14; then
 check "sciter studio zzsn.work" grep -q "url='https://zzsn.work'" src/ui/index.tis
 check "sciter studio-about p tag" grep -q "<p class='link custom-event studio-about'" src/ui/index.tis
 check "sciter about height" grep -q '480, get_msgbox_width()); // CUSTOM_RUSTDESK_ABOUT_HEIGHT' src/ui/index.tis
 fi
 
-if verify_from S13; then
+if verify_from S15; then
 check "sciter config menu flow" grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
 check "sciter config menu single-column" bash -c '! grep -q "menu.context#config-options > li" src/ui/index.css'
 check "sciter config menu max-height css" grep -q 'max-height: 80vh' src/ui/index.css

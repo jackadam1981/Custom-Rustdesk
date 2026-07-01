@@ -162,13 +162,18 @@ apply_custom_source_patches() {
     _custom_run_patch I01 _custom_patch_i18n_ui_strings || return 1
 
     _custom_run_patch F02 _custom_patch_flutter_ui_app_name || return 1
-    _custom_run_patch F10 _custom_patch_flutter_home_header || return 1
-    _custom_run_patch F11 _custom_patch_flutter_powered_by || return 1
-    _custom_run_patch F12 _custom_patch_flutter_about_studio || return 1
+    _custom_run_patch F10 _custom_patch_flutter_home_logo || return 1
+    _custom_run_patch F11 _custom_patch_flutter_home_title || return 1
+    _custom_run_patch F12 _custom_patch_flutter_home_slogan || return 1
+    _custom_run_patch F13 _custom_patch_flutter_powered_by || return 1
+    _custom_run_patch F14 _custom_patch_flutter_about_studio || return 1
 
-    _custom_run_patch S10 _custom_patch_sciter_home_ui || return 1
-    _custom_run_patch S12 _custom_patch_sciter_about_studio || return 1
-    _custom_run_patch S13 _custom_patch_sciter_index_css || return 1
+    _custom_run_patch S10 _custom_patch_sciter_home_logo || return 1
+    _custom_run_patch S11 _custom_patch_sciter_home_title || return 1
+    _custom_run_patch S12 _custom_patch_sciter_home_slogan || return 1
+    _custom_run_patch S13 _custom_patch_sciter_powered_by || return 1
+    _custom_run_patch S14 _custom_patch_sciter_about_studio || return 1
+    _custom_run_patch S15 _custom_patch_sciter_index_css || return 1
 
     _custom_run_patch P01 _custom_patch_portable_working_dir || return 1
     _custom_run_patch P02 _custom_patch_windows_test_signing || return 1

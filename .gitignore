@@ -87,6 +87,15 @@ site/
 
 # Agent / 本地临时目录
 tmp/
+.patch-lab/
+.patch-lab-test/
+.patch-lab-test2/
+.tmp-*
+downloads/
+
+# 本地 Flutter 插针树 / 本地 SDK（勿提交）
+.flutter-dev/
+.tools/
 
 # 其他
 *.pid

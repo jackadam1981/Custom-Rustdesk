@@ -19,14 +19,24 @@ source "$PATCH_DIR/brand/logo-assets.sh"
 source "$PATCH_DIR/i18n/ui-strings.sh"
 # shellcheck source=patches/flutter/app-name.sh
 source "$PATCH_DIR/flutter/app-name.sh"
-# shellcheck source=patches/flutter/home-header.sh
-source "$PATCH_DIR/flutter/home-header.sh"
+# shellcheck source=patches/flutter/home-logo.sh
+source "$PATCH_DIR/flutter/home-logo.sh"
+# shellcheck source=patches/flutter/home-title.sh
+source "$PATCH_DIR/flutter/home-title.sh"
+# shellcheck source=patches/flutter/home-slogan.sh
+source "$PATCH_DIR/flutter/home-slogan.sh"
 # shellcheck source=patches/flutter/powered-by.sh
 source "$PATCH_DIR/flutter/powered-by.sh"
 # shellcheck source=patches/flutter/about-studio.sh
 source "$PATCH_DIR/flutter/about-studio.sh"
-# shellcheck source=patches/sciter/home-ui.sh
-source "$PATCH_DIR/sciter/home-ui.sh"
+# shellcheck source=patches/sciter/home-logo.sh
+source "$PATCH_DIR/sciter/home-logo.sh"
+# shellcheck source=patches/sciter/home-title.sh
+source "$PATCH_DIR/sciter/home-title.sh"
+# shellcheck source=patches/sciter/home-slogan.sh
+source "$PATCH_DIR/sciter/home-slogan.sh"
+# shellcheck source=patches/sciter/powered-by.sh
+source "$PATCH_DIR/sciter/powered-by.sh"
 # shellcheck source=patches/sciter/about-studio.sh
 source "$PATCH_DIR/sciter/about-studio.sh"
 # shellcheck source=patches/sciter/config-menu-css.sh

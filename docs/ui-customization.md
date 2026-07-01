@@ -1,6 +1,6 @@
 # Custom RustDesk UI 定制要求
 
-本文档说明 `custom-rustdesk` 仓库对 RustDesk 客户端 **界面与品牌** 的定制范围、构建参数、插针实现与验收方法。定制逻辑集中在 [`.github/workflows/scripts/source-patcher.sh`](../.github/workflows/scripts/source-patcher.sh)。
+本文档说明 `custom-rustdesk` 仓库对 RustDesk 客户端 **界面与品牌** 的定制范围、构建参数、插针实现与验收方法。定制逻辑集中在 [`.github/workflows/scripts/source-patcher.sh`](../.github/workflows/scripts/source-patcher.sh)。**逐针与页面/控件对照**见 [`patch-registry.md`](patch-registry.md)。
 
 ## 概述
 
