@@ -77,6 +77,10 @@ on:
         required: false
         default: true
         type: boolean
+      patch_up_to:
+        description: 'Debug: cap patches at ID (R03/S12/S15…); empty = verified-patches.env'
+        required: false
+        default: ''
 
 permissions:
   issues: write
