@@ -603,30 +603,27 @@ EOF
         grep -q "translate('custom_studio_attribution')" flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
-        grep -q 'CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN' flutter/lib/desktop/pages/desktop_setting_page.dart
         grep -q 'studio-about' src/ui/index.tis
         grep -q 'translate("custom_studio_attribution")' src/ui/index.tis
         grep -q "url='https://zzsn.work'" src/ui/index.tis
         grep -q 'custom-customer-link' src/ui/index.tis
         grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'CUSTOM_RUSTDESK_HOME_ICON' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'CUSTOM_RUSTDESK_HOME_TITLE_ROW' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
-        grep -q 'custom-slogan' flutter/lib/desktop/pages/desktop_home_page.dart
-        grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
+        ! grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/connection_page.dart
         grep -q 'CUSTOM_RUSTDESK_POWERED_LINK' flutter/lib/common.dart
         grep -q 'CUSTOM_RUSTDESK_POWERED_STYLE' flutter/lib/common.dart
         grep -q 'custom-rd-home-header' src/ui/index.tis
         grep -q 'custom-rd-home-slogan' src/ui/index.tis
-        ! grep -q 'custom-rd-home-powered' src/ui/index.tis
+        grep -q 'custom-rd-home-powered' src/ui/index.tis
         grep -q 'font-size:0.8em' src/ui/index.tis
         grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
-        grep -q 'menu.context#config-options > li' src/ui/index.css
-        grep -q 'width: 48%' src/ui/index.css
-        grep -q 'flow: horizontal-flow' src/ui/index.css
+        ! grep -q 'menu.context#config-options > li' src/ui/index.css
         grep -q 'max-height: 80vh' src/ui/index.css
         grep -q 'overflow-y: scroll-indicator' src/ui/index.css
-        grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_WIDTH' src/ui/index.tis
+        ! grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_WIDTH' src/ui/index.tis
         ! grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' src/ui/index.tis
         ! grep -q 'fontSize: 14' flutter/lib/common.dart
         ! grep -q 'color:#000;font-size:1.15em' src/ui/index.tis
@@ -635,11 +632,12 @@ EOF
 import sys
 from pathlib import Path
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-if "custom-rd-home-powered" in text:
-    raise SystemExit(1)
 if text.find("#powered-by") == -1 or text.find("<div .card-connect>") == -1:
     raise SystemExit(1)
 if text.find("#powered-by") > text.find("<div .card-connect>"):
+    raise SystemExit(1)
+header = text.find("custom-rd-home-header")
+if header != -1 and "#powered-by" in text[header:header + 4000]:
     raise SystemExit(1)
 PY
         python3 - src/ui/index.tis <<'PY'
