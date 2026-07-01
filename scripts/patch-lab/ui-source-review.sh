@@ -72,13 +72,14 @@ fi
 if grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$af" &&
    grep -q "https://zzsn.work" "$af" &&
    grep -q "CUSTOM_RUSTDESK_ABOUT_LAYOUT" "$af" &&
-   grep -q "CUSTOM_RUSTDESK_ABOUT_UNIFIED_RICH" "$af" &&
-   grep -q "Text.rich" "$af" &&
-   grep -q "const TextSpan(text: '\\\\n')" "$af" &&
+   grep -q "translate('Slogan_tip')" "$af" &&
+   grep -q "translate('custom_studio_attribution')" "$af" &&
+   grep -q "const Text('\\\\n')" "$af" &&
+   ! grep -q "CUSTOM_RUSTDESK_ABOUT_UNIFIED_RICH" "$af" &&
    ! grep -q "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN" "$af" &&
    ! grep -q "CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT" "$af" &&
    ! grep -q "height: 2.0" "$af"; then
-    ok "F3 about: studio below Slogan_tip, zzsn.work, original row spacing"
+    ok "F3 about: studio below Slogan_tip, zzsn.work, upstream Text rows"
 else
     bad "F3 flutter about"
 fi

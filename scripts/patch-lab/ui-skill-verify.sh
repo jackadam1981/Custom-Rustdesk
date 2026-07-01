@@ -28,7 +28,9 @@ grep -q CUSTOM_RUSTDESK_HOME_SLOGAN flutter/lib/desktop/pages/desktop_home_page.
 grep -q CUSTOM_RUSTDESK_HOME_POWERED flutter/lib/desktop/pages/connection_page.dart && ok 'F11 POWERED on connection' || bad 'F11 POWERED on connection'
 grep -q CUSTOM_RUSTDESK_POWERED_STYLE flutter/lib/common.dart && ok 'F11 POWERED_STYLE' || bad 'F11 POWERED_STYLE'
 grep -q CUSTOM_RUSTDESK_STUDIO_LINK flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 STUDIO_LINK' || bad 'F12 STUDIO_LINK'
-grep -q CUSTOM_RUSTDESK_ABOUT_UNIFIED_RICH flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 about unified Text.rich' || bad 'F12 about unified Text.rich'
+grep -q CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 about studio marker' || bad 'F12 about studio marker'
+grep -q translate\('custom_studio_attribution'\) flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 about studio text' || bad 'F12 about studio text'
+! grep -q CUSTOM_RUSTDESK_ABOUT_UNIFIED_RICH flutter/lib/desktop/pages/desktop_setting_page.dart && ok 'F12 keeps upstream Text rows' || bad 'F12 keeps upstream Text rows'
 grep -q CUSTOM_RUSTDESK_UI_APP_NAME flutter/lib/common.dart && ok 'F02 UI_APP_NAME' || bad 'F02 UI_APP_NAME'
 
 echo ""
