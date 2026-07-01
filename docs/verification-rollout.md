@@ -43,7 +43,6 @@ bash scripts/patch-lab/step-verify-all.sh --profile baixin
 
 ```bash
 scripts/patch-lab/run.sh --profile baixin --patch-up-to F10
-scripts/patch-lab/ui-skill-verify.sh   # UI 组
 ```
 
 ## 验证进度
@@ -89,7 +88,6 @@ R01 起再使用：
 
 ```bash
 scripts/patch-lab/run.sh --profile baixin --patch-up-to R01
-bash scripts/patch-lab/ui-skill-verify.sh
 ```
 
 规范：[Outline 插针规范](https://wiki.jackadam.top/doc/custom-rustdesk-cWWhzjEHzb)

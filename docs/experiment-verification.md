@@ -56,10 +56,9 @@ Issue 字段 `patch_up_to` 仅单次 CI 调试，不代替 env 固化。
 ## 每档标准操作（5 步）
 
 1. **patch-lab 静态**：`bash scripts/patch-lab/run.sh --profile baixin --patch-up-to <组末ID>`（或全量 `step-verify-all.sh`）
-2. **（M5）UI 技能**：`bash scripts/patch-lab/ui-skill-verify.sh`
-3. **bump env**：只改 `.github/verified-patches.env` 最后一行
-4. **1 次 CI**：push → `gh workflow run` 或 Issue 队列；下载 2 exe + 1 msi
-5. **打勾固化**：在本文件对应 M 档 checklist 记录 run URL / Release 名
+2. **bump env**：只改 `.github/verified-patches.env` 最后一行
+3. **1 次 CI**：push → `gh workflow run` 或 Issue 队列；下载 2 exe + 1 msi
+4. **打勾固化**：在本文件对应 M 档 checklist 记录 run URL / Release 名
 
 ---
 
@@ -195,8 +194,7 @@ CI 成功看**主 run** 的 `upstream-build` / `finish`（勿只看 macOS ENOTFO
 
 累计针：… F02 F10 F11 F12 S10 S12 S13。组末 bump：`"S13"` 或 `"F12"`（取组内最大 ID 即可）。
 
-- [x] patch-lab：`--patch-up-to S13`
-- [x] **ui-skill-verify.sh**（Sciter S1–S3 PASS）
+- [x] patch-lab：`--patch-up-to S13`（现 22 针见 `patch-registry.md`）
 - [x] env bump：`"S13"`
 - [ ] CI / Release / exe — **Flutter**：
   - [ ] Flutter：首页 header、Powered by、关于页
