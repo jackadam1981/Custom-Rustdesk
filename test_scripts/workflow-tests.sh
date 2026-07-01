@@ -331,18 +331,25 @@ pub static T: &[(&str, &str)] = &[
 EOF
     mkdir -p "$tmp_dir/flutter/lib/desktop/pages" "$tmp_dir/flutter/lib" "$tmp_dir/src/ui"
     cat > "$tmp_dir/flutter/lib/desktop/pages/desktop_home_page.dart" <<'EOF'
-final children = <Widget>[
-  if (bind.isCustomClient())
-    Align(
-      alignment: Alignment.center,
-      child: loadPowered(context),
-    ),
-  Align(
-    alignment: Alignment.center,
-    child: loadLogo(),
-  ),
-  buildTip(context),
-];
+import 'dart:async';
+
+Widget buildHome(BuildContext context) {
+  return Column(
+    children: [
+      if (bind.isCustomClient())
+        Align(
+          alignment: Alignment.center,
+          child: loadPowered(context),
+        ),
+      Align(
+        alignment: Alignment.center,
+        child: loadLogo(),
+      ),
+      buildTip(context),
+    ],
+  );
+}
+
 Widget buildTip(BuildContext context) {
   return Column(
     children: [
@@ -356,26 +363,19 @@ Widget buildTip(BuildContext context) {
 }
 EOF
     cat > "$tmp_dir/flutter/lib/desktop/pages/connection_page.dart" <<'EOF'
-  Widget build(BuildContext context) {
-    final isOutgoingOnly = bind.isOutgoingOnly();
-    return Column(
-      children: [
-        Expanded(
-            child: Column(
-          children: [
-            Row(
-              children: [
-                Flexible(child: _buildRemoteIDTextField(context)),
-              ],
-            ).marginOnly(top: 22),
-          ],
-        ).paddingOnly(left: 12.0)),
-      ],
-    );
+  Widget _buildRemoteIDTextField(BuildContext context) {
+    final w = TextField();
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 600),
+      child: w);
   }
 EOF
     cat > "$tmp_dir/flutter/lib/desktop/pages/desktop_setting_page.dart" <<'EOF'
                         children: [
+                          Text(
+                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Ltd.\n$license',
+                            style: const TextStyle(color: Colors.white),
+                          ),
                           Text(
                             translate('Slogan_tip'),
                             style: TextStyle(
@@ -425,6 +425,12 @@ event click $(#powered-by) {
 function showAbout() {
     msgbox("about", "About", "<div><p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
             </div>", "", function(el) {}, 400, 400);
+}
+EOF
+    cat > "$tmp_dir/src/ui/index.css" <<'EOF'
+menu.context#config-options > li {
+  width: 48%;
+  flow: horizontal-flow;
 }
 EOF
     cat > "$tmp_dir/libs/portable/src/main.rs" <<'EOF'
@@ -546,6 +552,7 @@ EOF
         export BUILD_API_SERVER="http://192.168.2.22:21114"
         export BUILD_SOURCE_PATCH_DEBUG="true"
         export CUSTOM_PATCH_APPLY_ALL=true
+        export CUSTOM_RUSTDESK_REPO="$(cd "$(dirname "$patcher")/../../.." && pwd)"
         source "$patcher"
         cd "$tmp_dir"
         apply_custom_source_patches
@@ -655,7 +662,7 @@ if not re.search(
     raise SystemExit(1)
 PY
         ! grep -q 'SizedBox.shrink()' flutter/lib/desktop/pages/desktop_home_page.dart
-        grep -q 'else ...\[' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'if (!bind.isCustomClient())' flutter/lib/desktop/pages/desktop_home_page.dart
         grep -q 'https://rustdesk.com' flutter/lib/common.dart
         grep -q 'https://rustdesk.com' src/ui/index.tis
         grep -q 'let current_dir = path.parent().map(|dir| dir.to_path_buf());' libs/portable/src/main.rs
