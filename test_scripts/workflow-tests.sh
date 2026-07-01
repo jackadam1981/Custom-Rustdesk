@@ -329,7 +329,7 @@ pub static T: &[(&str, &str)] = &[
     ("powered_by_me", "Powered by RustDesk"),
 ];
 EOF
-    mkdir -p "$tmp_dir/flutter/lib/desktop/pages" "$tmp_dir/flutter/lib" "$tmp_dir/src/ui"
+    mkdir -p "$tmp_dir/flutter/lib/desktop/pages" "$tmp_dir/flutter/lib" "$tmp_dir/flutter/assets" "$tmp_dir/src/ui"
     cat > "$tmp_dir/flutter/lib/desktop/pages/desktop_home_page.dart" <<'EOF'
 import 'dart:async';
 
@@ -385,6 +385,11 @@ EOF
                         ],
 EOF
     cat > "$tmp_dir/flutter/lib/common.dart" <<'EOF'
+String getWindowName({WindowType? overrideType}) {
+  final name = bind.mainGetAppNameSync();
+  return name;
+}
+
 Widget loadPowered(BuildContext context) {
   if (bind.mainGetBuildinOption(key: "hide-powered-by-me") == 'Y') {
     return SizedBox.shrink();
