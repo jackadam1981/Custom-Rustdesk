@@ -203,8 +203,9 @@ check "sciter custom brand header" grep -q 'custom-rd-home-header' src/ui/index.
 check "sciter logo title same row" grep -q 'custom-rd-home-title-row' src/ui/index.tis
 check "sciter home logo" grep -q 'custom-rd-home-logo' src/ui/index.tis
 check "sciter home logo 48px" grep -q 'max-width:48px' src/ui/index.tis
-check "sciter home logo src helper" grep -q 'customHomeLogoSrc' src/ui/index.tis
-check "sciter home logo no inline base64" bash -c '! grep -q "custom-rd-home-logo src=\\\"data:image" src/ui/index.tis'
+check "sciter home logo handler in tis" grep -q 'handler.get_home_logo_src()' src/ui/index.tis
+check "sciter home logo handler in ui.rs" grep -q 'CUSTOM_RUSTDESK_HOME_LOGO_SRC' src/ui.rs
+check "sciter home logo no tis base64" bash -c '! grep -q "customHomeLogoSrc\\|custom-rd-home-logo src=\\\"data:image" src/ui/index.tis'
 check "sciter home logo render line short" python3 - src/ui/index.tis <<'PY'
 import sys
 from pathlib import Path

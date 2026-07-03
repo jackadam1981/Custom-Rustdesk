@@ -1,4 +1,78 @@
 # S10 — Sciter 首页 logo（48px，依赖 B02 res/logo.png）
+_custom_patch_sciter_home_logo_handler() {
+    local ui_file="src/ui.rs"
+
+    if [ ! -f "$ui_file" ] || [ ! -f "res/logo.png" ]; then
+        return 0
+    fi
+
+    python3 - "$ui_file" "res/logo.png" <<'PY'
+import base64
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+logo_path = Path(sys.argv[2])
+text = path.read_text(encoding="utf-8")
+data = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+
+rust_fn = (
+    "\npub fn get_home_logo_src() -> String {\n"
+    "    // CUSTOM_RUSTDESK_HOME_LOGO_SRC\n"
+    f'    "data:image/png;base64,{data}".into()\n'
+    "}\n"
+)
+
+if "CUSTOM_RUSTDESK_HOME_LOGO_SRC" in text:
+    text = re.sub(
+        r"\npub fn get_home_logo_src\(\) -> String \{[\s\S]*?// CUSTOM_RUSTDESK_HOME_LOGO_SRC[\s\S]*?\n\}\n",
+        rust_fn,
+        text,
+        count=1,
+    )
+elif "pub fn get_home_logo_src()" not in text:
+    anchor = "\npub fn get_icon() -> String {"
+    if anchor not in text:
+        raise SystemExit("source-patcher: S10 get_icon anchor not found in src/ui.rs")
+    text = text.replace(anchor, rust_fn + anchor, 1)
+
+impl_anchor = "    fn get_icon(&mut self) -> String {\n        get_icon()\n    }"
+impl_block = (
+    "    fn get_home_logo_src(&mut self) -> String {\n"
+    "        get_home_logo_src()\n"
+    "    }\n\n"
+    + impl_anchor
+)
+if "fn get_home_logo_src(&mut self)" in text:
+  pass
+elif impl_anchor in text:
+    text = text.replace(impl_anchor, impl_block, 1)
+else:
+    raise SystemExit("source-patcher: S10 UI::get_icon impl anchor not found in src/ui.rs")
+
+macro_anchor = "        fn get_icon();"
+macro_block = "        fn get_home_logo_src();\n" + macro_anchor
+if "fn get_home_logo_src();" not in text:
+    if macro_anchor not in text:
+        raise SystemExit("source-patcher: S10 get_icon macro anchor not found in src/ui.rs")
+    text = text.replace(macro_anchor, macro_block, 1)
+
+if "CUSTOM_RUSTDESK_HOME_LOGO_SRC" not in text or "get_home_logo_src" not in text:
+    raise SystemExit("source-patcher: failed to inject S10 home logo handler in src/ui.rs")
+
+path.write_text(text, encoding="utf-8")
+PY
+
+    if grep -q "CUSTOM_RUSTDESK_HOME_LOGO_SRC" "$ui_file" &&
+       grep -q "get_home_logo_src" "$ui_file"; then
+        echo "source-patcher: S10 home logo handler injected in $ui_file"
+    else
+        echo "source-patcher: failed to inject S10 home logo handler in $ui_file" >&2
+        return 1
+    fi
+}
+
 _custom_patch_sciter_home_logo() {
     local index_file="src/ui/index.tis"
 
@@ -6,47 +80,35 @@ _custom_patch_sciter_home_logo() {
         return 0
     fi
 
+    _custom_patch_sciter_home_logo_handler || return 1
+
     local logo_file_tmp=""
-    local logo_src_file_tmp=""
     logo_markup=$(_custom_sciter_logo_img_markup)
-    logo_src_fn=$(_custom_sciter_logo_src_function)
-    if [ -z "$logo_markup" ] || [ -z "$logo_src_fn" ]; then
+    if [ -z "$logo_markup" ]; then
         echo "source-patcher: res/logo.png missing — apply B02 before S10" >&2
         return 1
     fi
 
     logo_file_tmp=$(mktemp)
-    logo_src_file_tmp=$(mktemp)
     printf '%s' "$logo_markup" > "$logo_file_tmp"
-    printf '%s' "$logo_src_fn" > "$logo_src_file_tmp"
 
-    python3 - "$index_file" "$logo_file_tmp" "$logo_src_file_tmp" <<'PY'
+    python3 - "$index_file" "$logo_file_tmp" <<'PY'
 import re
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
 logo = Path(sys.argv[2]).read_text(encoding="utf-8").strip()
-logo_src = Path(sys.argv[3]).read_text(encoding="utf-8").strip()
 text = path.read_text(encoding="utf-8")
 
-app_anchor = "class App: Reactor.Component"
-src_marker = "CUSTOM_RUSTDESK_SCITER_HOME_LOGO_SRC"
-src_fn_name = "function customHomeLogoSrc()"
+legacy_src_fn = re.compile(
+    r"function customHomeLogoSrc\(\) \{[\s\S]*?\} <!-- CUSTOM_RUSTDESK_SCITER_HOME_LOGO_SRC -->\n*"
+)
+if legacy_src_fn.search(text):
+    text = legacy_src_fn.sub("", text, count=1)
 
-if src_marker in text:
-    text = re.sub(
-        r"function customHomeLogoSrc\(\) \{[\s\S]*?\} <!-- CUSTOM_RUSTDESK_SCITER_HOME_LOGO_SRC -->",
-        logo_src,
-        text,
-        count=1,
-    )
-elif src_fn_name in text:
-    raise SystemExit("source-patcher: S10 customHomeLogoSrc present without marker")
-elif app_anchor not in text:
-    raise SystemExit("source-patcher: S10 App class anchor not found in src/ui/index.tis")
-else:
-    text = text.replace(app_anchor, logo_src + "\n\n" + app_anchor, 1)
+logo = logo.replace("customHomeLogoSrc()", "handler.get_home_logo_src()")
+logo_plain = logo.replace(" <!-- CUSTOM_RUSTDESK_SCITER_HOME_LOGO -->", "")
 
 logo_shell = (
     '{is_custom_client ? <div #custom-brand.custom-rd-home-header style="text-align:center;margin-bottom:0.35em">'
@@ -75,13 +137,9 @@ logo_pat = re.compile(
 
 changed = False
 if "CUSTOM_RUSTDESK_SCITER_HOME_HEADER" in text and logo_pat.search(text):
-    text = logo_pat.sub(logo.replace(" <!-- CUSTOM_RUSTDESK_SCITER_HOME_LOGO -->", ""), text, count=1)
+    text = logo_pat.sub(logo_plain, text, count=1)
     if "CUSTOM_RUSTDESK_SCITER_HOME_LOGO" not in text:
-        text = text.replace(
-            logo.replace(" <!-- CUSTOM_RUSTDESK_SCITER_HOME_LOGO -->", ""),
-            logo,
-            1,
-        )
+        text = text.replace(logo_plain, logo, 1)
     changed = True
 elif legacy_brand.search(text):
     text = legacy_brand.sub(logo_shell, text, count=1)
@@ -101,22 +159,25 @@ if not changed and "custom-rd-home-logo" not in text:
 if "custom-rd-home-header" not in text or "custom-rd-home-title-row" not in text:
     raise SystemExit("source-patcher: S10 home logo header shell missing")
 
-if src_marker not in text or src_fn_name not in text:
-    raise SystemExit("source-patcher: S10 customHomeLogoSrc helper missing")
+if "handler.get_home_logo_src()" not in text:
+    raise SystemExit("source-patcher: S10 home logo must use handler.get_home_logo_src()")
+
+if "customHomeLogoSrc" in text:
+    raise SystemExit("source-patcher: S10 legacy customHomeLogoSrc still present in index.tis")
 
 if 'custom-rd-home-logo src="data:image/png;base64,' in text:
-    raise SystemExit("source-patcher: S10 still uses inline base64 logo src")
+    raise SystemExit("source-patcher: S10 still uses inline base64 logo src in index.tis")
 
 path.write_text(text, encoding="utf-8")
 PY
-    rm -f "$logo_file_tmp" "$logo_src_file_tmp"
+    rm -f "$logo_file_tmp"
 
     if grep -q "custom-rd-home-header" "$index_file" &&
        grep -q "custom-rd-home-title-row" "$index_file" &&
        grep -q "custom-rd-home-logo" "$index_file" &&
-       grep -q "customHomeLogoSrc" "$index_file" &&
+       grep -q "handler.get_home_logo_src()" "$index_file" &&
        grep -q "CUSTOM_RUSTDESK_SCITER_HOME_LOGO" "$index_file" &&
-       grep -q "CUSTOM_RUSTDESK_SCITER_HOME_LOGO_SRC" "$index_file"; then
+       grep -q "CUSTOM_RUSTDESK_HOME_LOGO_SRC" "src/ui.rs"; then
         echo "source-patcher: S10 home logo injected in $index_file"
     else
         echo "source-patcher: failed to inject S10 home logo in $index_file" >&2
