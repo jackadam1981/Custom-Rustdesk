@@ -203,6 +203,16 @@ check "sciter custom brand header" grep -q 'custom-rd-home-header' src/ui/index.
 check "sciter logo title same row" grep -q 'custom-rd-home-title-row' src/ui/index.tis
 check "sciter home logo" grep -q 'custom-rd-home-logo' src/ui/index.tis
 check "sciter home logo 48px" grep -q 'max-width:48px' src/ui/index.tis
+check "sciter home logo src helper" grep -q 'customHomeLogoSrc' src/ui/index.tis
+check "sciter home logo no inline base64" bash -c '! grep -q "custom-rd-home-logo src=\\\"data:image" src/ui/index.tis'
+check "sciter home logo render line short" python3 - src/ui/index.tis <<'PY'
+import sys
+from pathlib import Path
+lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+for line in lines:
+    if "custom-rd-home-logo" in line and len(line) > 2000:
+        raise SystemExit(1)
+PY
 fi
 
 if verify_from S11; then
