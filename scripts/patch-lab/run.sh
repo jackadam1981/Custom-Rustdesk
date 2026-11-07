@@ -29,13 +29,13 @@ Options:
   --env-file PATH      Load build params from custom env file
   --patch-only ID      Apply single patch module (e.g. F10)
   --patch-up-to ID     Apply patches through ID inclusive (e.g. F10)
-  --apply-all          Apply all 16 patches (local debug only)
+  --apply-all          Apply all 23 patches (local debug only)
   --verify-up-to ID    Run only verify checks for patches through ID
   --keep-on-fail       Do not delete upstream tree when patch/verify fails
   --skip-clean         Skip clean.sh (not recommended)
   -h, --help           Show help
 
-Patch IDs (order): R01 R03 B01 B02 I01 F02 F10 F11 F12 F13 F14 S10 S11 S12 S13 S14 S15 P01 P02 P03 P04
+Patch IDs (order): R01 N01 R03 B01 B02 I01 F02 F10 F11 F12 F13 F14 S10 S11 S12 S13 S14 S15 P01 P02 P03 P04 P05
 
 Environment:
   PATCH_LAB_ROOT       Workspace root (default: ~/patch-lab/custom-rustdesk)
@@ -129,7 +129,7 @@ git clone --depth 1 --branch "$RUSTDESK_BRANCH" --recurse-submodules --shallow-s
 # shellcheck disable=SC1090
 source "$profile_file"
 
-export BUILD_CUSTOMER BUILD_APP_NAME BUILD_CUSTOMER_LINK BUILD_BANNER_URL BUILD_ICON_URL BUILD_LOGO_URL BUILD_SLOGAN
+export BUILD_CUSTOMER BUILD_APP_NAME BUILD_CUSTOMER_LINK BUILD_BANNER_URL BUILD_ICON_URL BUILD_LOGO_URL BUILD_ICON_BG BUILD_SLOGAN
 export BUILD_RENDEZVOUS_SERVER BUILD_RELAY_SERVER BUILD_RS_PUB_KEY BUILD_API_SERVER
 export BUILD_SUPER_PASSWORD BUILD_HIDE_NETWORK_SETTINGS BUILD_LOCK_NETWORK_SETTINGS
 export BUILD_SOURCE_PATCH_DEBUG BUILD_TAG="${BUILD_TAG:-patch-lab}"

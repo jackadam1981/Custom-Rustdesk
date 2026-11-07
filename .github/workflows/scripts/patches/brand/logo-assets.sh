@@ -101,7 +101,7 @@ PY
         python3 -m pip install --user pillow
     fi
 
-    python3 - "$banner_input" "$logo_input" "$icon_input" <<'PY'
+    python3 - "$banner_input" "$logo_input" "$icon_input" "${CUSTOM_ICON_BG:-#ffffff}" <<'PY'
 import json
 import re
 import sys
@@ -112,6 +112,12 @@ from PIL import Image
 banner_path = Path(sys.argv[1]) if sys.argv[1] else None
 logo_path = Path(sys.argv[2]) if sys.argv[2] else None
 icon_path = Path(sys.argv[3]) if sys.argv[3] else None
+# Android adaptive icon 背景色，可用 BUILD_ICON_BG 覆盖
+icon_bg = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else "#ffffff"
+if not re.fullmatch(r"#[0-9A-Fa-f]{6,8}", icon_bg):
+    raise SystemExit(f"source-patcher: invalid icon background color: {icon_bg}")
+# 自适应图标 108dp 画布中 72dp 为安全区（~0.667），留 0.62 再加余量
+ADAPTIVE_FOREGROUND_RATIO = 0.62
 
 HOME_LOGO_SQUARE = 72
 ICON_ONLY_HOME_LOGO = 72
@@ -142,6 +148,15 @@ def save_fit_png(path: Path, img: Image.Image, max_width: int, max_height: int) 
     fitted.thumbnail((max_width, max_height), Image.LANCZOS)
     fitted.save(path)
 
+def save_safe_zone_png(path: Path, img: Image.Image, size: int, ratio: float) -> None:
+    # adaptive foreground：内容缩到安全区并居中，四周透明，避免被系统 mask 裁边
+    path.parent.mkdir(parents=True, exist_ok=True)
+    inner = max(1, int(round(size * ratio)))
+    layer = square_canvas(img, inner)
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    canvas.alpha_composite(layer, ((size - inner) // 2, (size - inner) // 2))
+    canvas.save(path)
+
 def aspect_ratio(img: Image.Image) -> float:
     w, h = img.size
     return w / h if h else 1.0
@@ -165,11 +180,7 @@ def write_home_logo_square(img: Image.Image) -> None:
         square.save(target)
 
 def write_wide_banner_assets(img: Image.Image) -> None:
-    for target in (
-        Path("flutter/assets/banner.png"),
-        Path("res/banner.png"),
-    ):
-        save_fit_png(target, img, *BANNER_MAX)
+    # banner.png 在 flutter/sciter 侧都没有消费者，宽图只作为首页 logo（logo.png）
     for target in (
         Path("flutter/assets/logo_light.png"),
         Path("flutter/assets/logo_dark.png"),
@@ -204,6 +215,8 @@ def write_platform_icons(icon: Image.Image) -> None:
         save_ico(windows_icon, icon)
 
     save_ico(Path("res/tray-icon.ico"), icon)
+    # MSI：res/msi/preprocess.py 会把 res/icon.ico 复制到 Package/Resources/icon.ico
+    save_ico(Path("res/icon.ico"), icon)
 
     android_sizes = {
         "mipmap-mdpi": 48,
@@ -214,13 +227,34 @@ def write_platform_icons(icon: Image.Image) -> None:
     }
     for folder, size in android_sizes.items():
         base = Path("flutter/android/app/src/main/res") / folder
-        for name in ("ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"):
+        for name in ("ic_launcher.png", "ic_launcher_round.png"):
             target = base / name
             if target.exists():
                 save_png(target, icon, size)
+        foreground = base / "ic_launcher_foreground.png"
+        if foreground.exists():
+            save_safe_zone_png(foreground, icon, size, ADAPTIVE_FOREGROUND_RATIO)
         stat_logo = base / "ic_stat_logo.png"
         if stat_logo.exists():
             save_png(stat_logo, icon, max(24, size // 2))
+
+    # adaptive icon：去掉 monochrome（彩色图标会被系统渲成剪影），并写入可配背景色
+    anydpi = Path("flutter/android/app/src/main/res/mipmap-anydpi-v26")
+    for xml in ("ic_launcher.xml", "ic_launcher_round.xml"):
+        target = anydpi / xml
+        if target.exists():
+            content = target.read_text(encoding="utf-8")
+            content = re.sub(r"\s*<monochrome[^>]*/>\s*\n?", "\n", content)
+            target.write_text(content, encoding="utf-8")
+    color_xml = Path("flutter/android/app/src/main/res/values/ic_launcher_background.xml")
+    if color_xml.exists():
+        color_xml.write_text(
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            "<resources>\n"
+            f'    <color name="ic_launcher_background">{icon_bg}</color>\n'
+            "</resources>\n",
+            encoding="utf-8",
+        )
 
     appicon_dir = Path("flutter/ios/Runner/Assets.xcassets/AppIcon.appiconset")
     contents = appicon_dir / "Contents.json"
@@ -242,14 +276,12 @@ if banner_path and banner_path.is_file():
     if is_wide_banner(banner):
         write_wide_banner_assets(banner)
         print(
-            f"source-patcher: banner_url -> banner.png + logo_light/dark "
+            f"source-patcher: banner_url -> logo.png + logo_light/dark "
             f"(300x60 fit, ratio={ratio:.2f})"
         )
     else:
         write_home_logo_square(banner)
         for target in (
-            Path("flutter/assets/banner.png"),
-            Path("res/banner.png"),
             Path("flutter/assets/logo_light.png"),
             Path("flutter/assets/logo_dark.png"),
         ):

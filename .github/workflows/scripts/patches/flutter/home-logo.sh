@@ -1,4 +1,4 @@
-# F10 — Flutter 首页 logo（48px base64）
+# F10 — Flutter 首页 logo（base64，按原图宽高比缩放：最大高 48 / 最大宽 240）
 _custom_patch_flutter_home_logo() {
     local home_file="flutter/lib/desktop/pages/desktop_home_page.dart"
     local logo_file="flutter/assets/logo.png"
@@ -15,6 +15,7 @@ _custom_patch_flutter_home_logo() {
     python3 - "$home_file" "$logo_file" <<'PY'
 import base64
 import re
+import struct
 import sys
 from pathlib import Path
 
@@ -29,10 +30,19 @@ if not logo_file.is_file():
     raise SystemExit(f"source-patcher: logo asset missing for F10: {logo_file}")
 
 logo_b64 = base64.b64encode(logo_file.read_bytes()).decode("ascii")
+png = logo_file.read_bytes()
+if png[:8] != b"\x89PNG\r\n\x1a\n":
+    raise SystemExit(f"source-patcher: F10 logo is not a PNG: {logo_file}")
+src_w, src_h = struct.unpack(">II", png[16:24])
+# 不写死 48×48：宽图（banner 型 300×60）按比例缩放，上限 高 48 / 宽 240
+MAX_H, MAX_W = 48, 240
+scale = min(MAX_W / src_w, MAX_H / src_h)
+disp_w = max(1, round(src_w * scale))
+disp_h = max(1, round(src_h * scale))
 logo_widget = f"""Image.memory(
                     base64Decode('{logo_b64}'),
-                    width: 48,
-                    height: 48,
+                    width: {disp_w},
+                    height: {disp_h},
                     fit: BoxFit.contain,
                     errorBuilder: (ctx, error, stackTrace) => loadIcon(48),
                   ), // {icon_marker}"""

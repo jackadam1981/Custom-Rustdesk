@@ -115,6 +115,7 @@ if [ -n "$expected_slogan" ]; then
 fi
 
 check "common.rs patch marker" grep -q 'CUSTOM_RUSTDESK_PATCH_START' src/common.rs
+check "hide-powered-by-me default" grep -q '"hide-powered-by-me"' src/common.rs
 
 if [ -n "$expected_app_name" ]; then
     check "common.rs CUSTOM_APP_NAME" grep -Fq "const CUSTOM_APP_NAME: &str = \"$expected_app_name\";" src/common.rs
@@ -162,7 +163,26 @@ if verify_from F10; then
 check "flutter home header shell" grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home logo" grep -q 'CUSTOM_RUSTDESK_HOME_ICON' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home logo memory" grep -q "base64Decode" flutter/lib/desktop/pages/desktop_home_page.dart
-check "flutter home logo size" grep -q 'width: 48' flutter/lib/desktop/pages/desktop_home_page.dart
+check "flutter home logo aspect preserved" python3 - flutter/lib/desktop/pages/desktop_home_page.dart flutter/assets/logo.png <<'PY'
+import re
+import struct
+import sys
+from pathlib import Path
+
+dart = Path(sys.argv[1]).read_text(encoding="utf-8")
+png = Path(sys.argv[2]).read_bytes()
+if png[:8] != b"\x89PNG\r\n\x1a\n":
+    raise SystemExit("logo.png is not a PNG")
+src_w, src_h = struct.unpack(">II", png[16:24])
+m = re.search(r"base64Decode\([\s\S]*?width: (\d+),\s*height: (\d+)", dart)
+if not m:
+    raise SystemExit("no width/height in home logo widget")
+got_w, got_h = int(m.group(1)), int(m.group(2))
+scale = min(240 / src_w, 48 / src_h)
+exp_w, exp_h = max(1, round(src_w * scale)), max(1, round(src_h * scale))
+if (got_w, got_h) != (exp_w, exp_h):
+    raise SystemExit(f"expected {exp_w}x{exp_h}, got {got_w}x{got_h}")
+PY
 check "flutter home title row" grep -q 'CUSTOM_RUSTDESK_HOME_TITLE_ROW' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home no powered on home" bash -c '! grep -q "CUSTOM_RUSTDESK_HOME_POWERED" flutter/lib/desktop/pages/desktop_home_page.dart'
 check "flutter home dart syntax" python3 - flutter/lib/desktop/pages/desktop_home_page.dart <<'PY'
@@ -192,7 +212,8 @@ fi
 
 if verify_from F14; then
 check "flutter studio zzsn.work" grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
-check "flutter studio zzsn.work url" grep -q 'https://zzsn.work' flutter/lib/desktop/pages/desktop_setting_page.dart
+check "flutter studio zzsn.work url" grep -q "launchUrlString('https://zzsn.work');" flutter/lib/desktop/pages/desktop_setting_page.dart
+check "flutter about no upstream website link" bash -c "! grep -q \"launchUrlString('https://rustdesk.com');\" flutter/lib/desktop/pages/desktop_setting_page.dart"
 check "flutter about layout" grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
 check "flutter about no merged bracket comment" bash -c '! grep -q "CUSTOM_RUSTDESK_ABOUT_LAYOUT\\]," flutter/lib/desktop/pages/desktop_setting_page.dart'
 check "flutter about no row-margin hack" bash -c '! grep -q "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN" flutter/lib/desktop/pages/desktop_setting_page.dart'
@@ -203,8 +224,11 @@ check "sciter custom brand header" grep -q 'custom-rd-home-header' src/ui/index.
 check "sciter logo title same row" grep -q 'custom-rd-home-title-row' src/ui/index.tis
 check "sciter home logo" grep -q 'custom-rd-home-logo' src/ui/index.tis
 check "sciter home logo 48px" grep -q 'max-width:48px' src/ui/index.tis
-check "sciter home logo handler in tis" grep -q 'handler.get_home_logo_src()' src/ui/index.tis
-check "sciter home logo handler in ui.rs" grep -q 'CUSTOM_RUSTDESK_HOME_LOGO_SRC' src/ui.rs
+check "sciter home logo uses get_icon probe" grep -q 'handler.get_icon()' src/ui/index.tis
+check "sciter s10 icon probe marker" grep -q 'CUSTOM_RUSTDESK_S10_ICON_PROBE' src/ui/index.tis
+check "sciter icon reads res/icon.png" grep -q 'include_bytes!("../res/icon.png")' src/ui.rs
+check "sciter icon marker" grep -q 'CUSTOM_RUSTDESK_SCITER_ICON_SRC_START' src/ui.rs
+check "sciter icon no legacy home logo handler" bash -c '! grep -q "CUSTOM_RUSTDESK_HOME_LOGO_SRC\|get_home_logo_src" src/ui.rs'
 check "sciter home logo no tis base64" bash -c '! grep -q "customHomeLogoSrc\\|custom-rd-home-logo src=\\\"data:image" src/ui/index.tis'
 check "sciter home logo render line short" python3 - src/ui/index.tis <<'PY'
 import sys
@@ -241,7 +265,7 @@ if text.find("#powered-by") == -1:
 if not (text.find("#powered-by") < text.find(card)):
     raise SystemExit(4)
 header_pos = text.find(header)
-if "#powered-by" in text[header_pos:header_pos + 4000]:
+if "#powered-by" in text[header_pos:header_pos + 1500]:
     raise SystemExit(5)
 PY
 fi
@@ -261,6 +285,14 @@ check "sciter config menu no tis width hook" bash -c '! grep -q "CUSTOM_RUSTDESK
 check "sciter config menu no overflow hook" bash -c '! grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT" src/ui/index.tis'
 fi
 
+if verify_from B01; then
+if [ -n "$expected_app_name" ]; then
+    check "android app label" grep -q "android:label=\"$expected_app_name\"" flutter/android/app/src/main/AndroidManifest.xml
+    check "android input label" grep -q "android:label=\"$expected_app_name Input\"" flutter/android/app/src/main/AndroidManifest.xml
+    check "android no upstream input label" bash -c '! grep -q "android:label=\"RustDesk Input\"" flutter/android/app/src/main/AndroidManifest.xml'
+fi
+fi
+
 if verify_from B02; then
 has_banner=false
 has_logo=false
@@ -277,10 +309,22 @@ elif verify_from B02; then
     has_icon=true
 fi
 if [ "$has_banner" = true ]; then
-    check "flutter banner asset" test -f flutter/assets/banner.png
-    check "res banner.png" test -f res/banner.png
+    # banner.png 已确认无消费者：宽图必须落到首页 logo，而不是只写一张没人读的图
     check "flutter logo light asset" test -f flutter/assets/logo_light.png
     check "flutter logo dark asset" test -f flutter/assets/logo_dark.png
+    if [ "$has_logo" != true ]; then
+    check "wide banner routed to home logo" python3 - <<'PY'
+import struct
+from pathlib import Path
+
+png = Path("flutter/assets/logo.png").read_bytes()
+if png[:8] != b"\x89PNG\r\n\x1a\n":
+    raise SystemExit("logo.png is not a PNG")
+w, h = struct.unpack(">II", png[16:24])
+if w / h < 1.5:
+    raise SystemExit(f"logo.png {w}x{h} is not wide; banner did not reach home logo")
+PY
+    fi
 fi
 if [ "$has_logo" = true ] || [ "$has_banner" = true ] || [ "$has_icon" = true ]; then
     check "flutter logo asset" test -f flutter/assets/logo.png
@@ -290,12 +334,16 @@ if [ "$has_icon" = true ]; then
     check "flutter icon asset" test -f flutter/assets/icon.png
     check "res icon.png" test -f res/icon.png
     check "res tray-icon.ico" test -f res/tray-icon.ico
+    check "res icon.ico for MSI" test -f res/icon.ico
+    check "android adaptive no monochrome" bash -c '! grep -q "<monochrome" flutter/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml'
+    check "android adaptive background color" grep -q 'name="ic_launcher_background"' flutter/android/app/src/main/res/values/ic_launcher_background.xml
 fi
 fi
 
 if verify_from I01; then
 check "lang cn powered_by customer" grep -q 'powered_by_me' src/lang/cn.rs
 check "lang cn studio attribution" grep -q 'custom_studio_attribution' src/lang/cn.rs
+check "lang en studio attribution fallback" grep -q 'custom_studio_attribution' src/lang/en.rs
 fi
 
 # --- C. is_custom_client detection (must not rely on APP_NAME != RustDesk only) ---
