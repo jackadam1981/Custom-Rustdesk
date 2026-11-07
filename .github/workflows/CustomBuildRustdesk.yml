@@ -142,8 +142,12 @@ jobs:
           echo "DEBUG: final_data 长度: ${#final_data}"
           echo "DEBUG: final_data 是否为空: $([ -z "$final_data" ] && echo "是" || echo "否")"
 
+          # GitHub 的 run 步骤默认是 bash -e；校验失败时会被 -e 直接中断，
+          # 导致下面的 outputs 写不出来。这里临时关掉 -e，先拿到 rc 再恢复。
+          set +e
           validation_result=$(trigger_manager "validate-parameters" "$final_data")
           validation_exit_code=$?
+          set -e
           echo "DEBUG: validation_result = $validation_result, exit_code = $validation_exit_code"
 
           build_id=$(echo "$final_data" | jq -r '.build_id // empty')
@@ -902,7 +906,15 @@ jobs:
         run: |
           source .github/workflows/scripts/queue/finish.sh
           source .github/workflows/scripts/queue/queue-manager.sh
-          TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
+          TRIGGER_DATA_FILE="$RUNNER_TEMP/trigger-data/trigger-data.json"
+          if [ -f "$TRIGGER_DATA_FILE" ]; then
+            TRIGGER_DATA="$(cat "$TRIGGER_DATA_FILE")"
+          else
+            # trigger 阶段校验失败时不会上传这个 artifact，这里降级成空数据，
+            # 避免 cat 失败在收尾阶段叠加一次假失败
+            echo "⚠️ trigger-data.json 不存在（trigger 未通过校验），按空数据处理"
+            TRIGGER_DATA='{}'
+          fi
           
           # 重新获取 github.event
           EVENT_DATA="$(cat "$GITHUB_EVENT_PATH")"

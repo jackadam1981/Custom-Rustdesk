@@ -232,6 +232,13 @@ _process_tag_timestamp() {
         return 0
     fi
     
+    # 空 tag 不再拼时间戳，否则拼出来的 "-20260101-120000" 非空，
+    # 校验里的 "tag is required" 永远不会触发，错误原因会被掩盖
+    if [ -z "$tag" ]; then
+        echo ""
+        return 0
+    fi
+
     local timestamp=$(date '+%Y%m%d-%H%M%S')
     local final_tag="${tag}-${timestamp}"
     
@@ -345,6 +352,9 @@ _validate_parameters() {
         debug "error" "Parameter validation failed:"
         for error in "${errors[@]}"; do
             debug "error" "  - $error"
+            # 同时写 stdout：workflow 会把 stdout 存进 validation_result 打出来，
+            # 只写 debug（stderr）的话 validation_result 永远是空的
+            echo "  - $error"
         done
         return 1
     fi
