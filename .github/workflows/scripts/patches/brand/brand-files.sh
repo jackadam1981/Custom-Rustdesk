@@ -10,6 +10,10 @@ _custom_patch_brand_files() {
     _custom_replace_file "flutter/android/app/src/main/AndroidManifest.xml" \
         'android:label="RustDesk"' \
         "android:label=\"$app_name_xml\""
+    # 第二处是输入法/无障碍服务 label（原 RustDesk Input）
+    _custom_replace_file "flutter/android/app/src/main/AndroidManifest.xml" \
+        'android:label="RustDesk Input"' \
+        "android:label=\"$app_name_xml Input\""
 
     _custom_replace_file "flutter/ios/Runner/Info.plist" \
         '(<key>CFBundleDisplayName</key>[[:space:]]*<string>)[^<]*(</string>)' \

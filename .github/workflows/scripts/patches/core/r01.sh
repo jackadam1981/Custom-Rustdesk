@@ -107,6 +107,10 @@ pub fn apply_custom_build_defaults() {
                 builtin_settings.insert(key.to_owned(), value.to_owned());
             }
         }
+        // F13 依赖这个 key；显式给默认 N（显示 powered_by），已有值（如运维改成 Y）时保留
+        builtin_settings
+            .entry("hide-powered-by-me".to_owned())
+            .or_insert("N".to_owned());
     }
     {
         let mut default_settings = config::DEFAULT_SETTINGS.write().unwrap();

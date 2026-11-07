@@ -62,12 +62,31 @@ def build_studio_insert() -> str:
         "                          ), // CUSTOM_RUSTDESK_ABOUT_LAYOUT"
     )
 
-text = re.sub(
-    r"final link = bind\.mainGetBuildinOption\(key: \"custom-customer-link\"\);\s*"
-    r"if \(link\.isNotEmpty\) launchUrlString\(link\);",
-    "launchUrlString('https://zzsn.work'); // CUSTOM_RUSTDESK_STUDIO_LINK",
-    text,
-)
+# 上游真实写法是 Website 那一行的 launchUrlString('https://rustdesk.com')；
+# 匹配不到就报错退出，避免静默失效。
+if "CUSTOM_RUSTDESK_STUDIO_LINK" not in text:
+    website_pat = re.compile(r"launchUrlString\('https://rustdesk\.com'\);")
+    legacy_pat = re.compile(
+        r"final link = bind\.mainGetBuildinOption\(key: \"custom-customer-link\"\);\s*"
+        r"if \(link\.isNotEmpty\) launchUrlString\(link\);"
+    )
+    if website_pat.search(text):
+        text = website_pat.sub(
+            "launchUrlString('https://zzsn.work'); // CUSTOM_RUSTDESK_STUDIO_LINK",
+            text,
+            count=1,
+        )
+    elif legacy_pat.search(text):
+        text = legacy_pat.sub(
+            "launchUrlString('https://zzsn.work'); // CUSTOM_RUSTDESK_STUDIO_LINK",
+            text,
+            count=1,
+        )
+    else:
+        raise SystemExit(
+            "source-patcher: about page website link anchor not found "
+            "(expected launchUrlString('https://rustdesk.com'))"
+        )
 
 # Strip legacy F14 spacing / unified-rich attempts; upstream rows stay plain Text.
 text = text.replace(
@@ -154,7 +173,7 @@ path.write_text(text, encoding="utf-8")
 PY
 
     if grep -q "CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION" "$about_file" &&
-       grep -q "https://zzsn.work" "$about_file" &&
+       grep -q "launchUrlString('https://zzsn.work');" "$about_file" &&
        grep -q "CUSTOM_RUSTDESK_ABOUT_LAYOUT" "$about_file" &&
        grep -q "translate('Slogan_tip')" "$about_file" &&
        grep -q "translate('custom_studio_attribution')" "$about_file" &&
