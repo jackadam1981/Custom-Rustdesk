@@ -135,7 +135,7 @@ gh workflow run "Custom Rustdesk Build Workflow" \
   -f hide_network_settings=false
 ```
 
-CI 成功看**主 run** 的 `upstream-build` / `finish`（勿只看 macOS ENOTFOUND 子 job）。
+CI 成功看**主 run** 的 `upstream-matrix` / `upstream-build` / `finish`（默认单 run）；仅 `use_source_branch=true` 调试时才有子 run，勿只看 macOS ENOTFOUND 子 job。
 
 **③ Windows 本机 exe 验收**
 
@@ -260,7 +260,7 @@ bash scripts/patch-lab/run.sh --profile baixin --patch-up-to B02
 # 2.18：GHA 触发（须带 api_server；用 gh workflow dispatch 或 Issue 队列）
 ```
 
-CI 排错：主 run 的 `upstream-build` / `finish` 为准；macOS 可能仅制品上传 ENOTFOUND，Windows 编译仍可能成功。
+CI 排错：默认单 run 以主 run 的 `upstream-matrix` / `upstream-build` / `finish` 为准；`use_source_branch=true` 调试时以 `upstream-legacy` 为准。macOS 可能仅制品上传 ENOTFOUND，Windows 编译仍可能成功。
 
 ## 相关文档
 

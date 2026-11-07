@@ -6,8 +6,10 @@
 
 ```
 .github/workflows/CustomBuildRustdesk.yml   # 主 workflow（Issue / 手动触发）
-.github/workflows/flutter-build.yml         # 上游 Flutter 构建占位，供内层 workflow 调用
-.github/workflows/custom-rustdesk-upstream-build.yml
+.github/workflows/flutter-build.yml         # 仓内上游矩阵副本：同 run 编译 patched-source
+.github/workflows/bridge.yml                # 仓内上游 bridge 副本
+.github/workflows/third-party-RustDeskTempTopMostWindow.yml # 仓内上游依赖副本
+.github/workflows/custom-rustdesk-upstream-build.yml      # 调试开关路径的分支触发入口
 .github/workflows/99-delete_issues.yml        # 辅助：批量清理 Issues
 .github/workflows/99-delete_workflow_runs.yml # 辅助：批量清理 workflow runs
 .github/workflows/99-generate-aes-key.yml     # 辅助：生成 ENCRYPTION_KEY
@@ -18,7 +20,7 @@
 
 定制逻辑集中在 `source-patcher.sh`：改 `.rs` / `.dart` / `.tis` / `preprocess.py` 等源码，尽量不改上游 workflow。
 
-编译由 `upstream-build` job 触发内层 `custom-rustdesk-upstream-build.yml`（RustDesk 原版 `flutter-build.yml`）完成，本仓库不再维护自编 compile job。
+编译默认在**同一 run** 内完成：`build` job 打包 `patched-source`（tar.gz，保留可执行位）artifact，`upstream-matrix` 直接调用仓内上游 `flutter-build.yml`，矩阵 job checkout 后下载解压并覆盖该源码树再编译。临时分支（`custom-build-*`）只在调试开关 `use_source_branch=true` 时启用。上游矩阵副本变更需手动同步。
 
 **Rollout / patch-lab / 交接**：见 [docs/experiment-verification.md](docs/experiment-verification.md)（M0–M6 实验验证）、[docs/verification-rollout.md](docs/verification-rollout.md)、[docs/workspace-handoff.md](docs/workspace-handoff.md)。
 

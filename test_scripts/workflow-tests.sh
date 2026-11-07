@@ -18,15 +18,17 @@ source_patcher_has_pattern() {
     grep -rq -- "$1" "$SOURCE_PATCHER_TREE" 2>/dev/null
 }
 
-function test_build_branch_uses_orphan_snapshot() {
+function test_legacy_source_branch_is_switch_gated() {
     if grep -q 'git checkout --orphan custom-build-${{ github.run_id }}' "$WORKFLOW_FILE" &&
-       grep -q 'git add -A' "$WORKFLOW_FILE" &&
+       grep -q 'if: steps.modify-source.outputs.modify_success == .true. && inputs.use_source_branch == true' "$WORKFLOW_FILE" &&
+       grep -q '^  upstream-legacy:' "$WORKFLOW_FILE" &&
+       grep -q 'if: needs.build.result == .success. && needs.build.outputs.build_success == .true. && inputs.use_source_branch == true' "$WORKFLOW_FILE" &&
        ! grep -q 'git checkout -b custom-build-${{ github.run_id }}' "$WORKFLOW_FILE"; then
-        record_test_result "build_branch_uses_orphan_snapshot" "PASS" "构建分支使用无父提交快照，避免推送 RustDesk 上游历史"
+        record_test_result "legacy_source_branch_is_switch_gated" "PASS" "临时 orphan 分支交付仅在 use_source_branch 调试开关打开时启用"
         return 0
     fi
 
-    record_test_result "build_branch_uses_orphan_snapshot" "FAIL" "构建分支应使用 orphan snapshot，而不是从 RustDesk 历史创建普通分支"
+    record_test_result "legacy_source_branch_is_switch_gated" "FAIL" "orphan snapshot 分支应作为 use_source_branch 调试路径，默认走单 run artifact 交付"
     return 1
 }
 
@@ -1044,33 +1046,40 @@ function test_build_job_does_not_export_trigger_data_env() {
 
 function test_build_uploads_patched_source_artifact() {
     if grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
-       grep -q 'path: rustdesk-source' "$WORKFLOW_FILE" &&
+       grep -q 'path: patched-source.tar.gz' "$WORKFLOW_FILE" &&
+       grep -q 'include-hidden-files: true' "$WORKFLOW_FILE" &&
+       grep -q 'retention-days: 1' "$WORKFLOW_FILE" &&
+       grep -q 'rsync -a --exclude=.\.git. rustdesk-source/ patched-source-stage/' "$WORKFLOW_FILE" &&
+       grep -q 'tar -czf patched-source.tar.gz' "$WORKFLOW_FILE" &&
        grep -q 'source_branch: ${{ steps.commit-repo.outputs.branch_name }}' "$WORKFLOW_FILE" &&
+       grep -q '^  upstream-matrix:' "$WORKFLOW_FILE" &&
+       grep -q 'uses: ./.github/workflows/flutter-build.yml' "$WORKFLOW_FILE" &&
+       grep -q 'Restore patched source' .github/workflows/flutter-build.yml &&
+       grep -q 'tar -xzf patched-source.tar.gz' .github/workflows/flutter-build.yml &&
+       grep -q 'tar -xzf patched-source.tar.gz' .github/workflows/bridge.yml &&
+       grep -q 'name: patched-source-${{ github.run_id }}' .github/workflows/flutter-build.yml &&
+       grep -q 'name: Build the flutter version of the RustDesk' .github/workflows/flutter-build.yml &&
+       ! grep -q 'RustDesk Upstream Flutter Build Placeholder' .github/workflows/flutter-build.yml &&
        grep -q 'custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
-       grep -q 'uses: ./.github/workflows/flutter-build.yml' .github/workflows/custom-rustdesk-upstream-build.yml &&
-       grep -Fq "github.event_name == 'workflow_dispatch' && inputs.upload-artifact || true" .github/workflows/custom-rustdesk-upstream-build.yml &&
-       grep -Fq "github.event_name == 'workflow_dispatch' && inputs.upload-tag || 'custom'" .github/workflows/custom-rustdesk-upstream-build.yml &&
-       grep -Fq "upload-artifact: __CUSTOM_UPLOAD_ARTIFACT_EXPR__" "$WORKFLOW_FILE" &&
-       grep -Fq "upload_artifact_expr=" "$WORKFLOW_FILE" &&
-       grep -Fq 'CUSTOM_UPLOAD_ARTIFACT_EXPR="$upload_artifact_expr"' "$WORKFLOW_FILE" &&
-       grep -Fq 'perl -0pi -e' "$WORKFLOW_FILE" &&
-       grep -q 'RustDesk Upstream Flutter Build Placeholder' .github/workflows/flutter-build.yml &&
        grep -q 'steps.record-artifact.outputs.download_url' "$WORKFLOW_FILE" &&
        grep -q 'actions: write' "$WORKFLOW_FILE" &&
        grep -q 'Delete trigger data artifact' "$WORKFLOW_FILE" &&
+       grep -q 'Delete patched source artifact' "$WORKFLOW_FILE" &&
        grep -q 'Delete custom source branch' "$WORKFLOW_FILE" &&
        grep -q 'trigger-data-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        ! grep -q 'https://api.github.com/repos/$RUSTDESK_REPO/dispatches' "$WORKFLOW_FILE"; then
-        record_test_result "build_uploads_patched_source_artifact" "PASS" "build 阶段上传已定制源码 artifact，不再触发无权限的官方仓库 dispatch"
+        record_test_result "build_uploads_patched_source_artifact" "PASS" "build 阶段上传 patched-source artifact 供同一 run 的矩阵 job 覆盖 checkout"
         return 0
     fi
 
-    record_test_result "build_uploads_patched_source_artifact" "FAIL" "build 阶段应上传 patched-source artifact，并避免触发 rustdesk/rustdesk dispatch"
+    record_test_result "build_uploads_patched_source_artifact" "FAIL" "build 阶段应上传 patched-source artifact，并由矩阵 job 下载覆盖，而不是依赖临时分支"
     return 1
 }
 
 function test_workflow_builds_real_client_artifact() {
-    if grep -q '^  upstream-build:' "$WORKFLOW_FILE" &&
+    if grep -q '^  upstream-matrix:' "$WORKFLOW_FILE" &&
+       grep -q '^  upstream-legacy:' "$WORKFLOW_FILE" &&
+       grep -q 'uses: ./.github/workflows/flutter-build.yml' "$WORKFLOW_FILE" &&
        grep -q 'push:' .github/workflows/custom-rustdesk-upstream-build.yml &&
        grep -Fq '"custom-build-*"' .github/workflows/custom-rustdesk-upstream-build.yml &&
        grep -q -- '--workflow custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
@@ -1079,14 +1088,14 @@ function test_workflow_builds_real_client_artifact() {
        grep -q 'run_status="$(gh run view "$upstream_run_id"' "$WORKFLOW_FILE" &&
        grep -q 'if \[ "$run_status" = "completed" \]; then' "$WORKFLOW_FILE" &&
        grep -Fq 'upstream_run_url=https://github.com/${{ github.repository }}/actions/runs/$upstream_run_id' "$WORKFLOW_FILE" &&
+       grep -Fq 'upstream_run_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"' "$WORKFLOW_FILE" &&
        ! grep -q '^  compile-client:' "$WORKFLOW_FILE" &&
-       grep -q 'finish:' "$WORKFLOW_FILE" &&
-       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, upstream-build]' "$WORKFLOW_FILE"; then
-        record_test_result "workflow_builds_real_client_artifact" "PASS" "workflow 通过 custom source 分支触发 RustDesk 原版 workflow 编译客户端产物"
+       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, upstream-matrix, upstream-legacy, upstream-build]' "$WORKFLOW_FILE"; then
+        record_test_result "workflow_builds_real_client_artifact" "PASS" "workflow 单 run 直接调用上游矩阵；调试开关仍可回退临时分支触发的第二次 run"
         return 0
     fi
 
-    record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 应通过 custom source 分支触发 RustDesk 原版 workflow，而不是继续自编 compile-client"
+    record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 应在同一 run 调用上游矩阵，并保留 use_source_branch 调试路径"
     return 1
 }
 
@@ -1119,18 +1128,18 @@ function test_upstream_build_uses_platform_result_summary() {
 }
 
 function test_upstream_android_universal_apk_has_diagnostics_injection() {
-    if grep -q 'Injecting diagnostics for upstream Android universal APK build' "$WORKFLOW_FILE" &&
-       grep -q -- '--target-platform android-arm64,android-arm,android-x64' "$WORKFLOW_FILE" &&
-       grep -q 'Android universal APK diagnostics before build' "$WORKFLOW_FILE" &&
-       grep -q 'Android universal APK monitor' "$WORKFLOW_FILE" &&
-       grep -q 'android/app/src/main/jniLibs' "$WORKFLOW_FILE" &&
-       grep -q 'ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss' "$WORKFLOW_FILE" &&
-       grep -q 'build/app/outputs/flutter-apk' "$WORKFLOW_FILE"; then
-        record_test_result "upstream_android_universal_apk_has_diagnostics_injection" "PASS" "inner upstream workflow injects diagnostics for Android universal APK only"
+    local flutter_build=".github/workflows/flutter-build.yml"
+    if grep -q 'Android universal APK diagnostics before build' "$flutter_build" &&
+       grep -q -- '--target-platform android-arm64,android-arm,android-x64' "$flutter_build" &&
+       grep -q 'Android universal APK monitor' "$flutter_build" &&
+       grep -q 'android/app/src/main/jniLibs' "$flutter_build" &&
+       grep -q 'ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss' "$flutter_build" &&
+       grep -q 'build/app/outputs/flutter-apk' "$flutter_build"; then
+        record_test_result "upstream_android_universal_apk_has_diagnostics_injection" "PASS" "仓内上游矩阵副本为 Android universal APK 静态保留资源诊断"
         return 0
     fi
 
-    record_test_result "upstream_android_universal_apk_has_diagnostics_injection" "FAIL" "Android universal APK should get resource diagnostics without replacing per-ABI APK builds"
+    record_test_result "upstream_android_universal_apk_has_diagnostics_injection" "FAIL" "仓内上游矩阵副本应保留 Android universal APK 资源诊断"
     return 1
 }
 
@@ -1183,7 +1192,7 @@ function test_workflow_builds_android_apk_artifact() {
        grep -q '^  upstream-build:' "$WORKFLOW_FILE" &&
        grep -q 'custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
        grep -q 'Injecting diagnostics for upstream Android universal APK build' "$WORKFLOW_FILE" &&
-       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, upstream-build]' "$WORKFLOW_FILE"; then
+       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, upstream-matrix, upstream-legacy, upstream-build]' "$WORKFLOW_FILE"; then
         record_test_result "workflow_builds_android_apk_artifact" "PASS" "Android 构建改由定制源码分支上的 RustDesk 原版 workflow 承担，旧自编 job 已关闭"
         return 0
     fi
@@ -1213,7 +1222,7 @@ function run_workflow_tests() {
     log_info "开始运行 workflow 结构测试..."
     local failed=0
 
-    test_build_branch_uses_orphan_snapshot || failed=1
+    test_legacy_source_branch_is_switch_gated || failed=1
     test_release_all_locks_leaves_queue || failed=1
     test_release_all_locks_skips_unowned_build_lock || failed=1
     test_cleanup_queue_clears_orphan_build_lock || failed=1

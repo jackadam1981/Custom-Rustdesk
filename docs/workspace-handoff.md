@@ -65,8 +65,8 @@ gh workflow run "Custom Rustdesk Build Workflow" --ref codex/linux-appimage-acti
 
 ## CI 排错备忘
 
-- **主 workflow 成功、子 run 红**：`custom-build-*` 分支触发的重复 upstream 构建；macOS 可能仅 `CreateArtifact ENOTFOUND`，**Windows 编译仍成功**。
-- 看 **主 run** 的 `upstream-build` / `finish`，不要只看 `Custom build for …` 子 run。
+- **主 workflow 成功、子 run 红**：仅在 `use_source_branch=true` 调试开关下才会出现 `custom-build-*` 分支触发的重复 upstream 构建；macOS 可能仅 `CreateArtifact ENOTFOUND`，**Windows 编译仍成功**。
+- 默认单 run：看主 run 的 `upstream-matrix` / `upstream-build` / `finish`；调试开关打开时再看 `upstream-legacy`。
 - 最近成功 Release 示例：`r01-baixin-lock-20260619-173618`。
 
 ## 插针顺序（无 R02）

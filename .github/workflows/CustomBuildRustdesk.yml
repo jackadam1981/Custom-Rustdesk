@@ -81,6 +81,11 @@ on:
         description: 'Debug: cap patches at ID (R03/S12/S15…); empty = verified-patches.env'
         required: false
         default: ''
+      use_source_branch:
+        description: 'Debug: deliver patched source through a custom-build-* orphan branch (two-run) instead of an in-run artifact'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   issues: write
@@ -361,6 +366,7 @@ jobs:
       download_url: ${{ steps.record-artifact.outputs.download_url || steps.extract-vars.outputs.download_url }}
       error_message: ${{ steps.extract-vars.outputs.error_message }}
       source_branch: ${{ steps.commit-repo.outputs.branch_name }}
+      tag: ${{ steps.extract-vars.outputs.tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -440,6 +446,7 @@ jobs:
           # 设置 GitHub Actions 输出变量
           echo "build_success=$build_success" >> $GITHUB_OUTPUT
           echo "extract_success=$build_success" >> $GITHUB_OUTPUT
+          echo "tag=$tag" >> $GITHUB_OUTPUT
           echo "download_url=" >> $GITHUB_OUTPUT
           echo "error_message=$error_message" >> $GITHUB_OUTPUT
 
@@ -517,6 +524,8 @@ jobs:
           echo "🧩 Apply source patches (verified rollout gate)..."
           apply_custom_source_patches || exit 1
 
+          if [ "${{ inputs.use_source_branch }}" = "true" ]; then
+          echo "🧪 Legacy delivery: preparing custom source branch files..."
           mkdir -p .github/workflows
           cat > .github/workflows/custom-rustdesk-upstream-build.yml <<'EOF'
           name: Custom RustDesk Upstream Build
@@ -555,6 +564,9 @@ jobs:
           else
             echo "::warning::Unable to find upstream Android universal APK build command for diagnostics injection"
           fi
+          else
+            echo "📦 Inline delivery: custom source branch files are not needed"
+          fi
           
           # 创建构建状态文件
           echo "📝 创建构建状态文件..."
@@ -572,7 +584,7 @@ jobs:
       # 步骤4: 提交仓库
       - name: Commit to repository
         id: commit-repo
-        if: steps.modify-source.outputs.modify_success == 'true'
+        if: steps.modify-source.outputs.modify_success == 'true' && inputs.use_source_branch == true
         run: |
           echo "🔧 Step 4: Committing to repository..."
           
@@ -603,10 +615,33 @@ jobs:
             exit 1
           fi
 
+      # 步骤4b: 单 run 交付——打包定制源码，供上游矩阵 job 覆盖 checkout
+      - name: Prepare patched source stage
+        id: prepare-patched-source
+        if: steps.modify-source.outputs.modify_success == 'true' && inputs.use_source_branch != true
+        run: |
+          echo "🔧 Step 4b: Preparing patched source snapshot for inline matrix..."
+          rm -rf patched-source-stage patched-source.tar.gz
+          mkdir -p patched-source-stage
+          rsync -a --exclude='.git' rustdesk-source/ patched-source-stage/
+          # 用 tar.gz 保留可执行位：GitHub artifact 下载会丢失文件权限
+          tar -czf patched-source.tar.gz -C patched-source-stage .
+          echo "✅ Patched source staged as patched-source.tar.gz"
+
+      - name: Upload patched source artifact
+        id: upload-patched-source-artifact
+        if: steps.prepare-patched-source.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: patched-source-${{ github.run_id }}
+          path: patched-source.tar.gz
+          include-hidden-files: true
+          retention-days: 1
+
       # 步骤5: 触发清理缓存
       - name: Trigger cache cleanup
         id: trigger-cleanup
-        if: steps.commit-repo.outputs.commit_success == 'true'
+        if: steps.modify-source.outputs.modify_success == 'true'
         run: |
           echo "🔧 Step 5: Triggering cache cleanup..."
           
@@ -652,10 +687,10 @@ jobs:
           echo "✅ Cache cleanup completed"
           echo "cleanup_completed=true" >> $GITHUB_OUTPUT
 
-      # 步骤7: 上传已定制源码快照
+      # 步骤7: 上传已定制源码快照（仅调试开关打开时产出脱敏快照）
       - name: Redact secrets before source snapshot
         id: redact-patched-source
-        if: steps.wait-cleanup.outputs.cleanup_completed == 'true'
+        if: steps.wait-cleanup.outputs.cleanup_completed == 'true' && inputs.use_source_branch == true
         run: |
           cd rustdesk-source
           rm -f build-config.json
@@ -673,7 +708,7 @@ jobs:
 
       - name: Upload patched source snapshot
         id: upload-patched-source
-        if: steps.wait-cleanup.outputs.cleanup_completed == 'true'
+        if: steps.wait-cleanup.outputs.cleanup_completed == 'true' && inputs.use_source_branch == true
         uses: actions/upload-artifact@v4
         with:
           name: patched-source-${{ github.run_id }}
@@ -708,6 +743,10 @@ jobs:
           else
             echo "ℹ️ Local source code directory not found"
           fi
+
+          # 删除单 run 交付的暂存目录与压缩包
+          rm -rf patched-source-stage patched-source.tar.gz
+          echo "✅ Successfully cleaned up patched source stage"
           
           # 清理其他临时文件
           find . -name "*.tmp" -delete 2>/dev/null || true
@@ -721,19 +760,25 @@ jobs:
           echo "✅ Final cleanup and rollback completed"
           echo "cleanup_completed=true" >> $GITHUB_OUTPUT
 
-  # 05-等待定制源码分支 push 自动触发的 RustDesk 原版 workflow
-  upstream-build:
+  # 05-单 run 路径：用本仓库携带的上游矩阵直接编译 patched-source
+  upstream-matrix:
     needs: [build]
-    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true'
+    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true' && inputs.use_source_branch != true
+    uses: ./.github/workflows/flutter-build.yml
+    secrets: inherit
+    with:
+      upload-artifact: true
+      upload-tag: ${{ needs.build.outputs.tag }}
+
+  # 05b-调试开关路径：等待 custom-build-* 分支 push 自动触发的上游 workflow
+  upstream-legacy:
+    needs: [build]
+    if: needs.build.result == 'success' && needs.build.outputs.build_success == 'true' && inputs.use_source_branch == true && needs.build.outputs.source_branch != ''
     runs-on: ubuntu-latest
     outputs:
       upstream_run_id: ${{ steps.wait-upstream.outputs.upstream_run_id }}
       upstream_run_url: ${{ steps.wait-upstream.outputs.upstream_run_url }}
       upstream_conclusion: ${{ steps.wait-upstream.outputs.upstream_conclusion }}
-      upstream_platform_conclusion: ${{ steps.wait-upstream.outputs.upstream_platform_conclusion }}
-      platform_results: ${{ steps.wait-upstream.outputs.platform_results }}
-      platform_successes: ${{ steps.wait-upstream.outputs.platform_successes }}
-      platform_failures: ${{ steps.wait-upstream.outputs.platform_failures }}
     steps:
       - name: Download trigger data
         uses: actions/download-artifact@v4
@@ -790,6 +835,47 @@ jobs:
           conclusion="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')"
           echo "upstream_conclusion=$conclusion" >> "$GITHUB_OUTPUT"
 
+  # 06-汇总上游平台结果：单 run 用本 run，调试开关用临时分支触发的子 run
+  upstream-build:
+    needs: [build, upstream-matrix, upstream-legacy]
+    if: always() && needs.build.result == 'success' && needs.build.outputs.build_success == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      upstream_run_id: ${{ steps.wait-upstream.outputs.upstream_run_id }}
+      upstream_run_url: ${{ steps.wait-upstream.outputs.upstream_run_url }}
+      upstream_conclusion: ${{ steps.wait-upstream.outputs.upstream_conclusion }}
+      upstream_platform_conclusion: ${{ steps.wait-upstream.outputs.upstream_platform_conclusion }}
+      platform_results: ${{ steps.wait-upstream.outputs.platform_results }}
+      platform_successes: ${{ steps.wait-upstream.outputs.platform_successes }}
+      platform_failures: ${{ steps.wait-upstream.outputs.platform_failures }}
+    steps:
+      - name: Download trigger data
+        uses: actions/download-artifact@v4
+        with:
+          name: trigger-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/trigger-data
+
+      - name: Collect upstream platform results
+        id: wait-upstream
+        env:
+          GH_TOKEN: ${{ secrets.BUILD_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.use_source_branch }}" = "true" ]; then
+            upstream_run_id="${{ needs.upstream-legacy.outputs.upstream_run_id }}"
+            upstream_run_url="${{ needs.upstream-legacy.outputs.upstream_run_url }}"
+          else
+            upstream_run_id="${{ github.run_id }}"
+            upstream_run_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+          if [ -z "$upstream_run_id" ]; then
+            echo "Failed to resolve upstream workflow run"
+            exit 1
+          fi
+          echo "upstream_run_id=$upstream_run_id" >> "$GITHUB_OUTPUT"
+          echo "upstream_run_url=$upstream_run_url" >> "$GITHUB_OUTPUT"
+          upstream_conclusion="${{ needs.upstream-legacy.outputs.upstream_conclusion || needs.upstream-matrix.result }}"
+          echo "upstream_conclusion=$upstream_conclusion" >> "$GITHUB_OUTPUT"
           jobs_json="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json jobs)"
           platform_summary="$(echo "$jobs_json" | jq -r '
             def platform($name):
@@ -882,7 +968,7 @@ jobs:
 
   # 07-完成处理
   finish:
-    needs: [trigger, review, join-queue, wait-build-lock, build, upstream-build]
+    needs: [trigger, review, join-queue, wait-build-lock, build, upstream-matrix, upstream-legacy, upstream-build]
     if: always() && needs.trigger.result != 'skipped'
     runs-on: ubuntu-latest
     outputs:
@@ -1002,6 +1088,20 @@ jobs:
         run: |
           gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/${{ needs.build.outputs.source_branch }}" || true
           echo "✅ Deleted custom source branch ${{ needs.build.outputs.source_branch }}"
+
+      - name: Delete patched source artifact
+        if: always() && inputs.use_source_branch != true
+        env:
+          GH_TOKEN: ${{ secrets.BUILD_TOKEN }}
+        run: |
+          artifact_id=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+            --jq '.artifacts[] | select(.name == "patched-source-${{ github.run_id }}") | .id' | head -n 1)
+          if [ -n "$artifact_id" ]; then
+            gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$artifact_id"
+            echo "✅ Deleted patched source artifact"
+          else
+            echo "ℹ️ Patched source artifact not found"
+          fi
 
       - name: Delete trigger data artifact
         if: always()

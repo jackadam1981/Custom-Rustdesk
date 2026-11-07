@@ -19,7 +19,7 @@ done
 
 echo "==> Workflow structure"
 WORKFLOW=".github/workflows/CustomBuildRustdesk.yml"
-for job in trigger review join-queue wait-build-lock build upstream-build finish; do
+for job in trigger review join-queue wait-build-lock build upstream-matrix upstream-legacy upstream-build finish; do
     if grep -q "^  ${job}:" "$WORKFLOW"; then
         echo "OK: job $job"
     else
