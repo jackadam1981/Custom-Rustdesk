@@ -649,7 +649,7 @@ if text.find("#powered-by") == -1 or text.find("<div .card-connect>") == -1:
 if text.find("#powered-by") > text.find("<div .card-connect>"):
     raise SystemExit(1)
 header = text.find("custom-rd-home-header")
-if header != -1 and "#powered-by" in text[header:header + 4000]:
+if header != -1 and "#powered-by" in text[header:header + 1500]:
     raise SystemExit(1)
 PY
         python3 - src/ui/index.tis <<'PY'

@@ -34,7 +34,7 @@ if title_plain in text:
     raise SystemExit(0)
 
 logo_close = re.compile(
-    r"(<img\.custom-rd-home-logo[^>]*/>\s*(?:<!-- CUSTOM_RUSTDESK_SCITER_HOME_LOGO -->)?)(\s*</div>)",
+    r"(<img\.custom-rd-home-logo[^>]*/>\s*(?:<!-- CUSTOM_RUSTDESK_SCITER_HOME_LOGO -->)?\s*(?:<!-- CUSTOM_RUSTDESK_S10_ICON_PROBE -->)?)(\s*</div>)",
     re.DOTALL,
 )
 if not logo_close.search(text):

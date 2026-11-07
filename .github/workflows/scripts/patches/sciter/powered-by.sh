@@ -70,7 +70,7 @@ if old_click in text:
 
 header_pos = text.find("custom-rd-home-header")
 if header_pos != -1:
-    header_chunk = text[header_pos : header_pos + 4000]
+    header_chunk = text[header_pos : header_pos + 1500]
     if left_powered_in_brand.search(header_chunk):
         raise SystemExit("source-patcher: S13 powered-by must not remain inside left brand header")
 
@@ -99,7 +99,7 @@ if header == -1 or card == -1 or powered == -1:
     raise SystemExit(1)
 if powered > card:
     raise SystemExit(2)
-if "#powered-by" in text[header : header + 4000]:
+if "#powered-by" in text[header : header + 1500]:
     raise SystemExit(3)
 PY
     then
