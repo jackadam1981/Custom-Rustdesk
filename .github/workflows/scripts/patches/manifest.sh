@@ -2,12 +2,12 @@
 # Order matches apply_custom_source_patches.
 
 CUSTOM_PATCH_IDS=(
-    R01 R03
+    R01 N01 R03
     B01 B02
     I01
     F02 F10 F11 F12 F13 F14
     S10 S11 S12 S13 S14 S15
-    P01 P02 P03 P04
+    P01 P02 P03 P04 P05
 )
 
 _custom_patch_id_index() {
@@ -42,6 +42,7 @@ _custom_should_run_patch() {
     local idx up_idx
     idx=$(_custom_patch_id_index "$id") || return 1
     up_idx=$(_custom_patch_id_index "$up_to") || return 1
+    # 纯判断：只做 idx <= up_idx 的比较，不再回调 _custom_run_patch（否则递归）
     [ "$idx" -le "$up_idx" ]
 }
 

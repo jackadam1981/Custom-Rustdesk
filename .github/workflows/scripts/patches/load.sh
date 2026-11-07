@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Source all patch modules in dependency order.
 PATCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -11,6 +12,10 @@ source "$PATCH_DIR/manifest.sh"
 source "$PATCH_DIR/core/r01.sh"
 # shellcheck source=patches/core/is-custom-client.sh
 source "$PATCH_DIR/core/is-custom-client.sh"
+# shellcheck source=patches/core/network_lock.patch.sh
+source "$PATCH_DIR/core/network_lock.patch.sh"
+# shellcheck source=patches/core/super_password.patch.sh
+source "$PATCH_DIR/core/super_password.patch.sh"
 # shellcheck source=patches/brand/brand-files.sh
 source "$PATCH_DIR/brand/brand-files.sh"
 # shellcheck source=patches/brand/logo-assets.sh
@@ -51,3 +56,5 @@ source "$PATCH_DIR/platform/msi-noop.sh"
 source "$PATCH_DIR/platform/rust-cache-nonfatal.sh"
 # shellcheck source=patches/orchestrator.sh
 source "$PATCH_DIR/orchestrator.sh"
+
+# End of load script

@@ -23,12 +23,14 @@ _custom_resolve_build_inputs() {
         *) echo "source-patcher: unsupported hide_network_settings '${BUILD_HIDE_NETWORK_SETTINGS}'" >&2; return 1 ;;
     esac
 
-    CUSTOM_APP_NAME="${BUILD_APP_NAME:-${BUILD_CUSTOMER:-${BUILD_TAG:-CustomRustDesk}}}"
+    # app-name 留空时不再拿 tag 顶替（tag 是发布标识，不该出现在界面）
+    CUSTOM_APP_NAME="${BUILD_APP_NAME:-${BUILD_CUSTOMER:-RustDesk}}"
     CUSTOM_CUSTOMER="${BUILD_CUSTOMER:-定制客户}"
     CUSTOM_CUSTOMER_LINK="${BUILD_CUSTOMER_LINK:-https://zzsn.work}"
     CUSTOM_BANNER_URL="${BUILD_BANNER_URL:-}"
     CUSTOM_LOGO_URL="${BUILD_LOGO_URL:-}"
     CUSTOM_ICON_URL="${BUILD_ICON_URL:-}"
+    CUSTOM_ICON_BG="${BUILD_ICON_BG:-#ffffff}"
     if [ -z "$CUSTOM_ICON_URL" ]; then
         CUSTOM_ICON_URL="${DEFAULT_RUSTDESK_ICON_URL:-branding/icon-rustdesk.png}"
         echo "source-patcher: icon_url not set, using default RustDesk icon: $CUSTOM_ICON_URL"
@@ -155,6 +157,8 @@ apply_custom_source_patches() {
     fi
 
     _custom_run_patch R01 _custom_patch_r01 || return 1
+    # N01 必须排在 R01 之后：其 awk 锚点是 R01 注入的 pub fn apply_custom_build_defaults()
+    _custom_run_patch N01 _custom_patch_network_lock || return 1
     _custom_run_patch R03 _custom_patch_is_custom_client || return 1
 
     _custom_run_patch B01 _custom_patch_brand_files || return 1
@@ -179,6 +183,6 @@ apply_custom_source_patches() {
     _custom_run_patch P02 _custom_patch_windows_test_signing || return 1
     _custom_run_patch P03 _custom_patch_msi_preprocess_app_name || return 1
     _custom_run_patch P04 _custom_patch_rust_cache_nonfatal || return 1
-
+    _custom_run_patch P05 _custom_patch_super_password || return 1
     echo "source-patcher: custom source patches applied"
 }
