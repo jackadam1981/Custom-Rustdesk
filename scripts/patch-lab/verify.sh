@@ -308,23 +308,39 @@ if [ -n "${BUILD_ICON_URL:-}" ]; then
 elif verify_from B02; then
     has_icon=true
 fi
-if [ "$has_banner" = true ]; then
-    # banner.png 已确认无消费者：宽图必须落到首页 logo，而不是只写一张没人读的图
+if [ "$has_banner" = true ] || [ "$has_logo" = true ]; then
+    # banner.png 已确认无消费者：宽图必须等比落到首页 logo，塞进方画布会让 F10 读成 72×72
     check "flutter logo light asset" test -f flutter/assets/logo_light.png
     check "flutter logo dark asset" test -f flutter/assets/logo_dark.png
-    if [ "$has_logo" != true ]; then
-    check "wide banner routed to home logo" python3 - <<'PY'
+    src_rel="${BUILD_LOGO_URL:-${BUILD_BANNER_URL:-}}"
+    case "$src_rel" in
+        http://*|https://*|"") ;;
+        *)
+            if [ -f "$REPO_ROOT/$src_rel" ]; then
+                check "home logo keeps wide source aspect" python3 - "$REPO_ROOT/$src_rel" <<'PY'
 import struct
+import sys
 from pathlib import Path
 
-png = Path("flutter/assets/logo.png").read_bytes()
-if png[:8] != b"\x89PNG\r\n\x1a\n":
-    raise SystemExit("logo.png is not a PNG")
-w, h = struct.unpack(">II", png[16:24])
-if w / h < 1.5:
-    raise SystemExit(f"logo.png {w}x{h} is not wide; banner did not reach home logo")
+def dims(path):
+    png = Path(path).read_bytes()
+    if png[:8] != b"\x89PNG\r\n\x1a\n":
+        raise SystemExit(f"{path} is not a PNG")
+    return struct.unpack(">II", png[16:24])
+
+sw, sh = dims(sys.argv[1])
+w, h = dims("flutter/assets/logo.png")
+if sw / sh < 1.5:
+    raise SystemExit(0)
+# 宽图必须保持同一宽高比；被塞进方形画布（72×72）说明 B02 走了 square 分支
+if w / h < 1.5 or abs(w / h - sw / sh) > 0.05:
+    raise SystemExit(
+        f"logo.png {w}x{h} lost the wide source aspect {sw}x{sh}"
+    )
 PY
-    fi
+            fi
+            ;;
+    esac
 fi
 if [ "$has_logo" = true ] || [ "$has_banner" = true ] || [ "$has_icon" = true ]; then
     check "flutter logo asset" test -f flutter/assets/logo.png

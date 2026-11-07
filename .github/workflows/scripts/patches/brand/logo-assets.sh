@@ -293,8 +293,19 @@ if banner_path and banner_path.is_file():
 
 if logo_path and logo_path.is_file():
     logo = open_image(logo_path)
-    write_home_logo_square(logo)
-    print(f"source-patcher: logo_url -> logo.png ({HOME_LOGO_SQUARE}px square, home row)")
+    ratio = aspect_ratio(logo)
+    if is_wide_banner(logo):
+        # 宽图不能塞进 72×72 方画布：那样 F10 只能读到 72×72，首页仍渲染成 ~48×10。
+        # 按 300×60 等比落盘，F10 读到的就是真实宽高比（300:60 → 240×48）。
+        write_home_logo_wide(logo)
+        write_wide_banner_assets(logo)
+        print(
+            f"source-patcher: logo_url wide (ratio={ratio:.2f}) "
+            f"-> logo.png + logo_light/dark (300x60 fit, home row)"
+        )
+    else:
+        write_home_logo_square(logo)
+        print(f"source-patcher: logo_url -> logo.png ({HOME_LOGO_SQUARE}px square, home row)")
 elif banner_path and banner_path.is_file():
     banner = open_image(banner_path)
     if is_wide_banner(banner):
