@@ -9,7 +9,7 @@ else
     standalone=false
 fi
 
-source .github/workflows/scripts/review.sh
+source .github/workflows/scripts/queue/review.sh
 
 function _review_test_event() {
     local event_name="$1"

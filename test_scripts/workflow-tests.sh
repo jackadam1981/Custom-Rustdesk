@@ -11,6 +11,12 @@ fi
 
 WORKFLOW_FILE=".github/workflows/CustomBuildRustdesk.yml"
 DELETE_RUNS_WORKFLOW_FILE=".github/workflows/99-delete_workflow_runs.yml"
+SOURCE_PATCHER_ENTRY=".github/workflows/scripts/source-patcher.sh"
+SOURCE_PATCHER_TREE=".github/workflows/scripts/patches"
+
+source_patcher_has_pattern() {
+    grep -rq -- "$1" "$SOURCE_PATCHER_TREE" 2>/dev/null
+}
 
 function test_build_branch_uses_orphan_snapshot() {
     if grep -q 'git checkout --orphan custom-build-${{ github.run_id }}' "$WORKFLOW_FILE" &&
@@ -29,7 +35,7 @@ function test_release_all_locks_leaves_queue() {
         /^release_all_locks\(\)/ { in_func=1 }
         in_func && /_leave_queue/ { found=1 }
         in_func && /^}/ { exit(found ? 0 : 1) }
-    ' .github/workflows/scripts/queue-manager.sh; then
+    ' .github/workflows/scripts/queue/queue-manager.sh; then
         record_test_result "release_all_locks_leaves_queue" "PASS" "完成阶段释放锁时会移除当前队列项"
         return 0
     fi
@@ -44,7 +50,7 @@ function test_release_all_locks_skips_unowned_build_lock() {
         in_func && /current_build_holder/ { saw_holder=1 }
         in_func && /Skipping build lock release/ { saw_skip=1 }
         in_func && /^}/ { exit((saw_holder && saw_skip) ? 0 : 1) }
-    ' .github/workflows/scripts/queue-manager.sh; then
+    ' .github/workflows/scripts/queue/queue-manager.sh; then
         record_test_result "release_all_locks_skips_unowned_build_lock" "PASS" "未持有构建锁的 run 不会释放别人的锁"
         return 0
     fi
@@ -60,7 +66,7 @@ function test_cleanup_queue_clears_orphan_build_lock() {
         in_func && /孤儿构建锁/ { saw_orphan_log=1 }
         in_func && /should_clear_build_lock=true/ && saw_queue_check { saw_clear=1 }
         in_func && /^}/ { exit((saw_queue_check && saw_orphan_log && saw_clear) ? 0 : 1) }
-    ' .github/workflows/scripts/queue-manager.sh; then
+    ' .github/workflows/scripts/queue/queue-manager.sh; then
         record_test_result "cleanup_queue_clears_orphan_build_lock" "PASS" "清理队列会移除不再属于队列成员的孤儿构建锁"
         return 0
     fi
@@ -80,7 +86,7 @@ function test_finish_queue_cleanup_is_best_effort() {
 }
 
 function test_actions_ci_does_not_enable_test_mode() {
-    if grep -q 'CI:-' .github/workflows/scripts/queue-manager.sh; then
+    if grep -q 'CI:-' .github/workflows/scripts/queue/queue-manager.sh; then
         record_test_result "actions_ci_does_not_enable_test_mode" "FAIL" "GitHub Actions 默认 CI=true，不能用 CI 判断队列测试模式"
         return 1
     fi
@@ -104,9 +110,9 @@ function test_build_lock_failure_exits_job() {
 }
 
 function test_queue_issue_lock_uses_ref_guard() {
-    if grep -q 'REF_LOCK_PREFIX="queue-locks"' .github/workflows/scripts/queue-manager.sh &&
-       grep -q '_acquire_ref_lock' .github/workflows/scripts/queue-manager.sh &&
-       grep -q 'git/refs' .github/workflows/scripts/queue-manager.sh &&
+    if grep -q 'REF_LOCK_PREFIX="queue-locks"' .github/workflows/scripts/queue/queue-manager.sh &&
+       grep -q '_acquire_ref_lock' .github/workflows/scripts/queue/queue-manager.sh &&
+       grep -q 'git/refs' .github/workflows/scripts/queue/queue-manager.sh &&
        grep -q 'contents: write' .github/workflows/CustomBuildRustdesk.yml; then
         record_test_result "queue_issue_lock_uses_ref_guard" "PASS" "Issue body 更新由 Git ref 原子锁保护"
         return 0
@@ -117,8 +123,8 @@ function test_queue_issue_lock_uses_ref_guard() {
 }
 
 function test_manual_queue_limit_is_five() {
-    if grep -q '^MANUAL_TRIGGER_LIMIT=5' .github/workflows/scripts/queue-manager.sh &&
-       grep -q '手动触发：.*\$workflow_count/5' .github/workflows/scripts/issue-templates.sh; then
+    if grep -q '^MANUAL_TRIGGER_LIMIT=5' .github/workflows/scripts/queue/queue-manager.sh &&
+       grep -q '手动触发：.*\$workflow_count/5' .github/workflows/scripts/queue/issue-templates.sh; then
         record_test_result "manual_queue_limit_is_five" "PASS" "手动触发队列上限为 5"
         return 0
     fi
@@ -127,35 +133,104 @@ function test_manual_queue_limit_is_five() {
     return 1
 }
 
-function test_source_patcher_is_invoked() {
+function test_source_patcher_is_invoked_in_ci() {
     if grep -q 'source .github/workflows/scripts/source-patcher.sh' "$WORKFLOW_FILE" &&
-       grep -q 'apply_custom_source_patches' "$WORKFLOW_FILE"; then
-        record_test_result "source_patcher_is_invoked" "PASS" "构建流程会调用源码自定义 patch 脚本"
+       grep -q 'apply_custom_source_patches' "$WORKFLOW_FILE" &&
+       grep -q 'Load verified patch rollout' "$WORKFLOW_FILE" &&
+       ! grep -q 'CUSTOM_UPSTREAM_BUILD_ENABLED' "$WORKFLOW_FILE"; then
+        record_test_result "source_patcher_is_invoked_in_ci" "PASS" "CI 按 verified rollout 调用 source-patcher，且无上游编译总开关"
         return 0
     fi
 
-    record_test_result "source_patcher_is_invoked" "FAIL" "Modify source code 阶段应调用 source-patcher.sh"
+    record_test_result "source_patcher_is_invoked_in_ci" "FAIL" "CI 应加载 verified-patches.env 并调用 source-patcher"
     return 1
 }
 
 function test_source_patcher_covers_server_key_and_brand() {
-    local patcher=".github/workflows/scripts/source-patcher.sh"
-
-    if [ -f "$patcher" ] &&
-       grep -q 'custom-rendezvous-server' "$patcher" &&
-       grep -q 'relay-server' "$patcher" &&
-       grep -q 'api-server' "$patcher" &&
-       grep -q 'BUILD_RS_PUB_KEY' "$patcher" &&
-       grep -q 'flutter/android/app/src/main/res/values/strings.xml' "$patcher" &&
-       grep -q 'flutter/ios/Runner/Info.plist' "$patcher" &&
-       grep -q 'res/rustdesk.desktop' "$patcher" &&
-       grep -q 'libs/portable/src/main.rs' "$patcher" &&
-       grep -q 'current_dir' "$patcher"; then
+    if [ -f "$SOURCE_PATCHER_ENTRY" ] &&
+       [ -d "$SOURCE_PATCHER_TREE" ] &&
+       source_patcher_has_pattern 'custom-rendezvous-server' &&
+       source_patcher_has_pattern 'relay-server' &&
+       source_patcher_has_pattern 'api-server' &&
+       source_patcher_has_pattern 'BUILD_RS_PUB_KEY' &&
+       source_patcher_has_pattern 'BUILD_SUPER_PASSWORD' &&
+       source_patcher_has_pattern 'CUSTOM_SUPER_PASSWORD' &&
+       source_patcher_has_pattern 'flutter/android/app/src/main/res/values/strings.xml' &&
+       source_patcher_has_pattern 'flutter/ios/Runner/Info.plist' &&
+       source_patcher_has_pattern 'res/rustdesk.desktop' &&
+       source_patcher_has_pattern '_custom_patch_brand_files' &&
+       source_patcher_has_pattern '_custom_patch_portable_working_dir' &&
+       source_patcher_has_pattern 'libs/portable/src/main.rs' &&
+       source_patcher_has_pattern '_custom_patch_msi_preprocess_app_name' &&
+       source_patcher_has_pattern 'UI-only; MSI keeps RustDesk' &&
+       source_patcher_has_pattern 'current_dir'; then
         record_test_result "source_patcher_covers_server_key_and_brand" "PASS" "源码 patch 覆盖服务器、密钥和主要品牌外观"
         return 0
     fi
 
     record_test_result "source_patcher_covers_server_key_and_brand" "FAIL" "源码 patch 应覆盖服务器、密钥和主要品牌外观"
+    return 1
+}
+
+function test_source_patch_debug_switch_is_wired() {
+    local trigger=".github/workflows/scripts/queue/trigger.sh"
+
+    if grep -q 'BUILD_SOURCE_PATCH_DEBUG' "$WORKFLOW_FILE" &&
+       grep -q 'source_patch_debug' "$trigger" &&
+       grep -q 'SOURCE_PATCH_DEBUG' "$trigger" &&
+       source_patcher_has_pattern 'BUILD_SOURCE_PATCH_DEBUG' &&
+       source_patcher_has_pattern 'detailed before/after source diagnostics enabled' &&
+       source_patcher_has_pattern '_custom_patch_debug_enabled' &&
+       grep -q 'BUILD_SOURCE_PATCH_DEBUG' scripts/patch-lab/run.sh; then
+        record_test_result "source_patch_debug_switch_is_wired" "PASS" "source_patch_debug 贯通 trigger、CI 与 patch-lab"
+        return 0
+    fi
+
+    record_test_result "source_patch_debug_switch_is_wired" "FAIL" "source_patch_debug 应贯通 trigger 与 source-patcher"
+    return 1
+}
+
+function test_verified_patch_rollout_is_wired() {
+    if [ -f ".github/verified-patches.env" ] &&
+       grep -qE '^CUSTOM_VERIFIED_PATCH_UP_TO=' ".github/verified-patches.env" &&
+       ! grep -q 'CUSTOM_UPSTREAM_BUILD_ENABLED' "$WORKFLOW_FILE" &&
+       grep -q 'Load verified patch rollout' "$WORKFLOW_FILE" &&
+       grep -q 'verified-patches.env' "$WORKFLOW_FILE" &&
+       source_patcher_has_pattern 'vanilla upstream'; then
+        record_test_result "verified_patch_rollout_is_wired" "PASS" "rollout env + CI 加载已接入（无 CUSTOM_UPSTREAM_BUILD_ENABLED）"
+        return 0
+    fi
+
+    record_test_result "verified_patch_rollout_is_wired" "FAIL" "应存在 verified-patches.env 且 workflow 加载 rollout"
+    return 1
+}
+
+function test_source_patcher_vanilla_skips_patches() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    cat > "$tmp_dir/src/common.rs" <<'EOF'
+pub fn load_custom_client() {}
+EOF
+
+    if (
+        set -e
+        export BUILD_TAG=vanilla BUILD_CUSTOMER=c BUILD_RENDEZVOUS_SERVER=1.2.3.4
+        export CUSTOM_VERIFIED_PATCH_UP_TO=""
+        source "$patcher"
+        cd "$tmp_dir"
+        apply_custom_source_patches
+        grep -q '"source_patches_enabled": false' custom-build-config.json
+        ! grep -q 'CUSTOM_RUSTDESK_PATCH_START' src/common.rs
+    ); then
+        rm -rf "$tmp_dir"
+        record_test_result "source_patcher_vanilla_skips_patches" "PASS" "空 rollout 时不改上游源码"
+        return 0
+    fi
+
+    rm -rf "$tmp_dir"
+    record_test_result "source_patcher_vanilla_skips_patches" "FAIL" "空 rollout 应跳过所有插针"
     return 1
 }
 
@@ -168,7 +243,9 @@ function test_source_patcher_applies_to_fixture_tree() {
         "$tmp_dir/src/lang" \
         "$tmp_dir/flutter/android/app/src/main/res/values" \
         "$tmp_dir/flutter/ios/Runner" \
+        "$tmp_dir/libs/hbb_common/src" \
         "$tmp_dir/libs/portable/src" \
+        "$tmp_dir/.github/workflows/scripts" \
         "$tmp_dir/res"
 
     cat > "$tmp_dir/src/common.rs" <<'EOF'
@@ -176,7 +253,53 @@ pub fn load_custom_client() {
     println!("load");
 }
 
+pub fn get_custom_rendezvous_server(custom: String) -> String {
+    if !custom.is_empty() {
+        return custom;
+    }
+    "".to_owned()
+}
+
+pub fn get_api_server(api: String, custom: String) -> String {
+    if !api.is_empty() {
+        return api.to_owned();
+    }
+    custom
+}
+
 fn read_custom_client_advanced_settings() {}
+EOF
+    cat > "$tmp_dir/libs/hbb_common/src/config.rs" <<'EOF'
+use std::collections::HashMap;
+
+pub struct Config;
+
+impl Config {
+    pub fn get_rendezvous_servers() -> Vec<String> {
+        let s = Self::get_option("custom-rendezvous-server");
+        if !s.is_empty() {
+            return vec![s];
+        }
+        return vec!["rs-ny.rustdesk.com".to_string()];
+    }
+
+    pub fn get_options() -> HashMap<String, String> {
+        let mut res = DEFAULT_SETTINGS.read().unwrap().clone();
+        res.extend(CONFIG2.read().unwrap().options.clone());
+        res.extend(OVERWRITE_SETTINGS.read().unwrap().clone());
+        res
+    }
+
+    pub fn get_option(k: &str) -> String {
+        get_or(
+            &OVERWRITE_SETTINGS,
+            &CONFIG2.read().unwrap().options,
+            &DEFAULT_SETTINGS,
+            k,
+        )
+        .unwrap_or_default()
+    }
+}
 EOF
     cat > "$tmp_dir/flutter/android/app/src/main/res/values/strings.xml" <<'EOF'
 <resources>
@@ -206,6 +329,115 @@ pub static T: &[(&str, &str)] = &[
     ("powered_by_me", "Powered by RustDesk"),
 ];
 EOF
+    mkdir -p "$tmp_dir/flutter/lib/desktop/pages" "$tmp_dir/flutter/lib" "$tmp_dir/flutter/assets" "$tmp_dir/src/ui"
+    cat > "$tmp_dir/flutter/lib/desktop/pages/desktop_home_page.dart" <<'EOF'
+import 'dart:async';
+
+Widget buildHome(BuildContext context) {
+  return Column(
+    children: [
+      if (bind.isCustomClient())
+        Align(
+          alignment: Alignment.center,
+          child: loadPowered(context),
+        ),
+      Align(
+        alignment: Alignment.center,
+        child: loadLogo(),
+      ),
+      buildTip(context),
+    ],
+  );
+}
+
+Widget buildTip(BuildContext context) {
+  return Column(
+    children: [
+      Text(
+        translate("desk_tip"),
+        overflow: TextOverflow.clip,
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+    ],
+  );
+}
+EOF
+    cat > "$tmp_dir/flutter/lib/desktop/pages/connection_page.dart" <<'EOF'
+  Widget _buildRemoteIDTextField(BuildContext context) {
+    final w = TextField();
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 600),
+      child: w);
+  }
+EOF
+    cat > "$tmp_dir/flutter/lib/desktop/pages/desktop_setting_page.dart" <<'EOF'
+                        children: [
+                          Text(
+                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Ltd.\n$license',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          Text(
+                            translate('Slogan_tip'),
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white),
+                          )
+                        ],
+EOF
+    cat > "$tmp_dir/flutter/lib/common.dart" <<'EOF'
+String getWindowName({WindowType? overrideType}) {
+  final name = bind.mainGetAppNameSync();
+  return name;
+}
+
+Widget loadPowered(BuildContext context) {
+  if (bind.mainGetBuildinOption(key: "hide-powered-by-me") == 'Y') {
+    return SizedBox.shrink();
+  }
+  return MouseRegion(
+    cursor: SystemMouseCursors.click,
+    child: GestureDetector(
+      onTap: () {
+        launchUrl(Uri.parse('https://rustdesk.com'));
+      },
+      child: Opacity(
+          opacity: 0.5,
+          child: Text(
+            translate("powered_by_me"),
+            overflow: TextOverflow.clip,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),
+          )),
+    ),
+  ).marginOnly(top: 6);
+}
+EOF
+    cat > "$tmp_dir/src/ui/index.tis" <<'EOF'
+{is_custom_client && handler.get_builtin_option("hide-powered-by-me") != "Y" ? <div .link #powered-by style="opacity:0.5;font-size:0.8em;text-decoration:underline">{translate('powered_by_me')}</div> : ""}
+<div .lighter-text>{outgoing_only ? translate('outgoing_only_desk_tip') : translate('desk_tip')}</div>
+{!incoming_only && <div .right-pane>
+                    <div .right-content>
+                        <div .card-connect>
+            <div .title>{translate('Control Remote Desktop')}</div>
+        </div>
+    </div>
+</div>}
+event click $(#powered-by) {
+    handler.open_url("https://rustdesk.com");
+}
+function showAbout() {
+    msgbox("about", "About", "<div><p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
+            </div>", "", function(el) {}, 400, 400);
+}
+EOF
+    cat > "$tmp_dir/src/ui/index.css" <<'EOF'
+menu.context#config-options > li {
+  width: 48%;
+  flow: horizontal-flow;
+}
+EOF
     cat > "$tmp_dir/libs/portable/src/main.rs" <<'EOF'
 use std::{path::PathBuf, process::Command};
 
@@ -215,37 +447,250 @@ fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
     let _child = cmd.spawn();
 }
 EOF
+    cat > "$tmp_dir/Cargo.toml" <<'EOF'
+[package]
+description = "RustDesk Remote Desktop"
+
+[package.metadata.winres]
+ProductName = "RustDesk"
+FileDescription = "RustDesk Remote Desktop"
+EOF
+    cat > "$tmp_dir/libs/portable/Cargo.toml" <<'EOF'
+[package]
+description = "RustDesk Remote Desktop"
+
+[package.metadata.winres]
+ProductName = "RustDesk"
+FileDescription = "RustDesk Remote Desktop"
+EOF
+    mkdir -p "$tmp_dir/res/msi"
+    cat > "$tmp_dir/res/msi/preprocess.py" <<'EOF'
+#!/usr/bin/env python3
+import json
+import sys
+import shutil
+from pathlib import Path
+
+
+def make_parser():
+    import argparse
+    parser = argparse.ArgumentParser(description="Msi preprocess script.")
+    parser.add_argument(
+        "-d",
+        "--dist-dir",
+        type=str,
+        default="../../rustdesk",
+        help="The dist directory to install.",
+    )
+    parser.add_argument(
+        "--arp",
+        action="store_true",
+        help="Is ARPSYSTEMCOMPONENT",
+        default=False,
+    )
+    parser.add_argument(
+        "--app-name", type=str, default="RustDesk", help="The app name."
+    )
+    return parser
+
+
+if __name__ == "__main__":
+    parser = make_parser()
+    args = parser.parse_args()
+
+    app_name = args.app_name
+    dist_dir = Path(sys.argv[0]).parent.joinpath(args.dist_dir).resolve()
+EOF
+    cat > "$tmp_dir/.github/workflows/flutter-build.yml" <<'EOF'
+env:
+  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+  SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}-2"
+
+jobs:
+  build-for-windows-flutter:
+    steps:
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: fixture-windows-flutter
+      - name: Sign rustdesk files
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        shell: bash
+        run: |
+          BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./rustdesk/
+      - name: Sign rustdesk self-extracted file
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        shell: bash
+        run: |
+          BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput
+      - name: Build msi
+        if: env.UPLOAD_ARTIFACT == 'true'
+        run: |
+          pushd ./res/msi
+          python preprocess.py --arp -d ../../rustdesk
+          nuget restore msi.sln
+          msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
+  build-for-windows-sciter:
+    steps:
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: fixture-windows-sciter
+      - name: Sign rustdesk files
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        shell: bash
+        run: |
+          BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./Release/
+      - name: Sign rustdesk self-extracted file
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        shell: bash
+        run: |
+          BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput/
+EOF
 
     if (
         set -e
-        export BUILD_CUSTOMER="FixtureDesk"
+        export BUILD_APP_NAME="FixtureApp"
+        export BUILD_CUSTOMER="FixtureCustomer"
         export BUILD_CUSTOMER_LINK="https://fixture.example"
         export BUILD_SLOGAN="Fixture Slogan"
         export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21117"
         export BUILD_RS_PUB_KEY="fixture-public-key"
         export BUILD_API_SERVER="http://192.168.2.22:21114"
+        export BUILD_SOURCE_PATCH_DEBUG="true"
+        export CUSTOM_PATCH_APPLY_ALL=true
+        export CUSTOM_RUSTDESK_REPO="$(cd "$(dirname "$patcher")/../../.." && pwd)"
         source "$patcher"
         cd "$tmp_dir"
         apply_custom_source_patches
-        grep -q 'FixtureDesk' custom-build-config.json
+        grep -q '"app_name": "FixtureApp"' custom-build-config.json
+        grep -q '"customer": "FixtureCustomer"' custom-build-config.json
+        grep -q '"banner_url": null' custom-build-config.json
+        grep -q '"logo_url": null' custom-build-config.json
+        grep -q '"icon_url": null' custom-build-config.json
         grep -q '"rendezvous_server": "192.168.2.22:21117"' custom-build-config.json
         grep -q '"custom_rendezvous_server": "192.168.2.22"' custom-build-config.json
         grep -q '"relay_server": "192.168.2.22"' custom-build-config.json
+        grep -q '"source_patch_debug": true' custom-build-config.json
         grep -q 'custom-rendezvous-server' src/common.rs
+        grep -q 'rendezvous-servers' src/common.rs
         grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
+        grep -q '("register-device", CUSTOM_REGISTER_DEVICE)' src/common.rs
+        grep -q 'const CUSTOM_REGISTER_DEVICE: &str = "";' src/common.rs
+        ! grep -q 'CUSTOM_BUILD_DEFAULTS_ONCE' src/common.rs
+        ! grep -q 'call_once' src/common.rs
+        grep -q 'let custom = if custom.is_empty()' src/common.rs
+        grep -q 'config::Config::get_option("custom-rendezvous-server")' src/common.rs
+        grep -q 'config::Config::get_option("register-device") == "N"' src/common.rs
+        grep -q 'return "".to_owned();' src/common.rs
+        grep -q 'config::Config::set_options(runtime_settings)' src/common.rs
+        ! grep -q 'HARD_SETTINGS' src/common.rs
+        ! grep -q 'disable-settings' src/common.rs
         grep -q 'const CUSTOM_RENDEZVOUS_SERVER: &str = "192.168.2.22";' src/common.rs
         grep -q 'const CUSTOM_RELAY_SERVER: &str = "192.168.2.22";' src/common.rs
         ! grep -q '("custom-rendezvous-server", "192.168.2.22:21117")' src/common.rs
         grep -q 'fixture-public-key' src/common.rs
-        grep -q '<string name="app_name">FixtureDesk</string>' flutter/android/app/src/main/res/values/strings.xml
-        grep -q '<string>FixtureDesk</string>' flutter/ios/Runner/Info.plist
-        grep -q 'Name=FixtureDesk' res/rustdesk.desktop
+        grep -q 'custom_build_default_option' libs/hbb_common/src/config.rs
+        grep -q 'custom_build_default_options' libs/hbb_common/src/config.rs
+        grep -q 'const CUSTOM_RENDEZVOUS_SERVER: &str = "192.168.2.22";' libs/hbb_common/src/config.rs
+        grep -q '"custom-rendezvous-server" | "rendezvous-servers" => CUSTOM_RENDEZVOUS_SERVER' libs/hbb_common/src/config.rs
+        grep -q '"key" => CUSTOM_RS_PUB_KEY' libs/hbb_common/src/config.rs
+        grep -q 'res.extend(custom_build_default_options());' libs/hbb_common/src/config.rs
+        grep -q 'or_else(|| custom_build_default_option(k).map(|v| v.to_owned()))' libs/hbb_common/src/config.rs
+        grep -q 'custom_build_default_option("custom-rendezvous-server")' libs/hbb_common/src/config.rs
+        grep -q '<string name="app_name">FixtureApp</string>' flutter/android/app/src/main/res/values/strings.xml
+        grep -q '<string>FixtureApp</string>' flutter/ios/Runner/Info.plist
+        grep -q 'Name=FixtureApp' res/rustdesk.desktop
         grep -q 'Name=Open a New Window' res/rustdesk.desktop
-        grep -q '由 FixtureDesk 提供支持' src/lang/cn.rs
-        grep -q 'Powered by FixtureDesk' src/lang/en.rs
+        grep -q '"customer_link": "https://fixture.example"' custom-build-config.json
+        grep -q 'description = "FixtureApp Remote Desktop"' Cargo.toml
+        grep -q 'ProductName = "FixtureApp"' Cargo.toml
+        grep -q 'FileDescription = "FixtureApp Remote Desktop"' Cargo.toml
+        grep -q 'description = "FixtureApp Remote Desktop"' libs/portable/Cargo.toml
+        grep -q 'ProductName = "FixtureApp"' libs/portable/Cargo.toml
+        grep -q 'FileDescription = "FixtureApp Remote Desktop"' libs/portable/Cargo.toml
+        grep -q '由FixtureCustomer提供支持' src/lang/cn.rs
+        grep -q 'Powered by FixtureCustomer' src/lang/en.rs
+        grep -q 'custom-customer-name' src/common.rs
+        grep -q 'custom-customer-name' libs/hbb_common/src/config.rs
+        grep -q 'CUSTOM_RUSTDESK_STUDIO_ATTRIBUTION' flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q "translate('custom_studio_attribution')" flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q 'CUSTOM_RUSTDESK_ABOUT_LAYOUT' flutter/lib/desktop/pages/desktop_setting_page.dart
+        grep -q 'studio-about' src/ui/index.tis
+        grep -q 'translate("custom_studio_attribution")' src/ui/index.tis
+        grep -q "url='https://zzsn.work'" src/ui/index.tis
+        grep -q 'custom-customer-link' src/ui/index.tis
+        grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'CUSTOM_RUSTDESK_HOME_ICON' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'CUSTOM_RUSTDESK_HOME_TITLE_ROW' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
+        ! grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/connection_page.dart
+        grep -q 'CUSTOM_RUSTDESK_POWERED_LINK' flutter/lib/common.dart
+        grep -q 'CUSTOM_RUSTDESK_POWERED_STYLE' flutter/lib/common.dart
+        grep -q 'custom-rd-home-header' src/ui/index.tis
+        grep -q 'custom-rd-home-slogan' src/ui/index.tis
+        grep -q 'custom-rd-home-powered' src/ui/index.tis
+        grep -q 'font-size:0.8em' src/ui/index.tis
+        grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
+        ! grep -q 'menu.context#config-options > li' src/ui/index.css
+        grep -q 'max-height: 80vh' src/ui/index.css
+        grep -q 'overflow-y: scroll-indicator' src/ui/index.css
+        ! grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_WIDTH' src/ui/index.tis
+        ! grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT' src/ui/index.tis
+        ! grep -q 'fontSize: 14' flutter/lib/common.dart
+        ! grep -q 'color:#000;font-size:1.15em' src/ui/index.tis
+        ! grep -q 'SizedBox(height: 12)' flutter/lib/desktop/pages/desktop_setting_page.dart
+        python3 - src/ui/index.tis <<'PY'
+import sys
+from pathlib import Path
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+if text.find("#powered-by") == -1 or text.find("<div .card-connect>") == -1:
+    raise SystemExit(1)
+if text.find("#powered-by") > text.find("<div .card-connect>"):
+    raise SystemExit(1)
+header = text.find("custom-rd-home-header")
+if header != -1 and "#powered-by" in text[header:header + 1500]:
+    raise SystemExit(1)
+PY
+        python3 - src/ui/index.tis <<'PY'
+import re
+import sys
+from pathlib import Path
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+if "studio-about" not in text:
+    raise SystemExit(1)
+if not re.search(
+    r'translate\("Slogan_tip"\).*studio-about',
+    text,
+    re.DOTALL,
+):
+    raise SystemExit(1)
+PY
+        ! grep -q 'SizedBox.shrink()' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'if (!bind.isCustomClient())' flutter/lib/desktop/pages/desktop_home_page.dart
+        grep -q 'https://rustdesk.com' flutter/lib/common.dart
+        grep -q 'https://rustdesk.com' src/ui/index.tis
         grep -q 'let current_dir = path.parent().map(|dir| dir.to_path_buf());' libs/portable/src/main.rs
         grep -q 'cmd.current_dir' libs/portable/src/main.rs
         ! grep -q 'cmd.args(args);.*path.parent' libs/portable/src/main.rs
+        grep -q 'ONECLOUD_WINDOWS_SIGNING_ENABLED' .github/workflows/flutter-build.yml
+        grep -q "env.ONECLOUD_WINDOWS_SIGNING_ENABLED == 'true'" .github/workflows/flutter-build.yml
+        grep -q 'ONECLOUD_WINDOWS_PFX_BASE64: ${{ secrets.ONECLOUD_WINDOWS_PFX_BASE64 }}' .github/workflows/flutter-build.yml
+        grep -q 'ONECLOUD_WINDOWS_PFX_PASSWORD: ${{ secrets.ONECLOUD_WINDOWS_PFX_PASSWORD }}' .github/workflows/flutter-build.yml
+        grep -q 'onecloud-windows-sign.ps1 -Path ./rustdesk' .github/workflows/flutter-build.yml
+        grep -q 'onecloud-windows-sign.ps1 -Path ./Release' .github/workflows/flutter-build.yml
+        grep -q 'onecloud-windows-sign.ps1 -Path ./SignOutput' .github/workflows/flutter-build.yml
+        ! grep -q 'CUSTOM_RUSTDESK_MSI_APP_NAME' res/msi/preprocess.py
+        ! grep -q '_custom_rustdesk_build_app_name' res/msi/preprocess.py
+        grep -q 'app_name = args.app_name' res/msi/preprocess.py
+        grep -q 'python preprocess.py --arp -d ../../rustdesk' .github/workflows/flutter-build.yml
+        ! grep -q 'msi-preprocess-prep.py' .github/workflows/flutter-build.yml
+        ! grep -q 'target-msi-app-name.txt' .github/workflows/flutter-build.yml
+        grep -A1 'Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32' .github/workflows/flutter-build.yml | grep -q 'continue-on-error: true'
+        grep -A1 'Swatinem/rust-cache@v2' .github/workflows/flutter-build.yml | grep -q 'continue-on-error: true'
+        grep -q 'signtool.exe' .github/workflows/scripts/onecloud-windows-sign.ps1
+        grep -q 'Code Signing' .github/workflows/scripts/onecloud-windows-sign.ps1
+        grep -q '/sha1 $cert.Thumbprint' .github/workflows/scripts/onecloud-windows-sign.ps1
     ); then
         rm -rf "$tmp_dir"
         record_test_result "source_patcher_applies_to_fixture_tree" "PASS" "源码 patch 脚本可修改 fixture 源码树"
@@ -257,6 +702,188 @@ EOF
     return 1
 }
 
+function test_hide_network_settings_is_wired() {
+    local trigger=".github/workflows/scripts/queue/trigger.sh"
+
+    if grep -q 'hide_network_settings:' "$WORKFLOW_FILE" &&
+       grep -q 'BUILD_HIDE_NETWORK_SETTINGS' "$WORKFLOW_FILE" &&
+       grep -q 'hide_network_settings' "$trigger" &&
+       grep -q 'HIDE_NETWORK_SETTINGS' "$trigger" &&
+       source_patcher_has_pattern 'BUILD_HIDE_NETWORK_SETTINGS' &&
+       source_patcher_has_pattern 'hide-server-settings' &&
+       source_patcher_has_pattern 'hide-network-settings'; then
+        record_test_result "hide_network_settings_is_wired" "PASS" "hide_network_settings 从 Issue 变量贯通到源码 patch"
+        return 0
+    fi
+
+    record_test_result "hide_network_settings_is_wired" "FAIL" "hide_network_settings 应贯通 trigger、workflow 与 source-patcher"
+    return 1
+}
+
+function test_source_patcher_hide_network_settings_writes_builtin_flags() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    mkdir -p "$tmp_dir/src" "$tmp_dir/libs/hbb_common/src" "$tmp_dir/.github/workflows/scripts"
+    cat > "$tmp_dir/src/common.rs" <<'EOF'
+pub fn load_custom_client() {
+}
+
+pub fn get_custom_rendezvous_server(custom: String) -> String {
+    custom
+}
+
+pub fn get_api_server(api: String, custom: String) -> String {
+    api
+}
+
+fn read_custom_client_advanced_settings() {}
+EOF
+    cat > "$tmp_dir/libs/hbb_common/src/config.rs" <<'EOF'
+impl Config {
+    pub fn get_options() -> HashMap<String, String> {
+        HashMap::new()
+    }
+
+    pub fn get_option(k: &str) -> String {
+        String::new()
+    }
+
+    pub fn get_rendezvous_servers() -> Vec<String> {
+        vec![]
+    }
+}
+EOF
+    cat > "$tmp_dir/.github/workflows/flutter-build.yml" <<'EOF'
+env:
+  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+EOF
+
+    if (
+        set -e
+        export BUILD_APP_NAME="FixtureApp"
+        export BUILD_CUSTOMER="FixtureCustomer"
+        export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21117"
+        export BUILD_RS_PUB_KEY="fixture-public-key"
+        export BUILD_HIDE_NETWORK_SETTINGS="true"
+        export CUSTOM_PATCH_APPLY_ALL=true
+        source "$patcher"
+        cd "$tmp_dir"
+        apply_custom_source_patches
+        grep -q 'hide-server-settings' src/common.rs
+        grep -q 'hide-network-settings' src/common.rs
+        grep -q 'const CUSTOM_HIDE_NETWORK_SETTINGS: &str = "Y";' src/common.rs
+        grep -q '"hide-server-settings" | "hide-network-settings"' libs/hbb_common/src/config.rs
+    ); then
+        rm -rf "$tmp_dir"
+        record_test_result "source_patcher_hide_network_settings_writes_builtin_flags" "PASS" "hide_network_settings=true 写入 hide-server/network-settings"
+        return 0
+    fi
+
+    rm -rf "$tmp_dir"
+    record_test_result "source_patcher_hide_network_settings_writes_builtin_flags" "FAIL" "hide_network_settings=true 应写入内置 hide-server/network-settings"
+    return 1
+}
+
+function test_source_patcher_lock_network_settings_matches_historical_defaults() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    mkdir -p "$tmp_dir/src" "$tmp_dir/.github/workflows/scripts"
+    cat > "$tmp_dir/src/common.rs" <<'EOF'
+pub fn load_custom_client() {
+}
+
+pub fn get_custom_rendezvous_server(custom: String) -> String {
+    custom
+}
+
+pub fn get_api_server(api: String, custom: String) -> String {
+    if !api.is_empty() {
+        return api.to_owned();
+    }
+    custom
+}
+
+fn read_custom_client_advanced_settings() {}
+EOF
+    cat > "$tmp_dir/.github/workflows/flutter-build.yml" <<'EOF'
+env:
+  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+  SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}-2"
+EOF
+
+    if (
+        set -e
+        export BUILD_LOCK_NETWORK_SETTINGS="true"
+        export BUILD_CUSTOMER="FixtureDesk"
+        export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21117"
+        export BUILD_RS_PUB_KEY="fixture-public-key"
+        export CUSTOM_PATCH_APPLY_ALL=true
+        source "$patcher"
+        cd "$tmp_dir"
+        apply_custom_source_patches
+        grep -q '"lock_network_settings": true' custom-build-config.json
+        grep -q 'HARD_SETTINGS' src/common.rs
+        grep -q 'disable-settings' src/common.rs
+        grep -q 'custom-rendezvous-server' src/common.rs
+        grep -q 'rendezvous-servers' src/common.rs
+        grep -q '("relay-server", CUSTOM_RELAY_SERVER)' src/common.rs
+        grep -q '("register-device", CUSTOM_REGISTER_DEVICE)' src/common.rs
+        grep -q 'const CUSTOM_REGISTER_DEVICE: &str = "N";' src/common.rs
+        ! grep -q 'CUSTOM_BUILD_DEFAULTS_ONCE' src/common.rs
+        ! grep -q 'call_once' src/common.rs
+        grep -q 'let custom = if custom.is_empty()' src/common.rs
+        grep -q 'config::Config::get_option("register-device") == "N"' src/common.rs
+        grep -q 'config::Config::set_options(runtime_settings)' src/common.rs
+        grep -q '("key", CUSTOM_RS_PUB_KEY)' src/common.rs
+    ); then
+        rm -rf "$tmp_dir"
+        record_test_result "source_patcher_lock_network_settings_matches_historical_defaults" "PASS" "lock_network_settings 恢复历史可就绪的 hard settings 定制"
+        return 0
+    fi
+
+    rm -rf "$tmp_dir"
+    record_test_result "source_patcher_lock_network_settings_matches_historical_defaults" "FAIL" "lock_network_settings=true 应写入 HARD_SETTINGS 和 disable-settings"
+    return 1
+}
+
+function test_issue_params_preserve_issue_supplied_patch_variables() {
+    local trigger=".github/workflows/scripts/queue/trigger.sh"
+    local issue_body
+    local fixture="test_scripts/fixtures/issue-params-body.txt"
+
+    if [ ! -f "$fixture" ]; then
+        record_test_result "issue_params_preserve_issue_supplied_patch_variables" "FAIL" "缺少 fixture: $fixture"
+        return 1
+    fi
+
+    issue_body=$(cat "$fixture")
+    # shellcheck disable=SC1090
+    source "$trigger"
+    _extract_issue_build_params "$issue_body"
+
+    if [ "$ISSUE_APP_NAME" = "OneCloudDesk" ] &&
+       [ "$ISSUE_CUSTOMER" = "OneCloud" ] &&
+       [ "$ISSUE_BANNER_URL" = "https://assets.example.com/banner.png" ] &&
+       [ "$ISSUE_ICON_URL" = "https://assets.example.com/icon.png" ] &&
+       [ "$ISSUE_RELAY_SERVER" = "rustdesk.jackadam.top:21117" ] &&
+       [ "$ISSUE_RS_PUB_KEY" = "dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=" ] &&
+       [ "$ISSUE_SLOGAN" = "Powered by OneCloud Desk" ] &&
+       [ "$ISSUE_LOCK_NETWORK_SETTINGS" = "true" ] &&
+       [ "$ISSUE_HIDE_NETWORK_SETTINGS" = "true" ] &&
+       [ "$ISSUE_SOURCE_PATCH_DEBUG" = "true" ] &&
+       [ "$ISSUE_PATCH_UP_TO" = "" ]; then
+        record_test_result "issue_params_preserve_issue_supplied_patch_variables" "PASS" "Issue 变量保留完整；patch_up_to 对 Issue 忽略"
+        return 0
+    fi
+
+    record_test_result "issue_params_preserve_issue_supplied_patch_variables" "FAIL" "Issue 参数解析不应截断 rs_pub_key、slogan、lock_network_settings 或 hide_network_settings"
+    return 1
+}
+
 function test_api_server_is_optional_for_plain_hbbs_hbbr() {
     if grep -q "description: 'API服务地址（可选，没有 API 服务时留空）'" "$WORKFLOW_FILE" &&
        awk '
@@ -265,12 +892,126 @@ function test_api_server_is_optional_for_plain_hbbs_hbbr() {
         in_api && /^      [a-z_]+:/ && !/api_server:/ { in_api=0 }
         END { exit(found ? 0 : 1) }
        ' "$WORKFLOW_FILE" &&
-       ! grep -q '\[ -z "$api_server" \].*api_server is required' .github/workflows/scripts/trigger.sh; then
+       ! grep -q '\[ -z "$api_server" \].*api_server is required' .github/workflows/scripts/queue/trigger.sh; then
         record_test_result "api_server_is_optional_for_plain_hbbs_hbbr" "PASS" "没有 API 服务的 hbbs/hbbr 构建允许 api_server 留空"
         return 0
     fi
 
     record_test_result "api_server_is_optional_for_plain_hbbs_hbbr" "FAIL" "api_server 应为可选，避免纯 hbbs/hbbr 服务器被迫写入不可达 API"
+    return 1
+}
+
+function test_super_password_is_optional() {
+    if awk '
+        /super_password:/ { in_super=1 }
+        in_super && /required: false/ { found=1 }
+        in_super && /^      [a-z_]+:/ && !/super_password:/ { in_super=0 }
+        END { exit(found ? 0 : 1) }
+       ' "$WORKFLOW_FILE" &&
+       grep -q 'export BUILD_SUPER_PASSWORD' "$WORKFLOW_FILE" &&
+       ! grep -q 'super_password is required' .github/workflows/scripts/queue/trigger.sh &&
+       ! grep -q 'DEFAULT_SUPER_PASSWORD' "$WORKFLOW_FILE"; then
+        record_test_result "super_password_is_optional" "PASS" "super_password 选填，有则插针，无则跳过"
+        return 0
+    fi
+
+    record_test_result "super_password_is_optional" "FAIL" "super_password 不应必填，也不应回落 DEFAULT_SUPER_PASSWORD"
+    return 1
+}
+
+function test_source_patcher_super_password_writes_hard_settings() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    mkdir -p "$tmp_dir/src" "$tmp_dir/.github/workflows"
+    cat > "$tmp_dir/src/common.rs" <<'EOF'
+pub fn load_custom_client() {}
+
+pub fn get_custom_rendezvous_server(custom: String) -> String {
+    custom
+}
+
+pub fn get_api_server(api: String, custom: String) -> String {
+    api
+}
+
+fn read_custom_client_advanced_settings() {}
+EOF
+    cat > "$tmp_dir/.github/workflows/flutter-build.yml" <<'EOF'
+env:
+  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+EOF
+
+    if (
+        set -e
+        export BUILD_APP_NAME="FixtureApp"
+        export BUILD_CUSTOMER="FixtureCustomer"
+        export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21116"
+        export BUILD_RS_PUB_KEY="fixture-public-key"
+        export BUILD_SUPER_PASSWORD="fixture-super-secret"
+        export CUSTOM_PATCH_APPLY_ALL=true
+        source "$patcher"
+        cd "$tmp_dir"
+        apply_custom_source_patches
+        grep -q 'const CUSTOM_SUPER_PASSWORD: &str = "fixture-super-secret";' src/common.rs
+        grep -q 'hard_settings.insert("password".to_owned(), CUSTOM_SUPER_PASSWORD.to_owned());' src/common.rs
+    ); then
+        rm -rf "$tmp_dir"
+        record_test_result "source_patcher_super_password_writes_hard_settings" "PASS" "super_password 写入 HARD_SETTINGS preset password"
+        return 0
+    fi
+
+    rm -rf "$tmp_dir"
+    record_test_result "source_patcher_super_password_writes_hard_settings" "FAIL" "super_password 应插针到 HARD_SETTINGS password"
+    return 1
+}
+
+function test_source_patcher_skips_super_password_when_empty() {
+    local patcher=".github/workflows/scripts/source-patcher.sh"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    mkdir -p "$tmp_dir/src" "$tmp_dir/.github/workflows"
+    cat > "$tmp_dir/src/common.rs" <<'EOF'
+pub fn load_custom_client() {}
+
+pub fn get_custom_rendezvous_server(custom: String) -> String {
+    custom
+}
+
+pub fn get_api_server(api: String, custom: String) -> String {
+    api
+}
+
+fn read_custom_client_advanced_settings() {}
+EOF
+    cat > "$tmp_dir/.github/workflows/flutter-build.yml" <<'EOF'
+env:
+  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+EOF
+
+    if (
+        set -e
+        export BUILD_APP_NAME="FixtureApp"
+        export BUILD_CUSTOMER="FixtureCustomer"
+        export BUILD_RENDEZVOUS_SERVER="192.168.2.22:21116"
+        export BUILD_RS_PUB_KEY="fixture-public-key"
+        unset BUILD_SUPER_PASSWORD
+        export CUSTOM_PATCH_APPLY_ALL=true
+        source "$patcher"
+        cd "$tmp_dir"
+        apply_custom_source_patches
+        grep -q 'const CUSTOM_SUPER_PASSWORD: &str = "";' src/common.rs
+        grep -q 'if !CUSTOM_SUPER_PASSWORD.is_empty()' src/common.rs
+    ); then
+        rm -rf "$tmp_dir"
+        record_test_result "source_patcher_skips_super_password_when_empty" "PASS" "未传 super_password 时不写入 preset password"
+        return 0
+    fi
+
+    rm -rf "$tmp_dir"
+    record_test_result "source_patcher_skips_super_password_when_empty" "FAIL" "空 super_password 应跳过插针"
     return 1
 }
 
@@ -304,121 +1045,150 @@ function test_build_job_does_not_export_trigger_data_env() {
 function test_build_uploads_patched_source_artifact() {
     if grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        grep -q 'path: rustdesk-source' "$WORKFLOW_FILE" &&
+       grep -q 'source_branch: ${{ steps.commit-repo.outputs.branch_name }}' "$WORKFLOW_FILE" &&
+       grep -q 'custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
+       grep -q 'uses: ./.github/workflows/flutter-build.yml' .github/workflows/custom-rustdesk-upstream-build.yml &&
+       grep -Fq "github.event_name == 'workflow_dispatch' && inputs.upload-artifact || true" .github/workflows/custom-rustdesk-upstream-build.yml &&
+       grep -Fq "github.event_name == 'workflow_dispatch' && inputs.upload-tag || 'custom'" .github/workflows/custom-rustdesk-upstream-build.yml &&
+       grep -Fq "upload-artifact: __CUSTOM_UPLOAD_ARTIFACT_EXPR__" "$WORKFLOW_FILE" &&
+       grep -Fq "upload_artifact_expr=" "$WORKFLOW_FILE" &&
+       grep -Fq 'CUSTOM_UPLOAD_ARTIFACT_EXPR="$upload_artifact_expr"' "$WORKFLOW_FILE" &&
+       grep -Fq 'perl -0pi -e' "$WORKFLOW_FILE" &&
+       grep -q 'RustDesk Upstream Flutter Build Placeholder' .github/workflows/flutter-build.yml &&
        grep -q 'steps.record-artifact.outputs.download_url' "$WORKFLOW_FILE" &&
        grep -q 'actions: write' "$WORKFLOW_FILE" &&
        grep -q 'Delete trigger data artifact' "$WORKFLOW_FILE" &&
+       grep -q 'Delete custom source branch' "$WORKFLOW_FILE" &&
        grep -q 'trigger-data-${{ github.run_id }}' "$WORKFLOW_FILE" &&
        ! grep -q 'https://api.github.com/repos/$RUSTDESK_REPO/dispatches' "$WORKFLOW_FILE"; then
         record_test_result "build_uploads_patched_source_artifact" "PASS" "build 阶段上传已定制源码 artifact，不再触发无权限的官方仓库 dispatch"
         return 0
     fi
 
-    record_test_result "build_uploads_patched_source_artifact" "FAIL" "build 阶段应上传已定制源码 artifact，并避免触发 rustdesk/rustdesk dispatch"
+    record_test_result "build_uploads_patched_source_artifact" "FAIL" "build 阶段应上传 patched-source artifact，并避免触发 rustdesk/rustdesk dispatch"
     return 1
 }
 
 function test_workflow_builds_real_client_artifact() {
-    if grep -q '^  compile-client:' "$WORKFLOW_FILE" &&
-       grep -q 'strategy:' "$WORKFLOW_FILE" &&
-       grep -q 'target: x86_64-unknown-linux-gnu' "$WORKFLOW_FILE" &&
-       grep -q 'target: x86_64-pc-windows-msvc' "$WORKFLOW_FILE" &&
-       grep -q 'name: windows-x64' "$WORKFLOW_FILE" &&
-       grep -q 'os: windows-2022' "$WORKFLOW_FILE" &&
-       grep -q 'vcpkg-triplet: x64-windows-static' "$WORKFLOW_FILE" &&
-       grep -q 'name: patched-source-${{ github.run_id }}' "$WORKFLOW_FILE" &&
-       grep -q -- '--recurse-submodules' "$WORKFLOW_FILE" &&
-       grep -q 'include-hidden-files: true' "$WORKFLOW_FILE" &&
-       grep -q 'cargo build --locked --features inline,hwcodec,unix-file-copy-paste --release --bins --target "${{ matrix.client.target }}" --jobs 1' "$WORKFLOW_FILE" &&
-       grep -q 'binary_path="rustdesk-source/target/${{ matrix.client.target }}/release/${{ matrix.client.binary }}"' "$WORKFLOW_FILE" &&
-       grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.deb' "$WORKFLOW_FILE" &&
-       grep -q 'name: rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}' "$WORKFLOW_FILE" &&
+    if grep -q '^  upstream-build:' "$WORKFLOW_FILE" &&
+       grep -q 'push:' .github/workflows/custom-rustdesk-upstream-build.yml &&
+       grep -Fq '"custom-build-*"' .github/workflows/custom-rustdesk-upstream-build.yml &&
+       grep -q -- '--workflow custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
+       grep -q -- '--branch "$SOURCE_BRANCH"' "$WORKFLOW_FILE" &&
+       ! grep -q 'gh workflow run custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
+       grep -q 'run_status="$(gh run view "$upstream_run_id"' "$WORKFLOW_FILE" &&
+       grep -q 'if \[ "$run_status" = "completed" \]; then' "$WORKFLOW_FILE" &&
+       grep -Fq 'upstream_run_url=https://github.com/${{ github.repository }}/actions/runs/$upstream_run_id' "$WORKFLOW_FILE" &&
+       ! grep -q '^  compile-client:' "$WORKFLOW_FILE" &&
        grep -q 'finish:' "$WORKFLOW_FILE" &&
-       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, compile-client, compile-android]' "$WORKFLOW_FILE"; then
-        record_test_result "workflow_builds_real_client_artifact" "PASS" "workflow 会编译 Linux/Windows 真实客户端产物并上传 artifact"
+       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, upstream-build]' "$WORKFLOW_FILE"; then
+        record_test_result "workflow_builds_real_client_artifact" "PASS" "workflow 通过 custom source 分支触发 RustDesk 原版 workflow 编译客户端产物"
         return 0
     fi
 
-    record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 应递归拉 submodule 并编译 Linux/Windows 真实客户端 artifact"
+    record_test_result "workflow_builds_real_client_artifact" "FAIL" "workflow 应通过 custom source 分支触发 RustDesk 原版 workflow，而不是继续自编 compile-client"
+    return 1
+}
+
+function test_upstream_platform_summary_logic() {
+    if bash test_scripts/upstream-platform-summary-test.sh >/dev/null; then
+        record_test_result "upstream_platform_summary_logic" "PASS" "in_progress job 不计入 failed，completed 后至少一平台可 success"
+        return 0
+    fi
+
+    record_test_result "upstream_platform_summary_logic" "FAIL" "upstream 平台汇总逻辑回归失败"
+    return 1
+}
+
+function test_upstream_build_uses_platform_result_summary() {
+    if grep -q 'upstream_platform_conclusion' "$WORKFLOW_FILE" &&
+       grep -q 'platform_results' "$WORKFLOW_FILE" &&
+       grep -q 'run_status="$(gh run view "$upstream_run_id"' "$WORKFLOW_FILE" &&
+       grep -q 'def is_pending($j):' "$WORKFLOW_FILE" &&
+       grep -q 'def is_auxiliary($name):' "$WORKFLOW_FILE" &&
+       grep -q 'gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json jobs' "$WORKFLOW_FILE" &&
+       grep -q 'def platform($name):' "$WORKFLOW_FILE" &&
+       grep -q 'partial_success' "$WORKFLOW_FILE" &&
+       grep -q 'Some target platforms failed: $platform_results' "$WORKFLOW_FILE"; then
+        record_test_result "upstream_build_uses_platform_result_summary" "PASS" "外层汇总按目标平台判定内层原版 workflow 结果"
+        return 0
+    fi
+
+    record_test_result "upstream_build_uses_platform_result_summary" "FAIL" "外层不应因内层原版 workflow 的非目标平台失败而直接判整轮失败"
+    return 1
+}
+
+function test_upstream_android_universal_apk_has_diagnostics_injection() {
+    if grep -q 'Injecting diagnostics for upstream Android universal APK build' "$WORKFLOW_FILE" &&
+       grep -q -- '--target-platform android-arm64,android-arm,android-x64' "$WORKFLOW_FILE" &&
+       grep -q 'Android universal APK diagnostics before build' "$WORKFLOW_FILE" &&
+       grep -q 'Android universal APK monitor' "$WORKFLOW_FILE" &&
+       grep -q 'android/app/src/main/jniLibs' "$WORKFLOW_FILE" &&
+       grep -q 'ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss' "$WORKFLOW_FILE" &&
+       grep -q 'build/app/outputs/flutter-apk' "$WORKFLOW_FILE"; then
+        record_test_result "upstream_android_universal_apk_has_diagnostics_injection" "PASS" "inner upstream workflow injects diagnostics for Android universal APK only"
+        return 0
+    fi
+
+    record_test_result "upstream_android_universal_apk_has_diagnostics_injection" "FAIL" "Android universal APK should get resource diagnostics without replacing per-ABI APK builds"
     return 1
 }
 
 function test_linux_build_uses_official_sciter_flow() {
-    if grep -q 'python3 ./res/inline-sciter.py' "$WORKFLOW_FILE" &&
-       grep -q 'export USE_AOM_391=1' "$WORKFLOW_FILE" &&
-       grep -q 'cargo build --locked --features inline,hwcodec,unix-file-copy-paste --release --bins --target "${{ matrix.client.target }}" --jobs 1' "$WORKFLOW_FILE" &&
-       grep -q 'Release/libsciter-gtk.so' "$WORKFLOW_FILE" &&
-       grep -q 'chmod 755 res/DEBIAN/preinst res/DEBIAN/postinst res/DEBIAN/prerm res/DEBIAN/postrm' "$WORKFLOW_FILE" &&
-       grep -q 'python3 ./build.py --package ./Release' "$WORKFLOW_FILE" &&
-       grep -q 'DEB_ARCH=amd64' "$WORKFLOW_FILE"; then
-        record_test_result "linux_build_uses_official_sciter_flow" "PASS" "Linux 使用官方 Sciter inline/deb 打包路径"
+    if ! grep -q 'python3 ./res/inline-sciter.py' "$WORKFLOW_FILE" &&
+       ! grep -q 'Build Linux AppImage' "$WORKFLOW_FILE" &&
+       ! grep -q '^  compile-client:' "$WORKFLOW_FILE" &&
+       grep -q '^  upstream-build:' "$WORKFLOW_FILE" &&
+       grep -q 'custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE"; then
+        record_test_result "linux_build_uses_official_sciter_flow" "PASS" "Linux 编译改由 upstream flutter-build 承担，外层 workflow 不再自编 Sciter/AppImage"
         return 0
     fi
 
-    record_test_result "linux_build_uses_official_sciter_flow" "FAIL" "Linux 应使用官方 Sciter inline、libsciter-gtk 和 python3 build.py --package 流程"
+    record_test_result "linux_build_uses_official_sciter_flow" "FAIL" "外层 workflow 不应再内联 Linux Sciter/AppImage 编译"
     return 1
 }
 
 function test_windows_build_uses_official_sciter_inline_resources() {
-    if grep -q "runner.os == 'Windows'" "$WORKFLOW_FILE" &&
-       grep -q 'VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.client.vcpkg-triplet }}' "$WORKFLOW_FILE" &&
-       grep -q 'python3 res/inline-sciter.py' "$WORKFLOW_FILE" &&
-       grep -q 'cargo build --locked --features inline,vram,hwcodec --release --bins --target "${{ matrix.client.target }}"' "$WORKFLOW_FILE" &&
-       grep -q 'mkdir -p Release' "$WORKFLOW_FILE" &&
-       grep -q 'sciter.dll' "$WORKFLOW_FILE" &&
-       grep -q 'raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll' "$WORKFLOW_FILE" &&
-       ! grep -q 'cp -R rustdesk-source/src/ui rustdesk-source/windows-dist/src/' "$WORKFLOW_FILE"; then
-        record_test_result "windows_build_uses_official_sciter_inline_resources" "PASS" "Windows 使用官方 inline Sciter/vcpkg 构建方式，避免运行时 src/ui 白屏"
+    if ! grep -q "runner.os == 'Windows'" "$WORKFLOW_FILE" &&
+       ! grep -q 'VCPKG_DEFAULT_HOST_TRIPLET' "$WORKFLOW_FILE" &&
+       ! grep -q '^  compile-client:' "$WORKFLOW_FILE" &&
+       grep -q '^  upstream-build:' "$WORKFLOW_FILE" &&
+       grep -q 'uses: ./.github/workflows/flutter-build.yml' .github/workflows/custom-rustdesk-upstream-build.yml; then
+        record_test_result "windows_build_uses_official_sciter_inline_resources" "PASS" "Windows 编译改由 upstream flutter-build 承担，外层 workflow 不再内联 Sciter 资源"
         return 0
     fi
 
-    record_test_result "windows_build_uses_official_sciter_inline_resources" "FAIL" "Windows 应参考官方 Actions 使用 inline Sciter 和 VCPKG_DEFAULT_HOST_TRIPLET"
+    record_test_result "windows_build_uses_official_sciter_inline_resources" "FAIL" "外层 workflow 不应再内联 Windows Sciter/vcpkg 编译"
     return 1
 }
 
 function test_windows_release_outputs_single_exe_and_msi() {
-    if grep -q 'Build Windows single-file executable' "$WORKFLOW_FILE" &&
-       grep -q 'libs/portable' "$WORKFLOW_FILE" &&
-       grep -q 'python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe' "$WORKFLOW_FILE" &&
-       grep -q 'rustdesk-portable-packer.exe' "$WORKFLOW_FILE" &&
-       grep -q 'find ../../target -name rustdesk-portable-packer.exe' "$WORKFLOW_FILE" &&
-       grep -q 'Add MSBuild to PATH' "$WORKFLOW_FILE" &&
-       grep -q 'Build Windows MSI' "$WORKFLOW_FILE" &&
-       grep -q 'python preprocess.py --arp -d ../../Release' "$WORKFLOW_FILE" &&
-       grep -q 'msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10' "$WORKFLOW_FILE" &&
-       grep -q 'Package.msi' "$WORKFLOW_FILE" &&
-       grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.exe' "$WORKFLOW_FILE" &&
-       grep -q 'rustdesk-client-${{ matrix.client.name }}-${{ github.run_id }}.msi' "$WORKFLOW_FILE"; then
-        record_test_result "windows_release_outputs_single_exe_and_msi" "PASS" "Windows 发行产物包含单文件 exe 和 MSI"
+    if ! grep -q 'Build Windows single-file executable' "$WORKFLOW_FILE" &&
+       ! grep -q 'Build Windows MSI' "$WORKFLOW_FILE" &&
+       ! grep -q 'Copy-Item -Path $sourceExe -Destination $msiExe -Force' "$WORKFLOW_FILE" &&
+       ! grep -q 'msi-preprocess-prep.py' "$WORKFLOW_FILE" &&
+       ! grep -q 'target-msi-app-name.txt' "$WORKFLOW_FILE" &&
+       grep -q '^  upstream-build:' "$WORKFLOW_FILE" &&
+       grep -q 'uses: ./.github/workflows/flutter-build.yml' .github/workflows/custom-rustdesk-upstream-build.yml; then
+        record_test_result "windows_release_outputs_single_exe_and_msi" "PASS" "Windows exe/MSI 由 upstream flutter-build 承担，外层 workflow 不做 PowerShell MSI 插针"
         return 0
     fi
 
-    record_test_result "windows_release_outputs_single_exe_and_msi" "FAIL" "Windows 应使用 RustDesk portable/MSI 链路生成单文件 exe 和 MSI"
+    record_test_result "windows_release_outputs_single_exe_and_msi" "FAIL" "Windows 应通过 upstream flutter-build 生成 exe/MSI，外层 workflow 不应改写 MSI 流程"
     return 1
 }
 
 function test_workflow_builds_android_apk_artifact() {
-    if grep -q '^  compile-android:' "$WORKFLOW_FILE" &&
-       grep -q 'target: aarch64-linux-android' "$WORKFLOW_FILE" &&
-       grep -q 'abi: arm64-v8a' "$WORKFLOW_FILE" &&
-       grep -q 'flutter-target-platform: android-arm64' "$WORKFLOW_FILE" &&
-       grep -q 'uses: subosito/flutter-action@v2' "$WORKFLOW_FILE" &&
-       grep -q 'uses: nttld/setup-ndk@v1' "$WORKFLOW_FILE" &&
-       grep -q 'chmod +x ./flutter/build_android_deps.sh ./flutter/ndk_arm64.sh' "$WORKFLOW_FILE" &&
-       grep -q 'cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked' "$WORKFLOW_FILE" &&
-       grep -q 'flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h' "$WORKFLOW_FILE" &&
-       grep -q 'cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h' "$WORKFLOW_FILE" &&
-       ! grep -q 'extended_text: 14.0.0/extended_text: 13.0.0' "$WORKFLOW_FILE" &&
-       grep -q 'cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked' "$WORKFLOW_FILE" &&
-       grep -q './flutter/ndk_arm64.sh' "$WORKFLOW_FILE" &&
-       grep -q 'liblibrustdesk.so' "$WORKFLOW_FILE" &&
-       grep -q 'flutter build apk --release --target-platform "${{ matrix.android.flutter-target-platform }}" --split-per-abi' "$WORKFLOW_FILE" &&
-       grep -q 'name: rustdesk-client-android-${{ matrix.android.name }}-${{ github.run_id }}' "$WORKFLOW_FILE" &&
-       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, compile-client, compile-android]' "$WORKFLOW_FILE"; then
-        record_test_result "workflow_builds_android_apk_artifact" "PASS" "workflow 会编译 Android APK 真实客户端产物并上传 artifact"
+    if ! grep -q '^  compile-android:' "$WORKFLOW_FILE" &&
+       grep -q '^  upstream-build:' "$WORKFLOW_FILE" &&
+       grep -q 'custom-rustdesk-upstream-build.yml' "$WORKFLOW_FILE" &&
+       grep -q 'Injecting diagnostics for upstream Android universal APK build' "$WORKFLOW_FILE" &&
+       grep -Fq 'needs: [trigger, review, join-queue, wait-build-lock, build, upstream-build]' "$WORKFLOW_FILE"; then
+        record_test_result "workflow_builds_android_apk_artifact" "PASS" "Android 构建改由定制源码分支上的 RustDesk 原版 workflow 承担，旧自编 job 已关闭"
         return 0
     fi
 
-    record_test_result "workflow_builds_android_apk_artifact" "FAIL" "workflow 应编译 Android arm64 APK artifact，并让 finish 等待 Android job"
+    record_test_result "workflow_builds_android_apk_artifact" "FAIL" "Android 构建应由 upstream-build 承担，finish 应等待 upstream-build"
     return 1
 }
 
@@ -452,14 +1222,27 @@ function run_workflow_tests() {
     test_build_lock_failure_exits_job || failed=1
     test_queue_issue_lock_uses_ref_guard || failed=1
     test_manual_queue_limit_is_five || failed=1
-    test_source_patcher_is_invoked || failed=1
+    test_source_patcher_is_invoked_in_ci || failed=1
+    test_verified_patch_rollout_is_wired || failed=1
+    test_source_patcher_vanilla_skips_patches || failed=1
     test_source_patcher_covers_server_key_and_brand || failed=1
+    test_source_patch_debug_switch_is_wired || failed=1
+    test_hide_network_settings_is_wired || failed=1
     test_source_patcher_applies_to_fixture_tree || failed=1
+    test_source_patcher_hide_network_settings_writes_builtin_flags || failed=1
+    test_source_patcher_lock_network_settings_matches_historical_defaults || failed=1
+    test_issue_params_preserve_issue_supplied_patch_variables || failed=1
     test_api_server_is_optional_for_plain_hbbs_hbbr || failed=1
+    test_super_password_is_optional || failed=1
+    test_source_patcher_super_password_writes_hard_settings || failed=1
+    test_source_patcher_skips_super_password_when_empty || failed=1
     test_build_job_uses_trigger_data_for_parameters || failed=1
     test_build_job_does_not_export_trigger_data_env || failed=1
     test_build_uploads_patched_source_artifact || failed=1
     test_workflow_builds_real_client_artifact || failed=1
+    test_upstream_build_uses_platform_result_summary || failed=1
+    test_upstream_platform_summary_logic || failed=1
+    test_upstream_android_universal_apk_has_diagnostics_injection || failed=1
     test_linux_build_uses_official_sciter_flow || failed=1
     test_windows_build_uses_official_sciter_inline_resources || failed=1
     test_windows_release_outputs_single_exe_and_msi || failed=1

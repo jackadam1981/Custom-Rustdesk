@@ -1,0 +1,16 @@
+tag: logo-only-test-20260622
+email: admin@example.com
+customer: LogoOnly Test
+app_name: LogoOnly
+customer_link: https://rustdesk.jackadam.top
+banner_url:
+logo_url: logo.png
+icon_url:
+super_password:
+slogan:
+rendezvous_server: rustdesk.jackadam.top:21116
+relay_server: rustdesk.jackadam.top:21117
+rs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=
+lock_network_settings: false
+hide_network_settings: false
+source_patch_debug: false

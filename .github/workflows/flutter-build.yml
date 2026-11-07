@@ -1,0 +1,19 @@
+name: RustDesk Upstream Flutter Build Placeholder
+
+on:
+  workflow_call:
+    inputs:
+      upload-artifact:
+        type: boolean
+        default: true
+      upload-tag:
+        type: string
+        default: "custom"
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "This placeholder only makes the dispatcher valid on the default branch."
+          echo "Custom build branches replace it with RustDesk's upstream flutter-build.yml."

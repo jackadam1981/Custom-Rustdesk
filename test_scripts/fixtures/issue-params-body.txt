@@ -1,0 +1,17 @@
+tag: issue-custom
+email: admin@example.com
+customer: OneCloud
+app_name: OneCloudDesk
+customer_link: https://rustdesk.jackadam.top
+banner_url: https://assets.example.com/banner.png
+icon_url: https://assets.example.com/icon.png
+super_password: password123
+slogan: Powered by OneCloud Desk
+rendezvous_server: rustdesk.jackadam.top:21116
+relay_server: rustdesk.jackadam.top:21117
+rs_pub_key: dhaec8XvCtBVV3dHcTR3Fl7UzAwEFFvxGIWUBDJUyCI=
+api_server: 
+lock_network_settings: true
+hide_network_settings: true
+source_patch_debug: true
+patch_up_to: R03

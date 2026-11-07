@@ -87,6 +87,7 @@ else
     log_info "  - utils-latest-workflow-run：测试获取最近的工作流运行ID函数"
     log_info "  - review-tests：运行本地审核逻辑测试"
     log_info "  - workflow-tests：运行本地 workflow 结构测试"
+    log_info "  - patch-lab：干净 clone 上游 RustDesk 并验证插针（2.18，触发 CI 前必跑）"
     log_info "  - test-queue-reset：运行队列复位测试（清理所有锁和队列）"
     log_info "  - test-manual-trigger：运行手动触发测试"
     log_info "  - test-issue-trigger：运行问题触发测试"

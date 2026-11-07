@@ -23,6 +23,7 @@ function test_manual_trigger_build() {
     local email="test@example.com"
     local super_password="test123"
     local rendezvous_server="192.168.1.100"
+    local relay_server="$rendezvous_server"
     local api_server="http://192.168.1.100:21114"
     local slogan="Manual Test Build"
     local customer_link="https://example.com/test"
@@ -34,6 +35,7 @@ function test_manual_trigger_build() {
     log_info "  - 邮箱: $email"
     log_info "  - 超级密码: $super_password"
     log_info "  - 服务器: $rendezvous_server"
+    log_info "  - 中继: $relay_server"
     log_info "  - API: $api_server"
     log_info "  - 标语: $slogan"
     log_info "  - 客户链接: $customer_link"
@@ -49,6 +51,7 @@ function test_manual_trigger_build() {
         -f email="$email" \
         -f super_password="$super_password" \
         -f rendezvous_server="$rendezvous_server" \
+        -f relay_server="$relay_server" \
         -f api_server="$api_server" \
         -f slogan="$slogan" \
         -f customer_link="$customer_link" \

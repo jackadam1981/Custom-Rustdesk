@@ -3,9 +3,10 @@
 Thumbs.db
 desktop.ini
 
-# 编辑器文件
+# 编辑器 / IDE
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
@@ -22,9 +23,14 @@ build/
 dist/
 target/
 *.exe
+*.msi
 *.dmg
 *.deb
 *.rpm
+*.apk
+*.AppImage
+*.flatpak
+*.zst
 *.zip
 *.tar.gz
 
@@ -62,6 +68,9 @@ config.local.*
 .github/workflows/.cache/
 .github/workflows/temp/
 
+# 本地测试 CA（已移出仓库；私钥仅放 Secrets）
+CA/
+
 # 自定义构建文件
 rustdesk-source/
 custom-build-*/
@@ -75,6 +84,18 @@ test_*.sh
 # 文档生成
 docs/_build/
 site/
+
+# Agent / 本地临时目录
+tmp/
+.patch-lab/
+.patch-lab-test/
+.patch-lab-test2/
+.tmp-*
+downloads/
+
+# 本地 Flutter 插针树 / 本地 SDK（勿提交）
+.flutter-dev/
+.tools/
 
 # 其他
 *.pid

@@ -1,0 +1,114 @@
+services:
+  hbbr:
+    image: ghcr.io/rustdesk/rustdesk-server:1.1.15-armv7
+    container_name: rustdesk-hbbr
+    command: hbbr
+    volumes:
+      - ./data/server:/root
+    networks:
+      - rustdesk-int
+    ports:
+      - "21117:21117"
+      - "21117:21117/udp"
+    restart: unless-stopped
+    mem_limit: 64m
+    memswap_limit: 96m
+    pids_limit: 64
+    cpus: "0.50"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  hbbs:
+    image: ghcr.io/rustdesk/rustdesk-server:1.1.15-armv7
+    container_name: rustdesk-hbbs
+    command: hbbs -r ${RELAY_SERVER:-rustdesk.jackadam.top}:${RELAY_PORT:-21117}
+    volumes:
+      - ./data/server:/root
+    networks:
+      - rustdesk-int
+    ports:
+      - "21115:21115"
+      - "21116:21116"
+      - "21116:21116/udp"
+    depends_on:
+      - hbbr
+    restart: unless-stopped
+    mem_limit: 64m
+    memswap_limit: 96m
+    pids_limit: 64
+    cpus: "0.50"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  rustdesk-api:
+    image: lejianwen/rustdesk-api
+    container_name: rustdesk-api
+    env_file:
+      - .env
+    environment:
+      - RUSTDESK_API_LANG=zh-CN
+      # 推荐关闭 Web Client（内网仅用 18444/_admin/ 管理）：RUSTDESK_API_APP_WEB_CLIENT=0
+      # v1 Web Client 用 21116+2→21118；须 nginx TLS 终结，API 可带端口供 localStorage 同步
+      - RUSTDESK_API_RUSTDESK_ID_SERVER=${ID_SERVER:-rustdesk.jackadam.top}:${ID_PORT:-21116}
+      - RUSTDESK_API_RUSTDESK_RELAY_SERVER=${RELAY_SERVER:-rustdesk.jackadam.top}:${RELAY_PORT:-21117}
+      - RUSTDESK_API_RUSTDESK_API_SERVER=https://${DOMAIN}:${NGINX_PORT}
+      - RUSTDESK_API_RUSTDESK_WS_HOST=wss://${DOMAIN}:${NGINX_PORT}
+      - RUSTDESK_API_RUSTDESK_KEY_FILE=/app/conf/data/id_ed25519.pub
+      - RUSTDESK_API_JWT_KEY=${JWT_KEY}
+    volumes:
+      - ./data/api:/app/data
+      - ./data/server:/app/conf/data
+    # 21114：API / 在线终端（/_admin/ 同后端）。2.1 保留 WAN 转发；明文 HTTP，客户端 preset 可选。
+    ports:
+      - "21114:21114"
+    networks:
+      - rustdesk-int
+    depends_on:
+      - hbbs
+      - hbbr
+    restart: unless-stopped
+    mem_limit: 128m
+    memswap_limit: 192m
+    pids_limit: 128
+    cpus: "0.75"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
+    container_name: rustdesk-nginx
+    image: nginx:latest
+    ports:
+      - "${NGINX_PORT:-18444}:443"
+      # Web Client 不建议用；2.1 勿转发 21118/21119
+      # - "21118:21118"
+      # - "21119:21119"
+    volumes:
+      - ./conf.d:/etc/nginx/conf.d:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - rustdesk-int
+    depends_on:
+      - rustdesk-api
+    restart: unless-stopped
+    mem_limit: 64m
+    memswap_limit: 96m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  rustdesk-int:
+    name: rustdesk-int
