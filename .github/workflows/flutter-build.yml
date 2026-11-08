@@ -454,7 +454,12 @@ jobs:
             --profile minimal \
             --no-self-update \
             --force-non-host
-          rustup default nightly-2023-10-13-${{ matrix.job.target }}
+          # `rustup default` re-applies the same non-host check and has no --force-non-host
+          # option, so it fails right after a successful install. Select the toolchain with
+          # RUSTUP_TOOLCHAIN for the remainder of the job instead of switching the global default.
+          echo "RUSTUP_TOOLCHAIN=nightly-2023-10-13-${{ matrix.job.target }}" >> "$GITHUB_ENV"
+          # $GITHUB_ENV only applies to later steps, so verify the selection explicitly here.
+          RUSTUP_TOOLCHAIN=nightly-2023-10-13-${{ matrix.job.target }} rustc --version
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
@@ -1606,6 +1611,24 @@ jobs:
         with:
           name: bridge-artifact
           path: ./
+
+      - name: Ensure CMake >= 4.3 for vcpkg
+        shell: bash
+        run: |
+          # The upstream vcpkg baseline runs portfiles with string(JSON ... STRING_ENCODE),
+          # which was only added in CMake 4.3. The ubuntu-22.04(-arm) images ship an older
+          # cmake, and a cold arm64 vcpkg build then dies with
+          # "string sub-command JSON got an invalid mode 'STRING_ENCODE', expected one".
+          case "${{ matrix.job.arch }}" in
+            aarch64) pkg="cmake-4.3.6-linux-aarch64" ;;
+            *)       pkg="cmake-4.3.6-linux-x86_64" ;;
+          esac
+          if [ ! -x "/opt/$pkg/bin/cmake" ]; then
+            curl -fsSL --retry 3 "https://github.com/Kitware/CMake/releases/download/v4.3.6/$pkg.tar.gz" -o "/tmp/$pkg.tar.gz"
+            sudo tar -xzf "/tmp/$pkg.tar.gz" -C /opt
+          fi
+          echo "/opt/$pkg/bin" >> "$GITHUB_PATH"
+          "/opt/$pkg/bin/cmake" --version | head -1
 
       - name: Resolve vcpkg commit from vcpkg.json baseline
         shell: bash
