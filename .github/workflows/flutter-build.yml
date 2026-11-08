@@ -36,13 +36,14 @@ env:
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  # vcpkg version: 2025.08.27
-  # If we change the `VCPKG COMMIT_ID`, please remember:
-  # 1. Call `$VCPKG_ROOT/vcpkg x-update-baseline` to update the baseline in `vcpkg.json`.
-  #  Or we may face build issue like 
-  #  https://github.com/rustdesk/rustdesk/actions/runs/14414119794/job/40427970174
-  # 2. Update the `VCPKG_COMMIT_ID` in `ci.yml` and `playground.yml`.
-  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  # VCPKG_COMMIT_ID is NOT hardcoded here: every job that uses vcpkg derives it at runtime
+  # from the baseline declared by the upstream vcpkg.json that is actually being built
+  # (vcpkg-configuration.default-registry.baseline, or top-level builtin-baseline), via
+  # .github/workflows/scripts/resolve-vcpkg-commit.sh. A pinned commit goes stale as soon
+  # as the cloned upstream source moves to a newer baseline, which fails with
+  # "error: no version database entry for <port> at <version>".
+  # armv7 keeps its own older commit (recent vcpkg does not build there); the armv7 job
+  # rewrites vcpkg.json's baseline first, so the derived value matches this commit.
   ARMV7_VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836" # 2025.01.13, got "/opt/artifacts/vcpkg/vcpkg: No such file or directory" with latest version
   VERSION: "1.4.9"
   NDK_VERSION: "r28c"
@@ -227,6 +228,10 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           prefix-key: ${{ matrix.job.os }}
+
+      - name: Resolve vcpkg commit from vcpkg.json baseline
+        shell: bash
+        run: bash .github/workflows/scripts/resolve-vcpkg-commit.sh
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -435,15 +440,29 @@ jobs:
           version: ${{ env.LLVM_VERSION }}
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
-        with:
-          toolchain: nightly-2023-10-13-${{ matrix.job.target }} # must use nightly here, because of abi_thiscall feature required
-          targets: ${{ matrix.job.target }}
-          components: "rustfmt"
+        # This must stay on nightly-2023-10-13 because the `abi_thiscall` feature is required.
+        # rustup >= 1.28 refuses a toolchain whose host triple differs from the runner host
+        # unless --force-non-host is passed: "toolchain 'nightly-2023-10-13-i686-pc-windows-msvc'
+        # may not be able to run on this system". The 32-bit host toolchain itself is usable on
+        # the x64 runner (that is why upstream picked it), so keep the exact same nightly and
+        # only opt in explicitly instead of bumping the version.
+        shell: bash
+        run: |
+          rustup toolchain install nightly-2023-10-13-${{ matrix.job.target }} \
+            --target ${{ matrix.job.target }} \
+            --component rustfmt \
+            --profile minimal \
+            --no-self-update \
+            --force-non-host
+          rustup default nightly-2023-10-13-${{ matrix.job.target }}
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           prefix-key: ${{ matrix.job.os }}-sciter
+
+      - name: Resolve vcpkg commit from vcpkg.json baseline
+        shell: bash
+        run: bash .github/workflows/scripts/resolve-vcpkg-commit.sh
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -602,6 +621,10 @@ jobs:
           cd $(dirname $(dirname $(which flutter)))
           [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
 
+      - name: Resolve vcpkg commit from vcpkg.json baseline
+        shell: bash
+        run: bash .github/workflows/scripts/resolve-vcpkg-commit.sh
+
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
         with:
@@ -695,14 +718,20 @@ jobs:
               arch: x86_64,
               vcpkg-triplet: x64-osx,
             }
-          - {
-              target: aarch64-apple-darwin,
-              os: macos-14,
-              # extra-build-args: "--disable-flutter-texture-render", # disable this for mac, because we see a lot of users reporting flickering both on arm and x64, and we can not confirm if texture rendering has better performance if htere is no vram, https://github.com/rustdesk/rustdesk/issues/6296
-              extra-build-args: "--screencapturekit",
-              arch: aarch64,
-              vcpkg-triplet: arm64-osx,
-            }
+          # aarch64-apple-darwin is DISABLED in this fork: it requires a hosted macOS ARM
+          # runner, and this repository does not have one — GitHub fails the job with
+          # "The configuration 'macos-14-arm64-us-default' is not supported", which surfaces
+          # as an instantly-cancelled job. Flutter cannot cross-build the macOS arm64 desktop
+          # app from an Intel runner, so keeping this entry enabled only adds a cancelled job.
+          # Re-enable it only when an ARM runner label that this repo can use exists.
+          # - {
+          #     target: aarch64-apple-darwin,
+          #     os: macos-14,
+          #     # extra-build-args: "--disable-flutter-texture-render", # disable this for mac, because we see a lot of users reporting flickering both on arm and x64, and we can not confirm if texture rendering has better performance if htere is no vram, https://github.com/rustdesk/rustdesk/issues/6296
+          #     extra-build-args: "--screencapturekit",
+          #     arch: aarch64,
+          #     vcpkg-triplet: arm64-osx,
+          #   }
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
@@ -816,6 +845,10 @@ jobs:
         with:
           name: bridge-artifact
           path: ./
+
+      - name: Resolve vcpkg commit from vcpkg.json baseline
+        shell: bash
+        run: bash .github/workflows/scripts/resolve-vcpkg-commit.sh
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -1067,6 +1100,10 @@ jobs:
         with:
           ndk-version: ${{ env.NDK_VERSION }}
           add-to-path: true
+
+      - name: Resolve vcpkg commit from vcpkg.json baseline
+        shell: bash
+        run: bash .github/workflows/scripts/resolve-vcpkg-commit.sh
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -1570,6 +1607,10 @@ jobs:
           name: bridge-artifact
           path: ./
 
+      - name: Resolve vcpkg commit from vcpkg.json baseline
+        shell: bash
+        run: bash .github/workflows/scripts/resolve-vcpkg-commit.sh
+
       - name: Setup vcpkg with Github Actions binary cache
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -1882,6 +1923,10 @@ jobs:
           sed -i 's/"baseline": ".*"/"baseline": "${{ env.ARMV7_VCPKG_COMMIT_ID }}"/' vcpkg.json
           echo "Modified vcpkg.json for armv7 build:"
           grep -A 2 -B 2 '"baseline"' vcpkg.json
+
+      - name: Resolve vcpkg commit from vcpkg.json baseline
+        shell: bash
+        run: bash .github/workflows/scripts/resolve-vcpkg-commit.sh
 
       - name: Free Space
         run: |
