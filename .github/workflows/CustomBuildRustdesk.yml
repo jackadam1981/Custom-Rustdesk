@@ -899,33 +899,44 @@ jobs:
               (is_pending($j) | not) and (is_success($j) | not)
               and ($j.conclusion != "skipped") and ($j.conclusion != "neutral")
               and ($j.conclusion != "cancelled");
+            # Expected primary job count per platform, hardcoded from the matrix in
+            # .github/workflows/flutter-build.yml: windows = i686 + x86_64 + aarch64;
+            # linux = 2 base + 2 sciter + 2 appimage + 3 flatpak = 9; macos = x86_64 only
+            # (aarch64 is disabled); android = 3 abis + universal apk; ios = ipa.
+            # Keep this list in sync when that matrix changes.
+            [["windows",3],["linux",9],["macos",1],["android",4],["ios",1]] as $platforms |
             [
               .jobs[]
-              | select(.conclusion != "skipped")
               | select(is_primary(.name))
               | {name, status, conclusion, platform: platform(.name)}
               | select(.platform != "other")
             ] as $jobs |
-            ["windows","linux","macos","android","ios"] as $platforms |
             [
-              $platforms[] as $p |
+              $platforms[] as $pe |
+              ($pe[0]) as $p |
+              ($pe[1]) as $expected |
               ($jobs | map(select(.platform == $p))) as $pjobs |
-              select(($pjobs | length) > 0) |
               {
                 platform: $p,
+                expected: $expected,
                 total: ($pjobs | length),
                 success: ($pjobs | map(select(is_success(.))) | length),
                 pending: ($pjobs | map(select(is_pending(.))) | length),
                 failed: ($pjobs | map(select(is_failed(.))) | length),
+                skipped: ($pjobs | map(select(.conclusion == "skipped")) | length),
                 failed_jobs: ($pjobs | map(select(is_failed(.)) | .name) | join(" | "))
               }
+              | .missing = ([.expected - .total, 0] | max)
+              # A platform counts as successful only when every expected target ran and
+              # succeeded; one failed, skipped or missing target fails the whole platform.
               | .status = (
                   if .pending > 0 then "pending"
-                  elif .success > 0 then "success"
+                  elif .failed > 0 or .skipped > 0 or .missing > 0 then "failure"
+                  elif .success == .total then "success"
                   else "failure" end
                 )
             ]
-            | .[] | [.platform, .status, ("success=" + (.success|tostring)), ("failed=" + (.failed|tostring)), ("pending=" + (.pending|tostring)), .failed_jobs] | @tsv
+            | .[] | [.platform, .status, ("success=" + (.success|tostring)), ("failed=" + (.failed|tostring)), ("pending=" + (.pending|tostring)), ("skipped=" + (.skipped|tostring)) + (" missing=" + (.missing|tostring)) + (if .failed_jobs != "" then " failed_jobs=" + .failed_jobs else "" end)] | @tsv
           ')"
 
           echo "Platform result summary:"
@@ -946,12 +957,12 @@ jobs:
           platform_failures="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF && $2=="failure"{print $1}' | paste -sd ',' -)"
           platform_results="$(printf '%s\n' "$platform_summary" | awk -F '\t' 'NF{printf "%s=%s", $1, $2; if ($6 != "") printf "(%s)", $6; printf ";"}')"
 
-          if [ "$success_count" -gt 0 ]; then
-            if [ "$failure_count" -gt 0 ]; then
-              platform_conclusion="partial_success"
-            else
-              platform_conclusion="success"
-            fi
+          # All 5 platforms are always emitted above, so "every expected target succeeded"
+          # is simply "no platform is in failure state".
+          if [ "$failure_count" -eq 0 ] && [ "$success_count" -gt 0 ]; then
+            platform_conclusion="success"
+          elif [ "$success_count" -gt 0 ]; then
+            platform_conclusion="partial_success"
           else
             platform_conclusion="failure"
           fi
@@ -961,8 +972,8 @@ jobs:
           echo "platform_failures=$platform_failures" >> "$GITHUB_OUTPUT"
           echo "platform_results=$platform_results" >> "$GITHUB_OUTPUT"
 
-          if [ "$success_count" -eq 0 ]; then
-            echo "No target platform succeeded in upstream workflow"
+          if [ "$platform_conclusion" != "success" ]; then
+            echo "Not every expected target of every platform succeeded in the upstream workflow"
             exit 1
           fi
 
