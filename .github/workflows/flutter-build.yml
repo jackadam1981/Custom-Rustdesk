@@ -2139,6 +2139,11 @@ jobs:
             if [ "${{ matrix.job.vcpkg-triplet }}" = "arm-linux" ]; then
               export PATH="/opt/cmake-${{ env.SCITER_ARMV7_CMAKE_VERSION }}-linux-armhf/bin:$PATH"
               export VCPKG_FORCE_SYSTEM_BINARIES=1
+              # 32-bit armv7 rustc/LLVM runs out of address space while codegen'ing the
+              # rustdesk lib as a single CGU (-C codegen-units=1) with three crate types;
+              # the host still has ~15GB free and cgroup oom_kill stays 0. Splitting the
+              # crate into smaller CGUs lowers the per-process LLVM peak. Only this target.
+              export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=4
             fi
             # edit cargo config
             mkdir -p ~/.cargo/
