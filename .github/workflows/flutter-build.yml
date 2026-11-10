@@ -2144,6 +2144,10 @@ jobs:
               # the host still has ~15GB free and cgroup oom_kill stays 0. Splitting the
               # crate into smaller CGUs lowers the per-process LLVM peak. Only this target.
               export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=4
+              # Fat LTO (-C lto) merges every CGU into one module, so codegen-units=4 is
+              # cancelled out at that stage and the same 32-bit address-space ceiling is
+              # hit again -- on the bin this time. Thin LTO optimizes per CGU in batches.
+              export CARGO_PROFILE_RELEASE_LTO=thin
             fi
             # edit cargo config
             mkdir -p ~/.cargo/
