@@ -2,7 +2,7 @@
 
 > **实验验证文档**：把 16 针插针拆成 **6 次 CI 全量编译**（加 Q0 基线共 7 档），每档「patch-lab 静态 → bump env → 1 次 CI → exe 验收 → 打勾固化」。  
 > Rollout 开关与总原则见 [verification-rollout.md](./verification-rollout.md)；换工作区见 [workspace-handoff.md](./workspace-handoff.md)。  
-> 2.22 自建服务端见 [rustdesk-stack.md](./rustdesk-stack.md)（内网 **18444** 管理后台；**不用 Web Client**；桌面客户端验收为主）。
+> 2.13 自建服务端见 [rustdesk-stack.md](./rustdesk-stack.md)（内网 **18444** 管理后台；**不用 Web Client**；桌面客户端验收为主）。
 
 ## 为什么分 6 步 CI，而不是 16 步
 

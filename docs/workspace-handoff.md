@@ -1,6 +1,6 @@
 # 工作区交接（Custom RustDesk）
 
-> 换工作区 / 新会话请先读本文 + [experiment-verification.md](./experiment-verification.md)（分步实验）+ [verification-rollout.md](./verification-rollout.md) + [rustdesk-stack.md](./rustdesk-stack.md)（2.22 服务端）。
+> 换工作区 / 新会话请先读本文 + [experiment-verification.md](./experiment-verification.md)（分步实验）+ [verification-rollout.md](./verification-rollout.md) + [rustdesk-stack.md](./rustdesk-stack.md)（2.13 服务端）。
 
 ## 仓库与分支
 

@@ -1,7 +1,7 @@
 # RustDesk 自建栈（集合文档）
 
-> Custom RustDesk 客户端 + 2.22 自建服务端的全景说明。  
-> **Outline（Wiki）：** [RustDesk 自建栈（2.22 服务端）](https://wiki.jackadam.top/doc/rustdesk-222-nxus8Lz4rs)  
+> Custom RustDesk 客户端 + 2.13 自建服务端的全景说明。  
+> **Outline（Wiki）：** [RustDesk 自建栈（2.13 服务端）](https://wiki.jackadam.top/doc/rustdesk-222-nxus8Lz4rs)  
 > **部署策略：** 内网保留 **18444** 仅作管理后台（登录、用户/活动管理）；**不建议使用 Web Client**。远控用桌面客户端（21116/21117）。详见 §5.4。  
 > 配置模板：`scripts/rustdesk-docker-compose-bridge.yaml`、`scripts/rustdesk-nginx-default.conf`  
 > 客户端验收见 [experiment-verification.md](./experiment-verification.md)；CI/插针见 [verification-rollout.md](./verification-rollout.md)。
@@ -12,10 +12,10 @@
 
 ```
                     2.1 路由器
-              DNS A→192.168.2.22  /  端口转发
+              DNS A→192.168.2.13  /  端口转发
                         │
     ┌───────────────────▼───────────────────────────────────────┐
-    │  192.168.2.22  /storage/build/rustdesk/                   │
+    │  192.168.2.13  /storage/build/rustdesk/                   │
     │                                                           │
     │   rustdesk-int (Docker bridge)                            │
     │   ┌─────────┐ ┌─────────┐ ┌──────────────┐ ┌──────────┐ │
@@ -47,10 +47,10 @@
 
 | 项 | 值 |
 |----|-----|
-| 主机 | `192.168.2.22`（`onecloud.jackadam.top`） |
+| 主机 | `192.168.2.13`（`onecloud.jackadam.top`） |
 | 目录 | `/storage/build/rustdesk/` |
 | 域名 | `rustdesk.jackadam.top` |
-| 内网 DNS（2.1） | A → `192.168.2.22`；AAAA → 公网 `::22`（见 §6） |
+| 内网 DNS（2.1） | A → `192.168.2.13`；AAAA → 公网 `::13`（见 §6） |
 
 ### 入口 URL
 
@@ -67,14 +67,14 @@
 ### 3.1 原因（IPv6）
 
 `network_mode: host` 时 hbbs 监听 `*:21116`，出站 IPv6 由内核选源地址。  
-当 ddns 公布 `::22` 且 `use_tempaddr=2` 启用临时地址时：
+当 ddns 公布 `::13` 且 `use_tempaddr=2` 启用临时地址时：
 
 ```
-host（失败）  客户端 → ::22:21116 ；回包源 = 临时 IPv6  → register_pk / key not confirmed
+host（失败）  客户端 → ::13:21116 ；回包源 = 临时 IPv6  → register_pk / key not confirmed
 bridge（通过）  docker-proxy 保持回包与目的地址对称
 ```
 
-内网把客户端四项钉 `192.168.2.22` 可绕过，但 **域名 + IPv6** 在 host 下不稳定。
+内网把客户端四项钉 `192.168.2.13` 可绕过，但 **域名 + IPv6** 在 host 下不稳定。
 
 ### 3.2 网络模式
 
@@ -126,10 +126,10 @@ docker logs --tail 5 rustdesk-hbbr   # Listening on websocket :21119
 
 | 端口 | 说明 |
 |------|------|
-| **21114** | TCP → `192.168.2.22` — API / 在线终端（明文 HTTP） |
-| **21115–21117** | TCP/UDP → `192.168.2.22` — ID / 中继 |
+| **21114** | TCP → `192.168.2.13` — API / 在线终端（明文 HTTP） |
+| **21115–21117** | TCP/UDP → `192.168.2.13` — ID / 中继 |
 
-#### 仅内网访问（DNS → 192.168.2.22，**不要**做公网 WAN 端口转发）
+#### 仅内网访问（DNS → 192.168.2.13，**不要**做公网 WAN 端口转发）
 
 | 端口 | 说明 |
 |------|------|
@@ -142,8 +142,8 @@ docker logs --tail 5 rustdesk-hbbr   # Listening on websocket :21119
 | **21118** | Web Client 注册 WSS | 不用 Web Client |
 | **21119** | Web Client 中继 WSS | 同上 |
 
-> **21114**：2.22 映射 `21114:21114`，**2.1 保留 WAN 转发**（你已确认）。明文 HTTP，凭据走 TLS 的 **18444/_admin/** 更安全。  
-> 看活跃终端：`http://rustdesk.jackadam.top:21114`、内网 `http://192.168.2.22:21114`，或 **`18444/_admin/`**、脚本 `query-api-peers.py`。
+> **21114**：2.13 映射 `21114:21114`，**2.1 保留 WAN 转发**（你已确认）。明文 HTTP，凭据走 TLS 的 **18444/_admin/** 更安全。  
+> 看活跃终端：`http://rustdesk.jackadam.top:21114`、内网 `http://192.168.2.13:21114`，或 **`18444/_admin/`**、脚本 `query-api-peers.py`。
 
 详见 §5.4。
 
@@ -183,12 +183,12 @@ docker logs --tail 5 rustdesk-hbbr   # Listening on websocket :21119
 | 项 | 说明 |
 |----|------|
 | 作用 | rustdesk-api；**18444 后台与 21114 是同一服务** — 在线终端两边都能看 |
-| 2.22 | 保留 `21114:21114` |
-| 2.1 | **保留 WAN 转发** → `192.168.2.22:21114` |
+| 2.13 | 保留 `21114:21114` |
+| 2.1 | **保留 WAN 转发** → `192.168.2.13:21114` |
 | 风险 | 明文 HTTP，公网嗅探可窃听 token；敏感操作用 **18444/_admin/**（HTTPS） |
 | 客户端 | 当前 **不** preset `api_server`（远控不依赖 API；需要时可填 `http://rustdesk.jackadam.top:21114`） |
 
-2.22：在 2.22 主机上手动编辑 `docker-compose` / nginx，保留 21114，仅关 21118/21119（原 `scripts/apply-close-api-port-2.22.sh` 已移除）。
+2.13：在 2.13 主机上手动编辑 `docker-compose` / nginx，保留 21114，仅关 21118/21119（原 `scripts/apply-close-api-port-2.22.sh` 已移除）。
 
 #### 若曾调试过 Web Client
 
@@ -313,11 +313,11 @@ JWT_KEY=<随机密钥>
 
 | 场景 | 说明 |
 |------|------|
-| 内网 A 劫持 → 192.168.2.22 | 预期；桌面客户端可走 IPv4 |
-| 内网 AAAA → 公网 `::22` | Windows 可能优先 IPv6；bridge 下已验证回包对称 |
-| 内网仅验收 | 可临时钉 `192.168.2.22` 四项；或 2.1 去掉 AAAA |
+| 内网 A 劫持 → 192.168.2.13 | 预期；桌面客户端可走 IPv4 |
+| 内网 AAAA → 公网 `::13` | Windows 可能优先 IPv6；bridge 下已验证回包对称 |
+| 内网仅验收 | 可临时钉 `192.168.2.13` 四项；或 2.1 去掉 AAAA |
 
-抓包验证（2.22 上 eth0 UDP 21116）：`tcpdump -i eth0 -n udp port 21116 -c 20`
+抓包验证（2.13 上 eth0 UDP 21116）：`tcpdump -i eth0 -n udp port 21116 -c 20`
 
 ---
 
@@ -366,7 +366,7 @@ JWT_KEY=<随机密钥>
 
 - [ ] 域名四项 + 公钥；界面 **网络就绪**
 - [ ] 日志 `request_pk received from …:21116`
-- [ ] IPv6 域名路径抓包：回包源为 `::22`（非临时地址）
+- [ ] IPv6 域名路径抓包：回包源为 `::13`（非临时地址）
 
 ### Web Client（可选，**不建议**）
 
@@ -385,6 +385,8 @@ JWT_KEY=<随机密钥>
 | 2026-06-21 | nginx `/ws/id` 改 bridge 服务名 + 路径剥离；API env 与 v1 行为对齐 |
 | 2026-06-21 | 同步至 Outline：[RustDesk 自建栈（2.22 服务端）](https://wiki.jackadam.top/doc/rustdesk-222-nxus8Lz4rs) |
 | 2026-06-21 | 2.22/2.1：**注释** 21118/21119；2.1 删除 Web Client WSS 转发 |
+| 2026-11-11 | 修正主机地址：`192.168.2.22` → `192.168.2.13`（实测容器与 `/storage/build/rustdesk` 在 `.13`；`.22` 为 pve2）；AAAA `::22` → `::13` |
+| 2026-11-11 | hbbs/hbbr 升级 `1.1.15-armv7` → `1.1.16-armv7`（启动参数、`-k`、数据目录不变） |
 
 ---
 

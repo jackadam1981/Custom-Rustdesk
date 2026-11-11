@@ -1,4 +1,4 @@
-# RustDesk 服务端 Docker 部署（2.22）
+# RustDesk 服务端 Docker 部署（2.13）
 
 > **已合并至集合文档：[rustdesk-stack.md](./rustdesk-stack.md)**  
 > 含架构、bridge 网络、IPv6、nginx WSS、Web Client v1、端口转发、脚本与验收清单。
