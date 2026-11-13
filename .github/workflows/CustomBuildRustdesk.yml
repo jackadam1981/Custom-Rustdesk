@@ -773,21 +773,54 @@ jobs:
           # Poll until upstream run is completed; do not rely on gh run watch (can exit early on API errors).
           upstream_wait_interval=60
           upstream_max_wait=$((6 * 60 * 60))
-          upstream_waited=0
-          while true; do
-            run_status="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json status --jq '.status')"
-            if [ "$run_status" = "completed" ]; then
+
+          wait_for_upstream_completion() {
+            local waited=0 run_status
+            while true; do
+              run_status="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json status --jq '.status')"
+              if [ "$run_status" = "completed" ]; then
+                return 0
+              fi
+              if [ "$waited" -ge "$upstream_max_wait" ]; then
+                echo "Timed out waiting for upstream workflow after ${upstream_max_wait}s (last status=$run_status)"
+                return 1
+              fi
+              echo "Upstream run $upstream_run_id status=$run_status, waiting ${upstream_wait_interval}s..."
+              sleep "$upstream_wait_interval"
+              waited=$((waited + upstream_wait_interval))
+            done
+          }
+
+          wait_for_upstream_completion
+          conclusion="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')"
+
+          # 平台 job 发布 release 资产时会并发 updateRelease，可能撞上 GitHub Releases API 的 5xx
+          # （action-gh-release 对非 404 不重试，单个 job 直接失败 → Release 少一个资产）。
+          # 这里最多补跑 2 次失败 job：只重跑失败的 job，不重跑已成功的平台。
+          # 必须在 finish 删除 custom-build-* 分支之前做，否则 rerun 无法解析 ref。
+          upstream_max_retries="${UPSTREAM_MAX_RETRIES:-2}"
+          upstream_retry=0
+          while [ "$conclusion" != "success" ] && [ "$upstream_retry" -lt "$upstream_max_retries" ]; do
+            upstream_retry=$((upstream_retry + 1))
+            echo "Upstream run concluded=$conclusion; retrying failed jobs ($upstream_retry/$upstream_max_retries)..."
+            if ! gh run rerun "$upstream_run_id" --repo "${{ github.repository }}" --failed; then
+              echo "⚠️ gh run rerun --failed 未能执行（可能没有失败 job，或 ref 已失效），停止重试"
               break
             fi
-            if [ "$upstream_waited" -ge "$upstream_max_wait" ]; then
-              echo "Timed out waiting for upstream workflow after ${upstream_max_wait}s (last status=$run_status)"
-              exit 1
+            # 等新 attempt 真正开始，避免 status 仍为 completed 导致立即退出
+            for _ in $(seq 1 6); do
+              run_status="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json status --jq '.status')"
+              if [ "$run_status" != "completed" ]; then
+                break
+              fi
+              sleep 10
+            done
+            if ! wait_for_upstream_completion; then
+              break
             fi
-            echo "Upstream run $upstream_run_id status=$run_status, waiting ${upstream_wait_interval}s..."
-            sleep "$upstream_wait_interval"
-            upstream_waited=$((upstream_waited + upstream_wait_interval))
+            conclusion="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')"
+            echo "After retry $upstream_retry: conclusion=$conclusion"
           done
-          conclusion="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')"
           echo "upstream_conclusion=$conclusion" >> "$GITHUB_OUTPUT"
 
           jobs_json="$(gh run view "$upstream_run_id" --repo "${{ github.repository }}" --json jobs)"
