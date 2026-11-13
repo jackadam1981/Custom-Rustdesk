@@ -6,11 +6,11 @@ alwaysApply: true
 # Custom RustDesk 工作区上下文
 
 - 主分支：`codex/linux-appimage-actions-test`；GitHub `jackadam1981/Custom-Rustdesk`。
-- Rollout 开关：`.github/verified-patches.env` → 当前 **`""`**（22 针重编号后待 bump）；对照 [`docs/patch-registry.md`](docs/patch-registry.md)。
-- 插针模块在 `.github/workflows/scripts/patches/`；顺序无 R02：`R01 R03 B01 B02 I01 F02 F10 F11 F12 F13 F14 S10 S11 S12 S13 S14 S15 P01 P02 P03 P04`。
-- 本地验收：`bash scripts/patch-lab/step-verify-all.sh --profile baixin`（22 针静态，不编译）；详 `docs/verification-rollout.md`、`docs/workspace-handoff.md`。
-- B02 品牌图：仓库 `branding/`；CI/patch-lab 需 `CUSTOM_RUSTDESK_REPO` 或 `GITHUB_WORKSPACE`。
-- F11 Flutter Powered by：改 `flutter/powered-by.sh`，勿用仅匹配 LF 的 perl 锚 `child: Column`（上游 Windows clone 为 CRLF）。
+- Rollout 开关：`.github/verified-patches.env` → 当前 **`101 103 201 202 301 401 402 403 404 405 406 501 502 503 504 505 506 601`**（18 针白名单）；对照 [`docs/patch-registry.md`](docs/patch-registry.md)。
+- 插针模块在 `.github/workflows/scripts/patches/`；顺序：`101 103 201 202 301 401 402 403 404 405 406 501 502 503 504 505 506 601`（104 已登记、暂不启用）。
+- 本地验收：`bash scripts/patch-lab/step-verify-all.sh --profile baixin`（18 针静态，不编译）；详 `docs/verification-rollout.md`、`docs/workspace-handoff.md`。
+- 202 品牌图：仓库 `branding/`；CI/patch-lab 需 `CUSTOM_RUSTDESK_REPO` 或 `GITHUB_WORKSPACE`。
+- 403 Flutter Powered by：改 `flutter/powered-by.sh`，勿用仅匹配 LF 的 perl 锚 `child: Column`（上游 Windows clone 为 CRLF）。
 - 任一针失败应中止：`orchestrator.sh` 已 fail-fast；CI `apply_custom_source_patches || exit 1`。
 - 百信 profile：`scripts/patch-lab/profiles/baixin.env`。
 - CI 红≠必编译失败：查主 run；macOS 常见制品上传 ENOTFOUND，Windows job 可能已成功。

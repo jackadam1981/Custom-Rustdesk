@@ -1,4 +1,4 @@
-# R01 — 连接/服务器默认（1 个 rollout 针 = 1 个脚本）
+# 101 — 连接/服务器默认（1 个 rollout 针 = 1 个脚本）
 # 改 2 个上游文件：src/common.rs + libs/hbb_common/src/config.rs
 # 连接七项：ID / 中继 / API / Key / 超级密码 / 锁定网络 / 隐藏网络
 # api_server 空则不写 api-server；super_password 空则不写 password；
@@ -107,7 +107,7 @@ pub fn apply_custom_build_defaults() {
                 builtin_settings.insert(key.to_owned(), value.to_owned());
             }
         }
-        // F13 依赖这个 key；显式给默认 N（显示 powered_by），已有值（如运维改成 Y）时保留
+        // 405 依赖这个 key；显式给默认 N（显示 powered_by），已有值（如运维改成 Y）时保留
         builtin_settings
             .entry("hide-powered-by-me".to_owned())
             .or_insert("N".to_owned());

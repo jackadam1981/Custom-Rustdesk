@@ -14,4 +14,4 @@ api_server:
 lock_network_settings: true
 hide_network_settings: true
 source_patch_debug: true
-patch_up_to: R03
+patch_up_to: 103

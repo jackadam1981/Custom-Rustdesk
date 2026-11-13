@@ -88,7 +88,7 @@ if "CUSTOM_RUSTDESK_STUDIO_LINK" not in text:
             "(expected launchUrlString('https://rustdesk.com'))"
         )
 
-# Strip legacy F14 spacing / unified-rich attempts; upstream rows stay plain Text.
+# Strip legacy 406 spacing / unified-rich attempts; upstream rows stay plain Text.
 text = text.replace(
     "style: const TextStyle(color: Colors.white, height: 2.0), // CUSTOM_RUSTDESK_ABOUT_LINE_HEIGHT",
     "style: const TextStyle(color: Colors.white)",

@@ -163,8 +163,7 @@ function test_source_patcher_covers_server_key_and_brand() {
        source_patcher_has_pattern '_custom_patch_brand_files' &&
        source_patcher_has_pattern '_custom_patch_portable_working_dir' &&
        source_patcher_has_pattern 'libs/portable/src/main.rs' &&
-       source_patcher_has_pattern '_custom_patch_msi_preprocess_app_name' &&
-       source_patcher_has_pattern 'UI-only; MSI keeps RustDesk' &&
+       ! source_patcher_has_pattern '_custom_patch_msi_preprocess_app_name' &&
        source_patcher_has_pattern 'current_dir'; then
         record_test_result "source_patcher_covers_server_key_and_brand" "PASS" "源码 patch 覆盖服务器、密钥和主要品牌外观"
         return 0
@@ -194,7 +193,7 @@ function test_source_patch_debug_switch_is_wired() {
 
 function test_verified_patch_rollout_is_wired() {
     if [ -f ".github/verified-patches.env" ] &&
-       grep -qE '^CUSTOM_VERIFIED_PATCH_UP_TO=' ".github/verified-patches.env" &&
+       grep -qE '^CUSTOM_VERIFIED_PATCH_IDS=' ".github/verified-patches.env" &&
        ! grep -q 'CUSTOM_UPSTREAM_BUILD_ENABLED' "$WORKFLOW_FILE" &&
        grep -q 'Load verified patch rollout' "$WORKFLOW_FILE" &&
        grep -q 'verified-patches.env' "$WORKFLOW_FILE" &&
@@ -219,7 +218,7 @@ EOF
     if (
         set -e
         export BUILD_TAG=vanilla BUILD_CUSTOMER=c BUILD_RENDEZVOUS_SERVER=1.2.3.4
-        export CUSTOM_VERIFIED_PATCH_UP_TO=""
+        export CUSTOM_VERIFIED_PATCH_IDS=""
         source "$patcher"
         cd "$tmp_dir"
         apply_custom_source_patches

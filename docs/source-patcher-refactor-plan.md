@@ -1,6 +1,8 @@
 # source-patcher.sh 工程化重构计划（历史归档）
 
 > **已落地**：插针已拆至 `.github/workflows/scripts/patches/`。当前针 ID、页面与控件对照见 [`patch-registry.md`](patch-registry.md)。下文保留作重构过程记录。
+>
+> **编号说明（2026-11）**：本文使用重构当时的旧编号（`P-R01`、`P-F10` 等），仅作历史记录，**不是当前可用的 rollout ID**；旧 → 新对照见 `patch-registry.md` 迁移表。
 
 > 目标：1600+ 行单文件 → 按 **patch ID / 函数 / MR** 三层拆分；定制逻辑只占少量文件，改一处不拖垮全局。
 

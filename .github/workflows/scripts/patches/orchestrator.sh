@@ -1,8 +1,11 @@
 # Orchestrator: resolve BUILD_* and optionally apply patches in dependency order.
-# CI 读 .github/verified-patches.env；patch-lab 用 --patch-up-to / --apply-all。
+# CI 读 .github/verified-patches.env 的白名单；patch-lab 用 --patch-up-to / --apply-all。
 
 _custom_patch_schedule_active() {
     if [ -n "${SOURCE_PATCH_ONLY:-}" ]; then
+        return 0
+    fi
+    if [ -n "${SOURCE_PATCH_WHITELIST:-}" ]; then
         return 0
     fi
     if [ -n "${SOURCE_PATCH_UP_TO:-}" ]; then
@@ -72,7 +75,8 @@ _custom_resolve_build_inputs() {
     _custom_trace_value "CUSTOM_HIDE_NETWORK_SETTINGS(normalized)" "$CUSTOM_HIDE_NETWORK_SETTINGS"
     _custom_trace_value "BUILD_SOURCE_PATCH_DEBUG(raw)" "${BUILD_SOURCE_PATCH_DEBUG:-}"
     _custom_trace_value "CUSTOM_SOURCE_PATCH_DEBUG(normalized)" "$CUSTOM_SOURCE_PATCH_DEBUG"
-    _custom_trace_value "CUSTOM_VERIFIED_PATCH_UP_TO" "${CUSTOM_VERIFIED_PATCH_UP_TO:-<empty>}"
+    _custom_trace_value "CUSTOM_VERIFIED_PATCH_IDS" "${CUSTOM_VERIFIED_PATCH_IDS:-<empty>}"
+    _custom_trace_value "SOURCE_PATCH_WHITELIST(effective)" "${SOURCE_PATCH_WHITELIST:-<none>}"
     _custom_trace_value "SOURCE_PATCH_UP_TO(effective)" "${SOURCE_PATCH_UP_TO:-<none>}"
     if _custom_patch_debug_enabled; then
         echo "source-patcher-trace: detailed before/after source diagnostics enabled"
@@ -83,7 +87,9 @@ _custom_resolve_build_inputs() {
 
 _custom_write_build_config_json() {
     local patches_enabled="false"
-    local verified_up_to="${CUSTOM_VERIFIED_PATCH_UP_TO:-}"
+    # 兼容字段：旧 UP_TO 开关已移除，固定写空，仅保留键名供既有消费者读取
+    local verified_up_to=""
+    local verified_patch_ids="${CUSTOM_VERIFIED_PATCH_IDS:-}"
     if _custom_patch_schedule_active; then
         patches_enabled="true"
     fi
@@ -107,6 +113,7 @@ _custom_write_build_config_json() {
         --arg super_password "$CUSTOM_SUPER_PASSWORD" \
         --arg patch_up_to "${SOURCE_PATCH_UP_TO:-}" \
         --arg verified_patch_up_to "$verified_up_to" \
+        --arg verified_patch_ids "$verified_patch_ids" \
         --arg source_patches_enabled "$patches_enabled" \
         '{
             app_name: $app_name,
@@ -117,6 +124,7 @@ _custom_write_build_config_json() {
             icon_url: (if ($icon_url | length) > 0 then $icon_url else null end),
             source_patches_enabled: ($source_patches_enabled == "true"),
             verified_patch_up_to: (if ($verified_patch_up_to | length) > 0 then $verified_patch_up_to else null end),
+            verified_patch_ids: (if ($verified_patch_ids | length) > 0 then $verified_patch_ids else null end),
             slogan: $slogan,
             rendezvous_server: $rendezvous_server,
             custom_rendezvous_server: $custom_rendezvous_server,
@@ -134,55 +142,52 @@ _custom_write_build_config_json() {
 apply_custom_source_patches() {
     _custom_resolve_build_inputs || return 1
 
-    if [ -z "${SOURCE_PATCH_UP_TO:-}" ] && [ -n "${CUSTOM_VERIFIED_PATCH_UP_TO:-}" ]; then
-        export SOURCE_PATCH_UP_TO="$CUSTOM_VERIFIED_PATCH_UP_TO"
+    if [ -z "${SOURCE_PATCH_UP_TO:-}" ] && [ -z "${SOURCE_PATCH_WHITELIST:-}" ] \
+        && [ -n "${CUSTOM_VERIFIED_PATCH_IDS:-}" ]; then
+        export SOURCE_PATCH_WHITELIST="$CUSTOM_VERIFIED_PATCH_IDS"
     fi
 
     _custom_write_build_config_json
 
     if ! _custom_patch_schedule_active; then
         echo "source-patcher: vanilla upstream — no patches scheduled"
-        echo "source-patcher: bump CUSTOM_VERIFIED_PATCH_UP_TO in .github/verified-patches.env after patch-lab gate passes"
+        echo "source-patcher: set CUSTOM_VERIFIED_PATCH_IDS in .github/verified-patches.env after patch-lab gate passes"
         return 0
     fi
 
     _custom_validate_source_patch_up_to || return 1
 
-    if [ -n "${SOURCE_PATCH_UP_TO:-}" ]; then
-        echo "source-patcher: rollout mode SOURCE_PATCH_UP_TO=${SOURCE_PATCH_UP_TO}"
-    elif [ -n "${SOURCE_PATCH_ONLY:-}" ]; then
+    if [ -n "${SOURCE_PATCH_ONLY:-}" ]; then
         echo "source-patcher: single-patch mode SOURCE_PATCH_ONLY=${SOURCE_PATCH_ONLY}"
+    elif [ -n "${SOURCE_PATCH_WHITELIST:-}" ]; then
+        echo "source-patcher: verified rollout SOURCE_PATCH_WHITELIST=${SOURCE_PATCH_WHITELIST}"
+    elif [ -n "${SOURCE_PATCH_UP_TO:-}" ]; then
+        echo "source-patcher: debug up-to mode SOURCE_PATCH_UP_TO=${SOURCE_PATCH_UP_TO}"
     elif _custom_bool_enabled "${CUSTOM_PATCH_APPLY_ALL:-false}"; then
         echo "source-patcher: patch-lab full apply (CUSTOM_PATCH_APPLY_ALL=true)"
     fi
 
-    _custom_run_patch R01 _custom_patch_r01 || return 1
-    # N01 必须排在 R01 之后：其 awk 锚点是 R01 注入的 pub fn apply_custom_build_defaults()
-    _custom_run_patch N01 _custom_patch_network_lock || return 1
-    _custom_run_patch R03 _custom_patch_is_custom_client || return 1
+    _custom_run_patch 101 _custom_patch_r01 || return 1
+    _custom_run_patch 103 _custom_patch_is_custom_client || return 1
 
-    _custom_run_patch B01 _custom_patch_brand_files || return 1
-    _custom_run_patch B02 _custom_patch_logo_assets || return 1
-    _custom_run_patch I01 _custom_patch_i18n_ui_strings || return 1
+    _custom_run_patch 201 _custom_patch_brand_files || return 1
+    _custom_run_patch 202 _custom_patch_logo_assets || return 1
+    _custom_run_patch 301 _custom_patch_i18n_ui_strings || return 1
 
-    _custom_run_patch F02 _custom_patch_flutter_ui_app_name || return 1
-    _custom_run_patch F10 _custom_patch_flutter_home_logo || return 1
-    _custom_run_patch F11 _custom_patch_flutter_home_title || return 1
-    _custom_run_patch F12 _custom_patch_flutter_home_slogan || return 1
-    _custom_run_patch F13 _custom_patch_flutter_powered_by || return 1
-    _custom_run_patch F14 _custom_patch_flutter_about_studio || return 1
+    _custom_run_patch 401 _custom_patch_flutter_ui_app_name || return 1
+    _custom_run_patch 402 _custom_patch_flutter_home_logo || return 1
+    _custom_run_patch 403 _custom_patch_flutter_home_title || return 1
+    _custom_run_patch 404 _custom_patch_flutter_home_slogan || return 1
+    _custom_run_patch 405 _custom_patch_flutter_powered_by || return 1
+    _custom_run_patch 406 _custom_patch_flutter_about_studio || return 1
 
-    _custom_run_patch S10 _custom_patch_sciter_home_logo || return 1
-    _custom_run_patch S11 _custom_patch_sciter_home_title || return 1
-    _custom_run_patch S12 _custom_patch_sciter_home_slogan || return 1
-    _custom_run_patch S13 _custom_patch_sciter_powered_by || return 1
-    _custom_run_patch S14 _custom_patch_sciter_about_studio || return 1
-    _custom_run_patch S15 _custom_patch_sciter_index_css || return 1
+    _custom_run_patch 501 _custom_patch_sciter_home_logo || return 1
+    _custom_run_patch 502 _custom_patch_sciter_home_title || return 1
+    _custom_run_patch 503 _custom_patch_sciter_home_slogan || return 1
+    _custom_run_patch 504 _custom_patch_sciter_powered_by || return 1
+    _custom_run_patch 505 _custom_patch_sciter_about_studio || return 1
+    _custom_run_patch 506 _custom_patch_sciter_index_css || return 1
 
-    _custom_run_patch P01 _custom_patch_portable_working_dir || return 1
-    _custom_run_patch P02 _custom_patch_windows_test_signing || return 1
-    _custom_run_patch P03 _custom_patch_msi_preprocess_app_name || return 1
-    _custom_run_patch P04 _custom_patch_rust_cache_nonfatal || return 1
-    _custom_run_patch P05 _custom_patch_super_password || return 1
+    _custom_run_patch 601 _custom_patch_portable_working_dir || return 1
     echo "source-patcher: custom source patches applied"
 }

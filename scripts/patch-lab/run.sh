@@ -27,15 +27,15 @@ Usage: scripts/patch-lab/run.sh [OPTIONS]
 Options:
   --profile NAME       Load scripts/patch-lab/profiles/NAME.env (default: baixin)
   --env-file PATH      Load build params from custom env file
-  --patch-only ID      Apply single patch module (e.g. F10)
-  --patch-up-to ID     Apply patches through ID inclusive (e.g. F10)
-  --apply-all          Apply all 23 patches (local debug only)
+  --patch-only ID      Apply single patch module (e.g. 402)
+  --patch-up-to ID     Apply patches through ID inclusive (e.g. 402)
+  --apply-all          Apply all 18 verified patches (local debug only)
   --verify-up-to ID    Run only verify checks for patches through ID
   --keep-on-fail       Do not delete upstream tree when patch/verify fails
   --skip-clean         Skip clean.sh (not recommended)
   -h, --help           Show help
 
-Patch IDs (order): R01 N01 R03 B01 B02 I01 F02 F10 F11 F12 F13 F14 S10 S11 S12 S13 S14 S15 P01 P02 P03 P04 P05
+Patch IDs (order): 101 103 201 202 301 401 402 403 404 405 406 501 502 503 504 505 506 601
 
 Environment:
   PATCH_LAB_ROOT       Workspace root (default: ~/patch-lab/custom-rustdesk)
@@ -190,7 +190,7 @@ if [ -z "$patch_only" ] && [ -z "$patch_up_to" ] && [ "$apply_all" != true ]; th
 else
     if [ -z "$verify_up_to" ]; then
         if [ "$apply_all" = true ]; then
-            verify_up_to="P04"
+            verify_up_to="601"
         elif [ -n "$patch_up_to" ]; then
             verify_up_to="$patch_up_to"
         elif [ -n "$patch_only" ]; then

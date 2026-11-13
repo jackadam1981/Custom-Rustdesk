@@ -78,7 +78,7 @@ on:
         default: true
         type: boolean
       patch_up_to:
-        description: 'Debug: cap patches at ID (R03/S12/S15…); empty = verified-patches.env'
+        description: 'Debug: cap patches at ID (103/503/506…); empty = verified-patches.env whitelist'
         required: false
         default: ''
       use_source_branch:
@@ -377,11 +377,11 @@ jobs:
           # shellcheck disable=SC1091
           source .github/verified-patches.env
           set +a
-          echo "CUSTOM_VERIFIED_PATCH_UP_TO=${CUSTOM_VERIFIED_PATCH_UP_TO:-}" >> "$GITHUB_ENV"
-          if [ -z "${CUSTOM_VERIFIED_PATCH_UP_TO:-}" ]; then
+          echo "CUSTOM_VERIFIED_PATCH_IDS=${CUSTOM_VERIFIED_PATCH_IDS:-}" >> "$GITHUB_ENV"
+          if [ -z "${CUSTOM_VERIFIED_PATCH_IDS:-}" ]; then
             echo "📦 Rollout gate: vanilla upstream (zero patches)"
           else
-            echo "📌 Rollout gate: patches through ${CUSTOM_VERIFIED_PATCH_UP_TO}"
+            echo "📌 Rollout gate: verified patch whitelist = ${CUSTOM_VERIFIED_PATCH_IDS}"
           fi
 
       - name: Download trigger data
@@ -488,7 +488,7 @@ jobs:
         run: |
           echo "🔧 Step 3: Preparing upstream source (verified rollout patches)..."
           source .github/workflows/scripts/source-patcher.sh
-          export CUSTOM_VERIFIED_PATCH_UP_TO="${CUSTOM_VERIFIED_PATCH_UP_TO:-}"
+          export CUSTOM_VERIFIED_PATCH_IDS="${CUSTOM_VERIFIED_PATCH_IDS:-}"
 
           TRIGGER_DATA="$(cat "$RUNNER_TEMP/trigger-data/trigger-data.json")"
           cd rustdesk-source
@@ -514,9 +514,9 @@ jobs:
           if [ -n "$PATCH_UP_TO" ]; then
             export SOURCE_PATCH_UP_TO="$PATCH_UP_TO"
             echo "🧪 Debug override: SOURCE_PATCH_UP_TO=$SOURCE_PATCH_UP_TO"
-          elif [ -n "${CUSTOM_VERIFIED_PATCH_UP_TO:-}" ]; then
-            export SOURCE_PATCH_UP_TO="$CUSTOM_VERIFIED_PATCH_UP_TO"
-            echo "📌 Verified rollout: SOURCE_PATCH_UP_TO=$SOURCE_PATCH_UP_TO"
+          elif [ -n "${CUSTOM_VERIFIED_PATCH_IDS:-}" ]; then
+            export SOURCE_PATCH_WHITELIST="$CUSTOM_VERIFIED_PATCH_IDS"
+            echo "📌 Verified rollout: SOURCE_PATCH_WHITELIST=$SOURCE_PATCH_WHITELIST"
           else
             echo "📦 Vanilla upstream: no source patches (Q0)"
           fi

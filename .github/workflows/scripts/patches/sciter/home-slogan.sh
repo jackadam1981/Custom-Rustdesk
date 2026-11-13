@@ -1,4 +1,4 @@
-# S12 — Sciter 首页 slogan（依赖 S10/S11）
+# 503 — Sciter 首页 slogan（依赖 501/502）
 _custom_patch_sciter_home_slogan() {
     local index_file="src/ui/index.tis"
 
@@ -30,7 +30,7 @@ if "CUSTOM_RUSTDESK_SCITER_HOME_SLOGAN" in text or "custom-rd-home-slogan" in te
     raise SystemExit(0)
 
 if "custom-rd-home-header" not in text:
-    raise SystemExit("source-patcher: S12 requires S10 home header first")
+    raise SystemExit("source-patcher: 503 requires 501 home header first")
 
 slogan_plain = slogan.replace(" <!-- CUSTOM_RUSTDESK_SCITER_HOME_SLOGAN -->", "")
 header_end = re.compile(
@@ -39,20 +39,20 @@ header_end = re.compile(
     re.DOTALL,
 )
 if not header_end.search(text):
-    raise SystemExit("source-patcher: S12 slogan anchor not found in src/ui/index.tis")
+    raise SystemExit("source-patcher: 503 slogan anchor not found in src/ui/index.tis")
 
 text = header_end.sub(lambda m: m.group(1) + slogan + m.group(2), text, count=1)
 if "custom-rd-home-slogan" not in text:
-    raise SystemExit("source-patcher: failed to inject S12 home slogan")
+    raise SystemExit("source-patcher: failed to inject 503 home slogan")
 
 path.write_text(text, encoding="utf-8")
 PY
     rm -f "$slogan_file"
 
     if grep -q "custom-rd-home-slogan" "$index_file"; then
-        echo "source-patcher: S12 home slogan injected in $index_file"
+        echo "source-patcher: 503 home slogan injected in $index_file"
     else
-        echo "source-patcher: failed to inject S12 home slogan in $index_file" >&2
+        echo "source-patcher: failed to inject 503 home slogan in $index_file" >&2
         return 1
     fi
 }

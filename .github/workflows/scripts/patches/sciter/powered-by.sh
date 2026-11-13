@@ -1,4 +1,4 @@
-# S13 — Sciter Powered-by（连接卡片上方，依赖 S10–S12 左栏不含 powered）
+# 504 — Sciter Powered-by（连接卡片上方，依赖 501–503 左栏不含 powered）
 _custom_patch_sciter_powered_by() {
     local index_file="src/ui/index.tis"
 
@@ -72,16 +72,16 @@ header_pos = text.find("custom-rd-home-header")
 if header_pos != -1:
     header_chunk = text[header_pos : header_pos + 1500]
     if left_powered_in_brand.search(header_chunk):
-        raise SystemExit("source-patcher: S13 powered-by must not remain inside left brand header")
+        raise SystemExit("source-patcher: 504 powered-by must not remain inside left brand header")
 
 card = "<div .card-connect>"
 if text.find("#powered-by") == -1 or text.find(card) == -1:
-    raise SystemExit("source-patcher: S13 missing powered-by or card-connect anchor")
+    raise SystemExit("source-patcher: 504 missing powered-by or card-connect anchor")
 if text.find("#powered-by") > text.find(card):
-    raise SystemExit("source-patcher: S13 powered-by must appear above card-connect")
+    raise SystemExit("source-patcher: 504 powered-by must appear above card-connect")
 
 if "custom-rd-home-powered" not in text and not changed:
-    raise SystemExit("source-patcher: S13 powered-by patch made no changes")
+    raise SystemExit("source-patcher: 504 powered-by patch made no changes")
 
 path.write_text(text, encoding="utf-8")
 PY
@@ -103,9 +103,9 @@ if "#powered-by" in text[header : header + 1500]:
     raise SystemExit(3)
 PY
     then
-        echo "source-patcher: S13 powered-by above card-connect in $index_file"
+        echo "source-patcher: 504 powered-by above card-connect in $index_file"
     else
-        echo "source-patcher: failed to inject S13 powered-by in $index_file" >&2
+        echo "source-patcher: failed to inject 504 powered-by in $index_file" >&2
         return 1
     fi
 }

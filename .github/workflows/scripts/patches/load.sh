@@ -12,8 +12,6 @@ source "$PATCH_DIR/manifest.sh"
 source "$PATCH_DIR/core/r01.sh"
 # shellcheck source=patches/core/is-custom-client.sh
 source "$PATCH_DIR/core/is-custom-client.sh"
-# shellcheck source=patches/core/network_lock.patch.sh
-source "$PATCH_DIR/core/network_lock.patch.sh"
 # shellcheck source=patches/core/super_password.patch.sh
 source "$PATCH_DIR/core/super_password.patch.sh"
 # shellcheck source=patches/brand/brand-files.sh
@@ -48,12 +46,6 @@ source "$PATCH_DIR/sciter/about-studio.sh"
 source "$PATCH_DIR/sciter/config-menu-css.sh"
 # shellcheck source=patches/platform/portable-workdir.sh
 source "$PATCH_DIR/platform/portable-workdir.sh"
-# shellcheck source=patches/platform/windows-signing.sh
-source "$PATCH_DIR/platform/windows-signing.sh"
-# shellcheck source=patches/platform/msi-noop.sh
-source "$PATCH_DIR/platform/msi-noop.sh"
-# shellcheck source=patches/platform/rust-cache-nonfatal.sh
-source "$PATCH_DIR/platform/rust-cache-nonfatal.sh"
 # shellcheck source=patches/orchestrator.sh
 source "$PATCH_DIR/orchestrator.sh"
 

@@ -1,18 +1,77 @@
 # Patch ID registry — one ID = one module = one MR gate.
 # Order matches apply_custom_source_patches.
+#
+# 1xx 配置注入 / 2xx 品牌壳层 / 3xx 文案 / 4xx Flutter / 5xx Sciter / 6xx 平台打包
+# 数字顺序 = 执行顺序；SOURCE_PATCH_UP_TO 仍按本数组的索引比较。
 
 CUSTOM_PATCH_IDS=(
-    R01 N01 R03
-    B01 B02
-    I01
-    F02 F10 F11 F12 F13 F14
-    S10 S11 S12 S13 S14 S15
-    P01 P02 P03 P04 P05
+    101 103
+    201 202
+    301
+    401 402 403 404 405 406
+    501 502 503 504 505 506
+    601
 )
 
+# 已登记、暂不启用：104 = super password（101 已写入该常量，单独运行会自跳过）
+CUSTOM_REGISTERED_DISABLED_PATCH_IDS=(104)
+
+# 旧 ID → 新 ID（兼容历史 issue / profile / 本地命令）
+_custom_normalize_patch_id() {
+    case "$1" in
+        101|103|201|202|301|401|402|403|404|405|406|501|502|503|504|505|506|601)
+            echo "$1"
+            ;;
+        R01) echo 101 ;;
+        R03) echo 103 ;;
+        P05) echo 104 ;;
+        B01) echo 201 ;;
+        B02) echo 202 ;;
+        I01) echo 301 ;;
+        F02) echo 401 ;;
+        F10) echo 402 ;;
+        F11) echo 403 ;;
+        F12) echo 404 ;;
+        F13) echo 405 ;;
+        F14) echo 406 ;;
+        S10) echo 501 ;;
+        S11) echo 502 ;;
+        S12) echo 503 ;;
+        S13) echo 504 ;;
+        S14) echo 505 ;;
+        S15) echo 506 ;;
+        P01) echo 601 ;;
+        *) return 1 ;;
+    esac
+}
+
+# 退役 ID → 占位编号（脚本已删除；解析时明确报错，不静默跳过）
+_custom_retired_patch_hint() {
+    case "$1" in
+        N01) echo 102 ;;
+        P02) echo 611 ;;
+        P03) echo 612 ;;
+        P04) echo 613 ;;
+        *) return 1 ;;
+    esac
+}
+
+_custom_patch_id_error() {
+    local id="$1"
+    local retired
+    if retired=$(_custom_retired_patch_hint "$id"); then
+        echo "source-patcher: patch ID '$id' is retired (placeholder $retired); see docs/patch-registry.md" >&2
+    elif [ "$id" = "P05" ] || [ "$id" = "104" ]; then
+        echo "source-patcher: patch ID '104' (P05 super password) is registered but not enabled" >&2
+    else
+        echo "source-patcher: invalid patch ID '$id' (valid: ${CUSTOM_PATCH_IDS[*]})" >&2
+    fi
+}
+
 _custom_patch_id_index() {
-    local want="$1"
+    local want
     local i=0
+    want=$(_custom_normalize_patch_id "$1") || return 1
     for id in "${CUSTOM_PATCH_IDS[@]}"; do
         if [ "$id" = "$want" ]; then
             echo "$i"
@@ -24,13 +83,25 @@ _custom_patch_id_index() {
 }
 
 _custom_should_run_patch() {
-    local id="$1"
+    local id only_id
+    id=$(_custom_normalize_patch_id "$1") || return 1
     local only="${SOURCE_PATCH_ONLY:-}"
+    local whitelist="${SOURCE_PATCH_WHITELIST:-}"
     local up_to="${SOURCE_PATCH_UP_TO:-}"
 
     if [ -n "$only" ]; then
-        [ "$id" = "$only" ]
+        only_id=$(_custom_normalize_patch_id "$only") || return 1
+        [ "$id" = "$only_id" ]
         return
+    fi
+
+    if [ -n "$whitelist" ]; then
+        local w
+        for w in $whitelist; do
+            w=$(_custom_normalize_patch_id "$w") || continue
+            [ "$id" = "$w" ] && return 0
+        done
+        return 1
     fi
 
     if [ -z "$up_to" ]; then
@@ -47,18 +118,27 @@ _custom_should_run_patch() {
 }
 
 _custom_validate_source_patch_up_to() {
+    local id
     local up_to="${SOURCE_PATCH_UP_TO:-}"
     local only="${SOURCE_PATCH_ONLY:-}"
+    local whitelist="${SOURCE_PATCH_WHITELIST:-}"
 
     if [ -n "$only" ] && ! _custom_patch_id_index "$only" >/dev/null; then
-        echo "source-patcher: invalid SOURCE_PATCH_ONLY='$only' (valid: ${CUSTOM_PATCH_IDS[*]})" >&2
+        _custom_patch_id_error "$only"
         return 1
     fi
 
     if [ -n "$up_to" ] && ! _custom_patch_id_index "$up_to" >/dev/null; then
-        echo "source-patcher: invalid SOURCE_PATCH_UP_TO='$up_to' (valid: ${CUSTOM_PATCH_IDS[*]})" >&2
+        _custom_patch_id_error "$up_to"
         return 1
     fi
+
+    for id in $whitelist; do
+        if ! _custom_patch_id_index "$id" >/dev/null; then
+            _custom_patch_id_error "$id"
+            return 1
+        fi
+    done
 
     return 0
 }
