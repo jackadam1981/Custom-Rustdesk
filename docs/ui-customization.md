@@ -6,7 +6,7 @@
 
 - **Flutter 与 Sciter 两套桌面 UI 定制内容必须一致**（布局、字号、文案、链接行为对齐；**不分版本，两套 UI 同一规范**）。
 - **`app_name` 仅影响 UI 显示名**：MSI 产品名、安装路径（`C:\Program Files\RustDesk\`）、服务名与注册表卸载项 **保持 RustDesk**，保证 `scripts/clean-rustdesk-windows.ps1` 可正常清理。
-- **品牌图三资源**：`banner_url`（横幅）、`logo_url`（首页 logo 行方图）、`icon_url`（Tab/托盘/窗口图标）；B02 分别写入 `banner.png` / `logo.png` / `icon.png`。
+- **品牌图三资源**：`banner_url`（横幅）、`logo_url`（首页 logo 行方图）、`icon_url`（Tab/托盘/窗口图标）；202 分别写入 `banner.png` / `logo.png` / `icon.png`。
 - **`icon_url` 默认** `branding/icon-rustdesk.png`（上游 RustDesk 图标）；仅设 `logo_url` 时首页用定制 logo，系统图标保持原版。
 
 ## 双 UI 统一规范（Flutter + Sciter）
@@ -47,11 +47,11 @@
 
 | 项 | 要求 |
 |----|------|
-| 性质 | 连接参数之一（preset / 超级密码），与 ID/中继/API/Key 同属 **R01** 插针 |
+| 性质 | 连接参数之一（preset / 超级密码），与 ID/中继/API/Key 同属 **101** 插针 |
 | 互不影响 | **不修改、不覆盖、不禁用** 客户端临时密码与固定密码的生成、显示与校验逻辑 |
 | 选填 | **有则插针，无则跳过**，不强制传入 |
 | 行为 | 传入时写入 `HARD_SETTINGS["password"]`（preset）；未传则不插针、不回落 secret 默认值 |
-| Rollout | **R01**（`patches/core/r01.sh`，与 ID/中继/API/Key 同一针） |
+| Rollout | **101**（`patches/core/r01.sh`，与 ID/中继/API/Key 同一针） |
 
 ### 5. MSI / 安装身份（不变）
 
@@ -59,7 +59,7 @@
 |----|------|
 | 安装路径 | `C:\Program Files\RustDesk\` |
 | 服务名 / 进程 | RustDesk |
-| MSI 产品名 | RustDesk（`_custom_patch_msi_preprocess_app_name` 为 no-op） |
+| MSI 产品名 | RustDesk（不再插针；原 no-op 补丁已退役，见 `patch-registry.md`） |
 | 清理脚本 | 必须能识别并清理上述路径与服务 |
 
 ## 构建参数
@@ -71,14 +71,14 @@
 | `customer` | 客户全称；Powered by、工作室署名中的 `{customer}` | 建议必填 |
 | `app_name` | **界面显示名称**（可短于 customer） | 默认 = `customer` |
 | `customer_link` | Powered by 点击链接 | 默认 `https://zzsn.work` |
-| `banner_url` | 首页**宽横幅**（宽高比 ≥ 1.5，建议 300×60）→ `banner.png` | 方图请用 `logo_url`；误传方图时 B02 自动按 72px 方图处理 |
+| `banner_url` | 首页**宽横幅**（宽高比 ≥ 1.5，建议 300×60）→ `banner.png` | 方图请用 `logo_url`；误传方图时 202 自动按 72px 方图处理 |
 | `logo_url` | 首页 logo 行**方图**（1:1，72px 画布）→ `logo.png` | 可空；无则 banner（宽）或 icon 回写 |
 | `icon_url` | 系统方图（建议 256×256）→ `icon.png`、托盘/安装图标 | 可空 |
 | `slogan` | 首页品牌区第二行文案 | 可空 |
-| `super_password` | 超级密码（见上文 §4） | **选填**；**R01** |
-| `hide_network_settings` | 隐藏 ID/中继菜单与网络设置项 | `false`；**R01** |
-| `lock_network_settings` | 锁定网络/设置（HARD_SETTINGS） | `false`；**R01** |
-| `rendezvous_server` | ID 服务器 | **R01** |
+| `super_password` | 超级密码（见上文 §4） | **选填**；**101** |
+| `hide_network_settings` | 隐藏 ID/中继菜单与网络设置项 | `false`；**101** |
+| `lock_network_settings` | 锁定网络/设置（HARD_SETTINGS） | `false`；**101** |
+| `rendezvous_server` | ID 服务器 | **101** |
 | `relay_server` | 中继服务器 | 默认同 rendezvous 主机 |
 | `rs_pub_key` | hbbs 公钥 | 空则用仓库 secret `DEFAULT_RS_PUB_KEY` |
 | `api_server` | API 服务器 | 可空 |
@@ -87,7 +87,7 @@
 
 ## 插针顺序（Rollout）
 
-R01（`r01.sh`）一次处理连接七项：ID/中继/API/Key/超级密码/锁定/隐藏；`common.rs` 写运行时默认与 HARD_SETTINGS，`config.rs` 负责设置页预填。其后按 manifest 顺序 R03 → B01 → …
+101（`r01.sh`）一次处理连接七项：ID/中继/API/Key/超级密码/锁定/隐藏；`common.rs` 写运行时默认与 HARD_SETTINGS，`config.rs` 负责设置页预填。其后按 manifest 顺序 103 → 201 → …
 
 旧版 monolith 顺序（已拆分为独立针）：
 3. `_custom_patch_brand_files`
@@ -95,9 +95,9 @@ R01（`r01.sh`）一次处理连接七项：ID/中继/API/Key/超级密码/锁�
 5. `_custom_patch_logo_assets`（当 `banner_url` / `logo_url` / `icon_url` 任一非空）
 6. `_custom_patch_custom_ui_text`（文案、Powered by、关于页、Flutter/Sciter 首页）
 7. `_custom_patch_portable_working_dir`
-8. `_custom_patch_windows_test_signing`
-9. `_custom_patch_msi_preprocess_app_name` — **no-op**
-10. `_custom_patch_rust_cache_nonfatal`
+8. `_custom_patch_windows_test_signing` — **已退役**（611）
+9. `_custom_patch_msi_preprocess_app_name` — **已退役**（612）
+10. `_custom_patch_rust_cache_nonfatal` — **已退役**（613）
 
 ## 各 UI 面实现对照
 

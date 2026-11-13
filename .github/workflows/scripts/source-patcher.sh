@@ -4,8 +4,8 @@
 # Thin entry — logic lives under patches/.
 #
 # Incremental apply (patch-lab / local debug):
-#   SOURCE_PATCH_ONLY=F10 apply_custom_source_patches
-#   SOURCE_PATCH_UP_TO=F10 apply_custom_source_patches
+#   SOURCE_PATCH_ONLY=402 apply_custom_source_patches
+#   SOURCE_PATCH_UP_TO=402 apply_custom_source_patches
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=patches/load.sh

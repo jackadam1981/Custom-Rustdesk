@@ -295,8 +295,8 @@ if logo_path and logo_path.is_file():
     logo = open_image(logo_path)
     ratio = aspect_ratio(logo)
     if is_wide_banner(logo):
-        # 宽图不能塞进 72×72 方画布：那样 F10 只能读到 72×72，首页仍渲染成 ~48×10。
-        # 按 300×60 等比落盘，F10 读到的就是真实宽高比（300:60 → 240×48）。
+        # 宽图不能塞进 72×72 方画布：那样 402 只能读到 72×72，首页仍渲染成 ~48×10。
+        # 按 300×60 等比落盘，402 读到的就是真实宽高比（300:60 → 240×48）。
         write_home_logo_wide(logo)
         write_wide_banner_assets(logo)
         print(

@@ -1,4 +1,4 @@
-# S11 — Sciter 首页 app 名（依赖 S10）
+# 502 — Sciter 首页 app 名（依赖 501）
 _custom_patch_sciter_home_title() {
     local index_file="src/ui/index.tis"
 
@@ -24,7 +24,7 @@ if "CUSTOM_RUSTDESK_SCITER_HOME_TITLE" in text:
     raise SystemExit(0)
 
 if "custom-rd-home-title-row" not in text:
-    raise SystemExit("source-patcher: S11 requires S10 home logo shell first")
+    raise SystemExit("source-patcher: 502 requires 501 home logo shell first")
 
 title_plain = title.replace(" <!-- CUSTOM_RUSTDESK_SCITER_HOME_TITLE -->", "")
 if title_plain in text:
@@ -34,15 +34,15 @@ if title_plain in text:
     raise SystemExit(0)
 
 logo_close = re.compile(
-    r"(<img\.custom-rd-home-logo[^>]*/>\s*(?:<!-- CUSTOM_RUSTDESK_SCITER_HOME_LOGO -->)?\s*(?:<!-- CUSTOM_RUSTDESK_S10_ICON_PROBE -->)?)(\s*</div>)",
+    r"(<img\.custom-rd-home-logo[^>]*/>\s*(?:<!-- CUSTOM_RUSTDESK_SCITER_HOME_LOGO -->)?\s*(?:<!-- CUSTOM_RUSTDESK_501_ICON_PROBE -->)?)(\s*</div>)",
     re.DOTALL,
 )
 if not logo_close.search(text):
-    raise SystemExit("source-patcher: S11 title anchor (logo in title-row) not found")
+    raise SystemExit("source-patcher: 502 title anchor (logo in title-row) not found")
 
 text = logo_close.sub(lambda m: m.group(1) + title + m.group(2), text, count=1)
 if "CUSTOM_RUSTDESK_SCITER_HOME_TITLE" not in text:
-    raise SystemExit("source-patcher: failed to inject S11 home title")
+    raise SystemExit("source-patcher: failed to inject 502 home title")
 
 path.write_text(text, encoding="utf-8")
 PY
@@ -50,9 +50,9 @@ PY
 
     if grep -q "CUSTOM_RUSTDESK_SCITER_HOME_TITLE" "$index_file" &&
        grep -q 'handler.get_builtin_option("app-name")' "$index_file"; then
-        echo "source-patcher: S11 home title injected in $index_file"
+        echo "source-patcher: 502 home title injected in $index_file"
     else
-        echo "source-patcher: failed to inject S11 home title in $index_file" >&2
+        echo "source-patcher: failed to inject 502 home title in $index_file" >&2
         return 1
     fi
 }

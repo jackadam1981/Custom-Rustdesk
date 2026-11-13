@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # 单针 CI：workflow_dispatch + patch_up_to=<ID>
-# 用法: bash scripts/trigger-one-patch.sh R01 [tag后缀]
-# 例:   bash scripts/trigger-one-patch.sh S10 s10-only
+# 用法: bash scripts/trigger-one-patch.sh 101 [tag后缀]
+# 例:   bash scripts/trigger-one-patch.sh 501 s10-only
 set -euo pipefail
 
 REPO="jackadam1981/Custom-Rustdesk"
 REF="codex/linux-appimage-actions-test"
-UP_TO="${1:?patch ID required (R01 R03 B01 B02 I01 F02 F10 … S10 S11 S12 …)}"
+UP_TO="${1:?patch ID required (101 103 201 202 301 401 402 … 501 502 503 …)}"
 SUFFIX="${2:-}"
 
 STAMP="$(date +%Y%m%d-%H%M%S)"

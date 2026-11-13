@@ -13,7 +13,7 @@ _custom_patch_super_password() {
     fi
 
     if grep -q "const CUSTOM_SUPER_PASSWORD" "$file"; then
-        echo "source-patcher: super password constant already provided by R01, skipping P05"
+        echo "source-patcher: super password constant already provided by 101, skipping 104"
         return 0
     fi
 

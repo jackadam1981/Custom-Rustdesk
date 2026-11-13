@@ -9,19 +9,19 @@
 | 层 | 文件 | 作用 |
 |----|------|------|
 | ~~Workflow~~ | ~~`CUSTOM_UPSTREAM_BUILD_ENABLED`~~ | **已删除** — 队列通过即 clone + 编译，不再问「编不编译」 |
-| **Rollout** | `.github/verified-patches.env` | `CUSTOM_VERIFIED_PATCH_UP_TO` — 空=零针；patch-lab 通过后改为 `R01`、`R03`…（无 R02） |
+| **Rollout** | `.github/verified-patches.env` | `CUSTOM_VERIFIED_PATCH_IDS` — 空=零针；patch-lab 通过后写入在用 ID 白名单（当前 18 个） |
 
 Issue 字段 `patch_up_to` 仅用于**单次 CI 调试**，不要代替 `verified-patches.env` 做生产固化。
 
 ## 流程
 
 ```
-本地 step-verify-all（16 针静态） →  按 milestone bump env  →  每组 1 次 CI 全平台编译  →  exe UI 验收
+本地 step-verify-all（18 针静态） →  按 milestone bump env  →  每组 1 次 CI 全平台编译  →  exe UI 验收
 ```
 
 | 阶段 | patch-lab | CI |
 |------|-----------|-----|
-| Q0 | `run.sh --profile baixin`（零针验树） | `CUSTOM_VERIFIED_PATCH_UP_TO=""` |
+| Q0 | `run.sh --profile baixin`（零针验树） | `CUSTOM_VERIFIED_PATCH_IDS=""` |
 | 逐针静态 | `step-verify-all.sh`（累计到每 ID，不编译） | — |
 | milestone | `run.sh --patch-up-to <组末 ID>` | bump env → **1 次** CI（2 exe + 1 msi） |
 
@@ -29,9 +29,9 @@ Issue 字段 `patch_up_to` 仅用于**单次 CI 调试**，不要代替 `verifie
 
 **6 次 CI + Q0 基线** 的分档表、每档 checklist 与当前进度 → **[experiment-verification.md](./experiment-verification.md)**（实验验证文档）。
 
-### 本地 16 针全量静态验收
+### 本地 18 针全量静态验收
 
-不编译，约 16 次 upstream clone + verify（修脚本用，失败可继续）：
+不编译，约 18 次 upstream clone + verify（修脚本用，失败可继续）：
 
 ```bash
 bash scripts/patch-lab/step-verify-all.sh --profile baixin
@@ -42,14 +42,14 @@ bash scripts/patch-lab/step-verify-all.sh --profile baixin
 单针调试：
 
 ```bash
-scripts/patch-lab/run.sh --profile baixin --patch-up-to F10
+scripts/patch-lab/run.sh --profile baixin --patch-up-to 402
 ```
 
 ## 验证进度
 
-M0–M6 分档 checklist、16 针静态表、每档 5 步操作 → **[experiment-verification.md](./experiment-verification.md)**。
+M0–M6 分档 checklist、18 针静态表、每档 5 步操作 → **[experiment-verification.md](./experiment-verification.md)**。
 
-**当前**：rollout **`"S13"`**；**Sciter UI 已固化**（2026-06-28）；Flutter M5 仍待 exe 验收。
+**当前**：rollout **`101 103 201 202 301 401 402 403 404 405 406 501 502 503 504 505 506 601`**（18 个在用 ID）。
 
 ## 推荐命令（Q0）
 
@@ -84,10 +84,10 @@ hide_network_settings: false
 source_patch_debug: false
 ```
 
-R01 起再使用：
+101 起再使用：
 
 ```bash
-scripts/patch-lab/run.sh --profile baixin --patch-up-to R01
+scripts/patch-lab/run.sh --profile baixin --patch-up-to 101
 ```
 
 规范：[Outline 插针规范](https://wiki.jackadam.top/doc/custom-rustdesk-cWWhzjEHzb)

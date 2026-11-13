@@ -3,9 +3,9 @@ _custom_sciter_logo_img_markup() {
         return 0
     fi
 
-    # S10 probe: reuse upstream get_icon() data URI (no CUSTOM_RUSTDESK_HOME_LOGO_SRC in ui.rs).
+    # 501 probe: reuse upstream get_icon() data URI (no CUSTOM_RUSTDESK_HOME_LOGO_SRC in ui.rs).
     printf '%s' \
-        '<img.custom-rd-home-logo src={handler.get_icon()} style="max-width:48px;max-height:48px;width:48px;height:48px;vertical-align:middle" /> <!-- CUSTOM_RUSTDESK_SCITER_HOME_LOGO --> <!-- CUSTOM_RUSTDESK_S10_ICON_PROBE -->'
+        '<img.custom-rd-home-logo src={handler.get_icon()} style="max-width:48px;max-height:48px;width:48px;height:48px;vertical-align:middle" /> <!-- CUSTOM_RUSTDESK_SCITER_HOME_LOGO --> <!-- CUSTOM_RUSTDESK_501_ICON_PROBE -->'
 }
 
 _custom_sciter_home_title_markup() {

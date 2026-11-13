@@ -101,7 +101,7 @@ echo "time: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$REPORT_FILE"
 echo "---" >>"$REPORT_FILE"
 
 # --- A. Build config / Rust core ---
-if verify_from R01; then
+if verify_from 101; then
 check "custom-build-config.json exists" test -f custom-build-config.json
 
 if [ -n "$expected_app_name" ]; then
@@ -159,7 +159,7 @@ check "hbb_common custom-slogan fallback" grep -q 'custom-slogan' libs/hbb_commo
 fi
 
 # --- B. UI patch markers ---
-if verify_from F10; then
+if verify_from 402; then
 check "flutter home header shell" grep -q 'CUSTOM_RUSTDESK_HOME_HEADER' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home logo" grep -q 'CUSTOM_RUSTDESK_HOME_ICON' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home logo memory" grep -q "base64Decode" flutter/lib/desktop/pages/desktop_home_page.dart
@@ -196,21 +196,21 @@ if re.search(r"if \(bind\.isCustomClient\(\)\)\)", text):
 PY
 fi
 
-if verify_from F11; then
+if verify_from 403; then
 check "flutter home title" grep -Fq '), // CUSTOM_RUSTDESK_HOME_TITLE' flutter/lib/desktop/pages/desktop_home_page.dart
 check "flutter home app-name" grep -q 'bind.mainGetBuildinOption(key: "app-name")' flutter/lib/desktop/pages/desktop_home_page.dart
 fi
 
-if verify_from F12; then
+if verify_from 404; then
 check "flutter home slogan" grep -q 'CUSTOM_RUSTDESK_HOME_SLOGAN' flutter/lib/desktop/pages/desktop_home_page.dart
 fi
 
-if verify_from F13; then
+if verify_from 405; then
 check "flutter connection powered by" grep -q 'CUSTOM_RUSTDESK_HOME_POWERED' flutter/lib/desktop/pages/connection_page.dart
 check "flutter powered by titleLarge" grep -q 'CUSTOM_RUSTDESK_POWERED_STYLE' flutter/lib/common.dart
 fi
 
-if verify_from F14; then
+if verify_from 406; then
 check "flutter studio zzsn.work" grep -q 'CUSTOM_RUSTDESK_STUDIO_LINK' flutter/lib/desktop/pages/desktop_setting_page.dart
 check "flutter studio zzsn.work url" grep -q "launchUrlString('https://zzsn.work');" flutter/lib/desktop/pages/desktop_setting_page.dart
 check "flutter about no upstream website link" bash -c "! grep -q \"launchUrlString('https://rustdesk.com');\" flutter/lib/desktop/pages/desktop_setting_page.dart"
@@ -219,13 +219,13 @@ check "flutter about no merged bracket comment" bash -c '! grep -q "CUSTOM_RUSTD
 check "flutter about no row-margin hack" bash -c '! grep -q "CUSTOM_RUSTDESK_ABOUT_ROW_MARGIN" flutter/lib/desktop/pages/desktop_setting_page.dart'
 fi
 
-if verify_from S10; then
+if verify_from 501; then
 check "sciter custom brand header" grep -q 'custom-rd-home-header' src/ui/index.tis
 check "sciter logo title same row" grep -q 'custom-rd-home-title-row' src/ui/index.tis
 check "sciter home logo" grep -q 'custom-rd-home-logo' src/ui/index.tis
 check "sciter home logo 48px" grep -q 'max-width:48px' src/ui/index.tis
 check "sciter home logo uses get_icon probe" grep -q 'handler.get_icon()' src/ui/index.tis
-check "sciter s10 icon probe marker" grep -q 'CUSTOM_RUSTDESK_S10_ICON_PROBE' src/ui/index.tis
+check "sciter s10 icon probe marker" grep -q 'CUSTOM_RUSTDESK_501_ICON_PROBE' src/ui/index.tis
 check "sciter icon reads res/icon.png" grep -q 'include_bytes!("../res/icon.png")' src/ui.rs
 check "sciter icon marker" grep -q 'CUSTOM_RUSTDESK_SCITER_ICON_SRC_START' src/ui.rs
 check "sciter icon no legacy home logo handler" bash -c '! grep -q "CUSTOM_RUSTDESK_HOME_LOGO_SRC\|get_home_logo_src" src/ui.rs'
@@ -240,16 +240,16 @@ for line in lines:
 PY
 fi
 
-if verify_from S11; then
+if verify_from 502; then
 check "sciter home title marker" grep -q 'CUSTOM_RUSTDESK_SCITER_HOME_TITLE' src/ui/index.tis
 check "sciter home app-name" grep -q 'handler.get_builtin_option("app-name")' src/ui/index.tis
 fi
 
-if verify_from S12; then
+if verify_from 503; then
 check "sciter home slogan" grep -q 'custom-rd-home-slogan' src/ui/index.tis
 fi
 
-if verify_from S13; then
+if verify_from 504; then
 check "sciter powered above card" python3 - src/ui/index.tis <<'PY'
 import sys
 from pathlib import Path
@@ -270,13 +270,13 @@ if "#powered-by" in text[header_pos:header_pos + 1500]:
 PY
 fi
 
-if verify_from S14; then
+if verify_from 505; then
 check "sciter studio zzsn.work" grep -q "url='https://zzsn.work'" src/ui/index.tis
 check "sciter studio-about p tag" grep -q "<p class='link custom-event studio-about'" src/ui/index.tis
 check "sciter about height" grep -q '480, get_msgbox_width()); // CUSTOM_RUSTDESK_ABOUT_HEIGHT' src/ui/index.tis
 fi
 
-if verify_from S15; then
+if verify_from 506; then
 check "sciter config menu flow" grep -q 'CUSTOM_RUSTDESK_CONFIG_MENU_FLOW' src/ui/index.css
 check "sciter config menu single-column" bash -c '! grep -q "menu.context#config-options > li" src/ui/index.css'
 check "sciter config menu max-height css" grep -q 'max-height: 80vh' src/ui/index.css
@@ -285,7 +285,7 @@ check "sciter config menu no tis width hook" bash -c '! grep -q "CUSTOM_RUSTDESK
 check "sciter config menu no overflow hook" bash -c '! grep -q "CUSTOM_RUSTDESK_CONFIG_MENU_MAX_HEIGHT" src/ui/index.tis'
 fi
 
-if verify_from B01; then
+if verify_from 201; then
 if [ -n "$expected_app_name" ]; then
     check "android app label" grep -q "android:label=\"$expected_app_name\"" flutter/android/app/src/main/AndroidManifest.xml
     check "android input label" grep -q "android:label=\"$expected_app_name Input\"" flutter/android/app/src/main/AndroidManifest.xml
@@ -293,7 +293,7 @@ if [ -n "$expected_app_name" ]; then
 fi
 fi
 
-if verify_from B02; then
+if verify_from 202; then
 has_banner=false
 has_logo=false
 has_icon=false
@@ -305,11 +305,11 @@ if [ -n "${BUILD_LOGO_URL:-}" ]; then
 fi
 if [ -n "${BUILD_ICON_URL:-}" ]; then
     has_icon=true
-elif verify_from B02; then
+elif verify_from 202; then
     has_icon=true
 fi
 if [ "$has_banner" = true ] || [ "$has_logo" = true ]; then
-    # banner.png 已确认无消费者：宽图必须等比落到首页 logo，塞进方画布会让 F10 读成 72×72
+    # banner.png 已确认无消费者：宽图必须等比落到首页 logo，塞进方画布会让 402 读成 72×72
     check "flutter logo light asset" test -f flutter/assets/logo_light.png
     check "flutter logo dark asset" test -f flutter/assets/logo_dark.png
     src_rel="${BUILD_LOGO_URL:-${BUILD_BANNER_URL:-}}"
@@ -332,7 +332,7 @@ sw, sh = dims(sys.argv[1])
 w, h = dims("flutter/assets/logo.png")
 if sw / sh < 1.5:
     raise SystemExit(0)
-# 宽图必须保持同一宽高比；被塞进方形画布（72×72）说明 B02 走了 square 分支
+# 宽图必须保持同一宽高比；被塞进方形画布（72×72）说明 202 走了 square 分支
 if w / h < 1.5 or abs(w / h - sw / sh) > 0.05:
     raise SystemExit(
         f"logo.png {w}x{h} lost the wide source aspect {sw}x{sh}"
@@ -356,14 +356,14 @@ if [ "$has_icon" = true ]; then
 fi
 fi
 
-if verify_from I01; then
+if verify_from 301; then
 check "lang cn powered_by customer" grep -q 'powered_by_me' src/lang/cn.rs
 check "lang cn studio attribution" grep -q 'custom_studio_attribution' src/lang/cn.rs
 check "lang en studio attribution fallback" grep -q 'custom_studio_attribution' src/lang/en.rs
 fi
 
 # --- C. is_custom_client detection (must not rely on APP_NAME != RustDesk only) ---
-if verify_from R03; then
+if verify_from 103; then
 check "is_custom_client custom patch marker" grep -q 'CUSTOM_RUSTDESK_IS_CUSTOM_CLIENT' src/common.rs
 check "is_custom_client uses app-name builtin" grep -q 'get_builtin_option("app-name")' src/common.rs
 fi

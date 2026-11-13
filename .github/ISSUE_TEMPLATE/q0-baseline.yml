@@ -8,7 +8,7 @@ body:
       value: |
         ## Q0 用途
 
-        验收 **零针 + 原版 `rustdesk/rustdesk` 编译**（`CUSTOM_VERIFIED_PATCH_UP_TO=""`）。
+        验收 **零针 + 原版 `rustdesk/rustdesk` 编译**（`CUSTOM_VERIFIED_PATCH_IDS=""`）。
 
         **本 Issue 不会改上游源码**；`build_params` 仅写入 `build-config.json` 备查。产物应表现为 **原版 RustDesk**。
 
@@ -28,7 +28,7 @@ body:
         | 字段 | 原因 |
         |------|------|
         | `patch_up_to` | 会覆盖 rollout，破坏零针基线 |
-        | `lock_network_settings: true` | 需 R01+ 插针后才生效 |
+        | `lock_network_settings: true` | 需 101 起插针后才生效 |
         | `hide_network_settings: true` | 同上 |
         | `source_patch_debug: true` | 仅排障时用 |
 
