@@ -142,15 +142,20 @@ slogan_pat = re.compile(
     r"\)\s*,?",
 )
 
+# 替换内容里含 Dart 字面量 "\\n"：必须用函数替换，字符串替换会被 re.sub 当作转义，
+# 把 "\\n" 变成真实换行，第二遍 apply 写出非法 Dart。
+def literal_repl(value: str):
+    return lambda _m: value
+
 replaced = False
 if unified_rich_pat.search(text):
-    text = unified_rich_pat.sub(upstream_pair + studio, text, count=1)
+    text = unified_rich_pat.sub(literal_repl(upstream_pair + studio), text, count=1)
     replaced = True
 elif unified_only_pat.search(text):
-    text = unified_only_pat.sub(upstream_pair + studio, text, count=1)
+    text = unified_only_pat.sub(literal_repl(upstream_pair + studio), text, count=1)
     replaced = True
 elif studio_block_pat.search(text):
-    text = studio_block_pat.sub(studio, text, count=1)
+    text = studio_block_pat.sub(literal_repl(studio), text, count=1)
     replaced = True
 elif slogan_pat.search(text):
     def slogan_repl(m: re.Match) -> str:

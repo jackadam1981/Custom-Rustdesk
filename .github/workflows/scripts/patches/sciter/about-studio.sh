@@ -52,12 +52,15 @@ if "studio-about" not in text:
 if "custom_studio_attribution" not in text:
     raise SystemExit("source-patcher: studio attribution translate key missing in src/ui/index.tis")
 
-text = re.sub(
-    r"(function showAbout\(\)[\s\S]*?), 400, get_msgbox_width\(\)\);",
-    r"\1, 480, get_msgbox_width()); // CUSTOM_RUSTDESK_ABOUT_HEIGHT",
-    text,
-    count=1,
-)
+# 只对尚未改高的树做一次；否则第二遍 apply 会从第一个 showAbout 一路非贪婪
+# 匹配到别的函数的 ", 400,"，把无关弹窗高度也改掉。
+if "CUSTOM_RUSTDESK_ABOUT_HEIGHT" not in text:
+    text = re.sub(
+        r"(function showAbout\(\)[\s\S]*?), 400, get_msgbox_width\(\)\);",
+        r"\1, 480, get_msgbox_width()); // CUSTOM_RUSTDESK_ABOUT_HEIGHT",
+        text,
+        count=1,
+    )
 text = re.sub(
     r"(function showAbout\(\)[\s\S]*?), 440, get_msgbox_width\(\)\); // CUSTOM_RUSTDESK_ABOUT_HEIGHT",
     r"\1, 480, get_msgbox_width()); // CUSTOM_RUSTDESK_ABOUT_HEIGHT",
