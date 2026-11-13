@@ -1,6 +1,7 @@
 # ADR-0002：A / B 两条路线的未来工作量对比（估算）
 
 - **状态**：评估中（Evaluation）。**本文不改变 ADR-0001 的结论**，只把「未来要花多少人力」摊开量化；是否维持 ADR-0001 由本文 §5 的翻转条件决定。
+- **2026-11-14 校正**：ADR-0001 已修订为「方案 A 是 main 的实际实现，B 只是历史设计」。本文写作时假设「B 是当前默认」，该前提**不成立**；下文所有「B 更适合当前形态」的结论只作**工作量参考**，不代表现状。§1.3 的 workflow 归属与 §5.1 的建议已就地标注。
 - **日期**：2026-11-13
 - **输入**：[ADR-0001](./0001-inline-patch-vs-fork-branch.md)、[patch-delivery-inline-vs-branch.md](../patch-delivery-inline-vs-branch.md)、[patch-registry.md](../patch-registry.md)
 - **方法**：先列实测基线（§1），再按六个维度分别估 A / B（§2），所有假设单列（§3），最后给转换成本（§4）与翻转条件（§5）。**拿不到数据的项一律写「无数据」，不填数。**
@@ -52,8 +53,8 @@
 
 | workflow | run | 成功 | 失败 | 取消/其他 | 失败率 |
 |----------|-----|------|------|-----------|--------|
-| Custom Rustdesk Build Workflow（B，内联） | 49 | 34 | 13 | 2 取消 | ≈27% |
-| Custom RustDesk Upstream Build（A，legacy） | 34 | 20 | 13 | 1 startup_failure | ≈38% |
+| Custom Rustdesk Build Workflow（父 run：触发 + 插针 + 建分支 + 汇总） | 49 | 34 | 13 | 2 取消 | ≈27% |
+| Custom RustDesk Upstream Build（子 run：实际编译，**A 路径**） | 34 | 20 | 13 | 1 startup_failure | ≈38% |
 
 - 失败原因分类（从失败 run 的 failed step 名归并）：
   1. **平台编译/工具链**：`build-rustdesk-linux-sciter armv7`、`Install Rust toolchain`、`Install vcpkg dependencies`、`Install LLVM and Clang`、`Ensure CMake >= 4.3` —— 出现频次最高。
@@ -141,8 +142,8 @@
 
 **要做什么**
 
-- B 独有：issue 队列（`issue-manager.sh` 237 行、`issue-templates.sh` 695 行）、锁（`queue-manager.sh` 1,182 行）、`secrets`（签名/密钥）、macOS runner。
-- A 独有：fork 与分支管理（`custom-build-*` 的创建/清理、fork 同步）。
+- 两条路共有：issue 队列（`issue-manager.sh` 237 行、`issue-templates.sh` 695 行）、锁（`queue-manager.sh` 1,182 行）、`secrets`（签名/密钥）、macOS runner —— 这些在当前 A 路径下同样在跑。
+- A 独有：fork 与分支管理（`custom-build-*` 的创建/清理、生成子 workflow 的 perl 注入）。
 
 **估算（每月）**
 
@@ -155,8 +156,8 @@
 
 | 方案 | 实测/事实 | 影响 |
 |------|-----------|------|
-| B | **未配置 `concurrency`**（9 个 workflow 精确匹配 `^\s*concurrency\s*:` 均为 0）；靠 issue #1 队列 + `queue-locks/*` 串行化 | 串行，一次一个构建；排队时间**无数据**；锁失败会直接失败（#2132） |
-| A | 子 run 由分支 push 触发，理论上可按分支并行，但同样受 issue 队列串行化约束 | 并发能力**无数据**；分支多了会放大 runner 占用与清理成本 |
+| B（历史设计） | **未配置 `concurrency`**（9 个 workflow 精确匹配 `^\s*concurrency\s*:` 均为 0）；靠 issue #1 队列 + `queue-locks/*` 串行化 | 串行，一次一个构建；排队时间**无数据**；锁失败会直接失败（#2132） |
+| A（当前实现） | 子 run 由分支 push 触发，理论上可按分支并行，但同样受 issue 队列串行化约束 | 并发能力**无数据**；分支多了会放大 runner 占用与清理成本 |
 
 - 两方案当前都不具备真正的并发调度；B 的锁是**自建**，A 的并发是**理论上的**。
 
@@ -193,8 +194,9 @@
 
 ### 5.1 建议
 
-> **在当前仓库形态下（多客户 profile、上游仍在活跃演进），继续选 B。**
+> **（写作时的假设结论，现状已修正）在原假设「B 为默认」下：继续选 B。**
 > A 只在「单客户 + 上游长期冻结」的窄条件下有优势。
+> **校正**：main 实际执行的是 A（见 ADR-0001 §1），因此本结论应读作「若从零重做，B 更省人力」，不表示当前仓库跑的是 B。
 
 ### 5.2 翻转条件
 
