@@ -3,7 +3,7 @@
 - **状态**：已采纳（Accepted）
 - **日期**：2026-11-13
 - **决策范围**：定制 RustDesk 客户端的补丁交付方式与 CI 归属
-- **相关文档**：[patch-registry.md](../patch-registry.md)、[patch-delivery-inline-vs-branch.md](../patch-delivery-inline-vs-branch.md)、[verification-rollout.md](../verification-rollout.md)、[patch-id-renumber-plan.md](../patch-id-renumber-plan.md)
+- **相关文档**：[patch-registry.md](../patch-registry.md)、[patch-delivery-inline-vs-branch.md](../patch-delivery-inline-vs-branch.md)、[verification-rollout.md](../verification-rollout.md)、[patch-id-renumber-plan.md](../patch-id-renumber-plan.md)、[ADR-0002：A/B 未来工作量对比](./0002-ab-workload-estimate.md)
 
 ---
 
@@ -118,3 +118,5 @@
 2. **上游结构变化**导致补丁锚点大面积失效，单次升级成本超过可接受范围；
 3. **补丁维护成本**（逐针审计 + 每客户回归）超过切换到 fork 分支的 rebase 成本；
 4. GitHub Actions 的 `concurrency` 或其他原生能力发生变化，使方案 A 的「跨 run 传输源码」不再有吸引力。
+
+> 各变量（客户数量、上游活跃度、workflow 变更频率）的量化阈值与结论翻转点见 [ADR-0002](./0002-ab-workload-estimate.md)。该文目前状态为「评估中」，不改变本文结论。
